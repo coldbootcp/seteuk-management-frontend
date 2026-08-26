@@ -10,6 +10,7 @@ import type {
   ReconciliationLog,
   Roadmap,
   RoadmapNode,
+  RoadmapPlanEvent,
 } from "../lib/product-harness";
 import {
   SCHOOL_RECORD_MAX_FILE_SIZE,
@@ -24,7 +25,7 @@ import {
 /* ──────────────────────────────────────────────
    Types
    ────────────────────────────────────────────── */
-type TabId = "overview" | "roadmap" | "activities" | "profile";
+type TabId = "overview" | "roadmap" | "activities" | "portfolio" | "profile";
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
@@ -46,6 +47,13 @@ type RoadmapTimelineEvent = {
   subject: string; title: string; isPlan: boolean;
 };
 
+type ActivityDraft = {
+  title: string;
+  subject: string;
+  planEventId?: string;
+  roadmapNodeId?: string;
+};
+
 type OnboardingSuggestions = {
   majors: string[];
   keywords: string[];
@@ -56,6 +64,8 @@ type ClarificationQuestion = {
   id: string;
   label: string;
   question: string;
+  why?: string;
+  selectionMode?: "single" | "multiple";
   options: string[];
 };
 
@@ -63,6 +73,8 @@ type ClarificationResponse = {
   summary?: string;
   questions?: ClarificationQuestion[];
   blocked?: boolean;
+  complete?: boolean;
+  draftChangeSummary?: string;
   reason?: string;
   provider?: "deepseek" | "fallback";
 };
@@ -76,17 +88,19 @@ type OnboardingRecordContext = {
    Constants
    ────────────────────────────────────────────── */
 const EMPTY_PROFILE: ProfileForm = {
-  name: "김세연", grade: "2", semester: "2", targetCareer: "인공지능 연구원",
-  concreteResearchQuestion: "자연어 처리 모델의 편향성 완화 방안", knowledgeLevel: "관련 도서 3권 이상 읽음",
-  targetMajors: "컴퓨터공학과, 인공지능학과", interests: "딥러닝, 자연어 처리, 윤리적 AI", motivationTrigger: "관심분야와 목표학과 입력을 기반으로 판단",
-  careerResolution: "인간에게 이로운 투명한 AI 모델 개발",
-  currentEngagement: "파이썬 기초 학습 완료, 데이터 분석 동아리 활동 중", preferredSubjects: "수학, 정보, 물리", strengths: "논리적 사고, 끈기, 프로그래밍 기초", gaps: "고급 수학 지식 부족, 실전 프로젝트 경험 부족", constraints: "내신 성적 관리로 인한 시간 부족",
-  outputPreference: "보고서·소논문, 실험·프로토타입, 발표·토론, 인포그래픽·시각자료",
-  collaborationStyle: "교과 수행평가, 세특 보고서, 독서 확장, 대회·발표회, 동아리·팀 프로젝트",
-  roadmapDesignNotes: "개발 모드 기본 예시 데이터입니다.",
+  name: "", grade: "", semester: "", targetCareer: "",
+  concreteResearchQuestion: "", knowledgeLevel: "",
+  targetMajors: "", interests: "", motivationTrigger: "",
+  careerResolution: "",
+  currentEngagement: "", preferredSubjects: "", strengths: "", gaps: "", constraints: "",
+  outputPreference: "",
+  collaborationStyle: "",
+  roadmapDesignNotes: "",
 };
 
 const APP_VERSION = "0.7.0";
+const AI_JUDGEMENT_OPTION = "잘 모르겠음 — AI 판단에 맡길게요";
+const OTHER_CLARIFICATION_OPTION = "기타 직접 입력";
 
 const ROADMAP_CATEGORIES: Array<{ category: RoadmapEventCategory; icon: string }> = [
   { category: "계획", icon: "📌" },
@@ -95,21 +109,6 @@ const ROADMAP_CATEGORIES: Array<{ category: RoadmapEventCategory; icon: string }
   { category: "봉사", icon: "V" },
   { category: "독서", icon: "B" },
   { category: "시험", icon: "E" },
-];
-
-const OUTPUT_EVIDENCE_OPTIONS: Array<{ label: string; detail: string; icon: string }> = [
-  { label: "보고서·소논문", detail: "탐구 질문, 근거, 결론을 글로 정리", icon: "▤" },
-  { label: "실험·프로토타입", detail: "데이터, 제작물, 검증 과정으로 증명", icon: "T" },
-  { label: "발표·토론", detail: "관점과 논리를 말로 설득", icon: "C" },
-  { label: "인포그래픽·시각자료", detail: "복잡한 내용을 구조화해 표현", icon: "A" },
-];
-
-const ACTIVITY_CHANNEL_OPTIONS: Array<{ label: string; detail: string; icon: string }> = [
-  { label: "교과 수행평가", detail: "수업 과제와 평가 안에서 연결", icon: "T" },
-  { label: "세특 보고서", detail: "과목별 기록으로 남길 탐구", icon: "▤" },
-  { label: "독서 확장", detail: "전공 키워드를 책과 논문으로 확장", icon: "B" },
-  { label: "대회·발표회", detail: "외부 평가나 공개 발표로 검증", icon: "C" },
-  { label: "동아리·팀 프로젝트", detail: "협업 활동과 장기 프로젝트로 확장", icon: "E" },
 ];
 
 const SUBJECT_COLORS = [
@@ -124,8 +123,28 @@ function splitList(value: string) {
   return value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
 }
 
+function clarificationOptions(question: ClarificationQuestion) {
+  const options = question.options.some((option) => option.includes("잘 모르겠") || option.includes("AI 판단"))
+    ? question.options
+    : [...question.options.slice(0, 3), AI_JUDGEMENT_OPTION];
+  return options.some((option) => option === OTHER_CLARIFICATION_OPTION) ? options : [...options, OTHER_CLARIFICATION_OPTION];
+}
+
+function clarificationAnswerParts(answer: string) {
+  return answer.split(" | ").map((part) => part.trim()).filter(Boolean);
+}
+
+function allowsMultipleClarificationAnswers(question: ClarificationQuestion) {
+  if (question.selectionMode) return question.selectionMode === "multiple";
+  return !/(identity_conflict|grade_conflict|이름 확인|학년 확인)/.test(`${question.id} ${question.label}`);
+}
+
 function isGraduatedGrade(value: string) {
   return value === "graduated";
+}
+
+function hasSpecificCareerGoal(form: ProfileForm) {
+  return form.careerResolution === "구체적인 학과나 직무까지 정한 단계";
 }
 
 function profileGradeValue(form: ProfileForm) {
@@ -156,7 +175,6 @@ function buildClarificationQuestions(
   recordContext: OnboardingRecordContext,
 ): ClarificationQuestion[] {
   const career = form.targetCareer.trim() || "희망 진로";
-  const interests = splitList(form.interests).join(", ") || "관심 키워드";
   const hasRecords = !!parsed?.entries.length;
   const recordSubjects = parsed
     ? [...new Set(parsed.entries.map((entry) => entry.subject).filter(Boolean))].filter((subject) => subject !== "교과 외 활동").slice(0, 5)
@@ -205,53 +223,23 @@ function buildClarificationQuestions(
     });
   }
 
-  if (form.grade === "2" || form.grade === "3") {
-    questions.push({
-      id: "remaining_record_strategy",
-      label: "남은 학생부 전략",
-      question: `현재 ${gradeLabel(form.grade)}이므로 남은 학생부에서 무엇을 가장 우선할까요?`,
-      options: ["기존 기록의 강점을 희망 진로와 연결", "희망 진로의 핵심 역량을 짧은 기간에 집중 보완", "기존 방향과 새 진로를 융합한 대표 탐구 완성", "이미 확정된 기록은 유지하고 입시용 산출물 완성에 집중"],
-    });
-  }
-
-  if (!finalized) questions.push(
-    {
-      id: "depth",
-      label: "로드맵 전개안",
-      question: `${interests}를 6학기 전체에 어떤 구조로 펼칠까요?`,
-      options: ["기초→응용→심화로 단계적 전개", "여러 축을 6학기에 고르게 분산", "핵심 주제 1~2개를 반복 심화", "학생부 기록과 가까운 축부터 시작해 희망 진로로 이동"],
-    },
-    {
-      id: "strategic_choice",
-      label: "우선순위",
-      question: "로드맵이 여러 방향 중 무엇을 가장 우선해야 할까요?",
-      options: ["전공 적합성을 강하게 보여주기", "학생부 기존 결을 잃지 않기", "학교에서 실제 수행 가능한 활동으로 낮추기", "진로 변경의 이유를 설득력 있게 만들기"],
-    },
-    {
-      id: "risk",
-      label: "조심할 점",
-      question: "로드맵을 만들 때 가장 피해야 할 방향은 무엇인가요?",
-      options: ["너무 어려운 전공 심화부터 시작하는 것", "기존 학생부와 연결 없이 갑자기 방향을 바꾸는 것", "활동이 많지만 기록 근거가 약한 것"],
-    },
-  );
-
-  return questions.slice(0, 3);
+  return questions;
 }
 
 function readClarificationAnswer(notes: string, id: string) {
   return notes.split("\n").find((line) => line.startsWith(`${id}: `))?.slice(id.length + 2) ?? "";
 }
 
-function writeClarificationAnswer(notes: string, id: string, answer: string) {
-  const lines = notes.split("\n").filter((line) => line && !line.startsWith(`${id}: `));
-  return [...lines, `${id}: ${answer}`].join("\n");
+function removeClarificationAnswers(notes: string) {
+  return notes.split("\n").filter((line) => !/^[a-z][a-z0-9_]*: /i.test(line)).join("\n");
 }
 
 function toProfileInput(form: ProfileForm): ProfileInput {
+  const useSpecificGoal = hasSpecificCareerGoal(form);
   const branchInterests = [
     form.interests,
-    form.knowledgeLevel && `관련 배경지식 수준: ${form.knowledgeLevel}`,
-    form.concreteResearchQuestion && `핵심 탐구 질문: ${form.concreteResearchQuestion}`,
+    useSpecificGoal && form.knowledgeLevel && `관련 배경지식 수준: ${form.knowledgeLevel}`,
+    useSpecificGoal && form.concreteResearchQuestion && `핵심 탐구 질문: ${form.concreteResearchQuestion}`,
     form.roadmapDesignNotes && `로드맵 설계 전 확인 답변:\n${form.roadmapDesignNotes}`,
   ].filter(Boolean).join("\n");
   return {
@@ -379,6 +367,135 @@ function activityCategory(activityType: string): RoadmapEventCategory {
   return "활동";
 }
 
+function planTitleWithPriority(title: string, priority?: "core" | "optional") {
+  return priority === "core" ? `★ ${title}` : title;
+}
+
+function subjectConceptGuide(subject: string) {
+  const guides: Array<[RegExp, string]> = [
+    [/화학/, "반응식, 물질의 구조와 성질, 반응 속도·평형, 산화·환원 중 주제와 직접 연결되는 개념"],
+    [/물리/, "힘·운동, 에너지, 전기·자기, 파동, 반도체 물성 중 주제와 직접 연결되는 개념"],
+    [/생명/, "세포와 항상성, 유전 정보, 생태계, 생명공학의 원리 중 주제와 직접 연결되는 개념"],
+    [/지구|환경/, "지구 시스템의 상호작용, 기후 자료, 자원과 환경 영향 중 주제와 직접 연결되는 개념"],
+    [/수학/, "함수·변화율, 확률과 통계, 모델링 중 주제를 설명하거나 비교할 수 있는 개념"],
+    [/정보|컴퓨터/, "데이터의 수집·처리, 알고리즘, 정보 윤리 중 주제와 직접 연결되는 개념"],
+    [/사회|역사|경제|정치/, "이해관계자, 제도·정책, 통계 자료, 사회적 영향 중 주제와 직접 연결되는 관점"],
+  ];
+  return guides.find(([pattern]) => pattern.test(subject))?.[1] ?? `${subject}에서 배운 핵심 개념 중 이 주제를 설명할 수 있는 개념`;
+}
+
+function evidenceGuide(title: string) {
+  if (/비교|차이|대조/.test(title)) return "비교할 대상 두 가지와 비교 기준을 먼저 정한 뒤, 차이가 생기는 이유를 근거와 함께 설명하기";
+  if (/원리|작동|구조|과정/.test(title)) return "구성 요소와 작동 과정을 순서대로 정리하고, 실제 사례에서 그 원리가 어떻게 드러나는지 확인하기";
+  if (/영향|윤리|사회|환경|문제/.test(title)) return "누가 어떤 영향을 받는지 살피고, 장점과 한계를 같은 기준으로 판단하기";
+  if (/한계|개선/.test(title)) return "현재 방식이 잘 작동하지 않는 조건을 찾고, 가능한 개선 방향을 근거와 함께 제안하기";
+  return "주제와 직접 관련된 사례를 골라, 그 사례가 왜 이 탐구 질문에 적합한 근거인지 설명하기";
+}
+
+function subjectConnectionTip(subject: string, plan: RoadmapPlanEvent) {
+  const topic = plan.title.replace(/^★\s*/, "");
+  const tips: Array<[RegExp, string]> = [
+    [/화학/, `화학 수업에서 배운 개념 하나를 먼저 고른 뒤, ‘${topic}’ 사례가 그 개념으로 어떻게 설명되는지 연결해 보세요. 반응식·구조식·그래프처럼 교과에서 쓰는 표현을 활용하면 탐구의 출발점이 분명해집니다.`],
+    [/물리/, `물리에서는 ‘${topic}’를 힘·에너지·전기·파동처럼 설명 가능한 원리로 나누어 보세요. 계산 자체보다 어떤 조건에서 결과가 달라지는지 해석하는 방식이 자연스럽습니다.`],
+    [/수학/, `수학에서는 ‘${topic}’와 관련된 변화나 차이를 표·그래프·간단한 모델로 표현해 보세요. 수식이 목적이 아니라, 자료를 읽고 판단하는 근거가 되도록 쓰는 것이 좋습니다.`],
+    [/생명/, `생명과학에서는 ‘${topic}’를 생명 현상 또는 생명공학의 과정과 연결해 보세요. 구조·기능·상호작용 중 하나를 중심으로 사례를 설명하면 과목 맥락이 살아납니다.`],
+    [/정보|컴퓨터/, `정보 과목에서는 ‘${topic}’에 필요한 자료를 어떻게 분류·처리·해석할지에 초점을 두세요. 간단한 데이터 표나 알고리즘적 사고를 활용하면 자연스럽게 연결됩니다.`],
+    [/사회|역사|경제|정치/, `사회 계열 과목에서는 ‘${topic}’가 누구에게 어떤 영향을 주는지, 어떤 기준으로 판단할지 살펴보세요. 통계·제도·이해관계자 중 하나를 근거로 잡으면 좋습니다.`],
+  ];
+  return tips.find(([pattern]) => pattern.test(subject))?.[1]
+    ?? `${subject}에서 다루는 핵심 개념 하나를 출발점으로 ‘${topic}’를 설명해 보세요. 이 주제가 왜 그 과목의 질문으로도 의미가 있는지 사례와 근거를 함께 제시하면 됩니다.`;
+}
+
+function planDetailGuide(plan: RoadmapPlanEvent, node: RoadmapNode) {
+  const relatedSubjects = [...new Set([plan.subject, ...node.candidateSubjects])].slice(0, 3);
+  const conceptGuide = subjectConceptGuide(plan.subject);
+  const sourceGuide = evidenceGuide(plan.title);
+  const keywords = [...new Set([
+    plan.subject,
+    plan.title,
+    ...node.competencyGoals,
+    ...conceptGuide.split(/,|·/).map((keyword) => keyword.trim()).filter((keyword) => keyword.length < 16),
+  ])].slice(0, 6);
+  return {
+    role: `${node.grade}학년 ${node.semester}학기 ‘${node.narrativeStage}’ 단계에서 ${node.objective}`,
+    contents: [
+      `탐구의 중심을 ‘${plan.title}’로 분명히 정하고, ${plan.description || "왜 이 질문을 살펴볼 가치가 있는지"}를 첫 부분에 제시하기`,
+      `${plan.subject} 개념 중 ${conceptGuide}을(를) 골라 주제와 연결하기`,
+      sourceGuide,
+    ],
+    relatedSubjects,
+    keywords,
+    formats: [
+      "수행평가 탐구 보고서", "수업 발표 자료", "교과 심화 탐구", "교내 대회 주제",
+    ],
+  };
+}
+
+function PlanDetailModal({ plan, node, onClose, onConvertPlan }: {
+  plan: RoadmapPlanEvent;
+  node: RoadmapNode;
+  onClose: () => void;
+  onConvertPlan: (draft: ActivityDraft) => void;
+}) {
+  const guide = planDetailGuide(plan, node);
+  const [selectedSubject, setSelectedSubject] = useState(plan.subject);
+  const connectionTip = subjectConnectionTip(selectedSubject, plan);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+  return (
+    <div className="modal-overlay" onClick={onClose} role="presentation">
+      <section aria-label="활동 주제 상세 안내" aria-modal="true" className="modal-panel plan-detail-panel" onClick={(e) => e.stopPropagation()} role="dialog">
+        <div className="modal-head">
+          <div>
+            <span className="kicker">TOPIC GUIDE</span>
+            <h2>{planTitleWithPriority(plan.title, plan.priority)}</h2>
+            <p>{plan.description || "이 학기 목표와 연결되는 탐구 주제입니다."}</p>
+          </div>
+          <button aria-label="닫기" className="focus-close" onClick={onClose} type="button">×</button>
+        </div>
+        <div className="modal-body plan-detail-body">
+          <p className="plan-detail-note">아래 내용은 학교에서 생긴 수행평가·발표·대회 등의 기회에 맞춰 골라 쓰는 추천입니다. 특정 형식을 반드시 해야 한다는 뜻은 아닙니다.</p>
+          <section>
+            <h3>로드맵에서의 역할</h3>
+            <p>{guide.role}</p>
+          </section>
+          <section>
+            <h3>이 주제에 담으면 좋은 내용</h3>
+            <ul>{guide.contents.map((content) => <li key={content}>{content}</li>)}</ul>
+          </section>
+          <section>
+            <h3>연결을 우선 검토할 과목</h3>
+            <div className="focus-goal-chips plan-subject-selector">
+              {guide.relatedSubjects.map((subject) => (
+                <button className={selectedSubject === subject ? "is-selected" : ""} key={subject} onClick={() => setSelectedSubject(subject)} type="button">{subject}</button>
+              ))}
+            </div>
+            <div className="plan-subject-tip">
+              <strong>{selectedSubject} 연결 팁</strong>
+              <p>{connectionTip}</p>
+            </div>
+          </section>
+          <section>
+            <h3>학교 기회에 따라 활용할 수 있는 형식</h3>
+            <div className="focus-goal-chips">{guide.formats.map((format) => <span key={format}>{format}</span>)}</div>
+          </section>
+          <section>
+            <h3>탐구 키워드</h3>
+            <div className="focus-goal-chips">{guide.keywords.map((keyword) => <span key={keyword}>{keyword}</span>)}</div>
+          </section>
+        </div>
+        <div className="modal-foot">
+          <button className="btn btn-secondary" onClick={onClose} type="button">닫기</button>
+          <button className="btn btn-primary" onClick={() => onConvertPlan({ title: plan.title, subject: plan.subject, planEventId: plan.id, roadmapNodeId: node.id })} type="button">이 주제를 실제 활동에 연결</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function academicTimelinePosition(date: string) {
   const [, monthText = "3", dayText = "1"] = date.split("-");
   const month = Number(monthText); const day = Number(dayText);
@@ -477,6 +594,9 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
   const [clarificationSummary, setClarificationSummary] = useState("");
   const [clarificationBusy, setClarificationBusy] = useState(false);
   const [clarificationBlocked, setClarificationBlocked] = useState(false);
+  const [clarificationComplete, setClarificationComplete] = useState(false);
+  const [roadmapHypothesis, setRoadmapHypothesis] = useState<Roadmap | null>(null);
+  const [clarificationAnswers, setClarificationAnswers] = useState<Array<{ id: string; question: string; answer: string }>>([]);
   const [recordOnlyMode, setRecordOnlyMode] = useState(false);
   const onboardingRecordRef = useRef<HTMLInputElement>(null);
   const onboardingRecordAbortRef = useRef<AbortController | null>(null);
@@ -493,14 +613,10 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
     }));
   }
 
-  function toggleFormList(key: "outputPreference" | "collaborationStyle", option: string) {
-    setForm((cur) => {
-      const values = splitList(cur[key]);
-      const next = values.includes(option)
-        ? values.filter((value) => value !== option)
-        : [...values, option];
-      return { ...cur, [key]: next.join(", ") };
-    });
+  function updateCareerResolution(value: string) {
+    setForm((current) => value === "넓은 분야만 정한 단계"
+      ? { ...current, careerResolution: value, knowledgeLevel: "", concreteResearchQuestion: "" }
+      : { ...current, careerResolution: value });
   }
 
   function addListValue(key: "targetMajors" | "interests", value: string) {
@@ -512,11 +628,12 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
   }
 
   function answerClarification(question: ClarificationQuestion, answer: string) {
+    setClarificationAnswers((current) => [
+      ...current.filter((item) => item.id !== question.id),
+      { id: question.id, question: question.question, answer },
+    ]);
     setForm((cur) => {
-      const next = {
-        ...cur,
-        roadmapDesignNotes: writeClarificationAnswer(cur.roadmapDesignNotes, question.id, `${question.label} - ${question.question} / ${answer}`),
-      };
+      const next = { ...cur };
       if (question.id === "identity_conflict" && onboardingRecordContext.studentName && answer.startsWith(onboardingRecordContext.studentName)) {
         next.name = onboardingRecordContext.studentName;
       }
@@ -525,6 +642,40 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
         if (isGraduatedGrade(next.grade)) next.semester = "";
       }
       return next;
+    });
+  }
+
+  function chooseClarificationOption(question: ClarificationQuestion, option: string) {
+    const current = clarificationAnswers.find((answer) => answer.id === question.id)?.answer ?? "";
+    if (!allowsMultipleClarificationAnswers(question)) {
+      answerClarification(question, option);
+      return;
+    }
+    const parts = clarificationAnswerParts(current);
+    const hasOption = option === OTHER_CLARIFICATION_OPTION ? parts.some((part) => part.startsWith("기타")) : parts.includes(option);
+    const next = hasOption
+      ? parts.filter((part) => option === OTHER_CLARIFICATION_OPTION ? !part.startsWith("기타") : part !== option)
+      : [...parts, option];
+    answerClarification(question, next.join(" | "));
+  }
+
+  function updateOtherClarificationAnswer(question: ClarificationQuestion, value: string) {
+    const current = clarificationAnswers.find((answer) => answer.id === question.id)?.answer ?? "";
+    const parts = clarificationAnswerParts(current);
+    const nextOther = value.trim() ? `기타: ${value}` : OTHER_CLARIFICATION_OPTION;
+    const next = parts.some((part) => part.startsWith("기타"))
+      ? parts.map((part) => part.startsWith("기타") ? nextOther : part)
+      : [...parts, nextOther];
+    answerClarification(question, allowsMultipleClarificationAnswers(question) ? next.join(" | ") : nextOther);
+  }
+
+  function roadmapProfile(includeClarificationAnswers = true) {
+    const answerNotes = includeClarificationAnswers
+      ? clarificationAnswers.map((answer) => `${answer.question} / ${answer.answer}`)
+      : [];
+    return toProfileInput({
+      ...form,
+      roadmapDesignNotes: [removeClarificationAnswers(form.roadmapDesignNotes), ...answerNotes].filter(Boolean).join("\n"),
     });
   }
 
@@ -598,18 +749,22 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
       setError("학생부 분석이 끝난 뒤 로드맵을 설계할 수 있어요. 분석 결과까지 반영해서 더 정확하게 만들겠습니다.");
       return;
     }
+    if (!clarificationComplete) {
+      setError("확인 질문의 답변을 반영한 뒤, AI가 추가 확인이 필요 없다고 판단하면 최종 로드맵 초안을 보여드릴게요.");
+      return;
+    }
     setBusy(true); setError("");
     try {
       const result = await jsonRequest<typeof preview>("/api/onboarding/preview", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify(toProfileInput(form)),
+        body: JSON.stringify(roadmapProfile()),
       });
       setPreview(result);
     } catch (e) { setError(e instanceof Error ? e.message : "로드맵을 만들지 못했습니다."); }
     finally { setBusy(false); }
   }
 
-  async function prepareClarification() {
+  async function prepareClarification(restart = false) {
     if (onboardingRecordBusy) {
       setError("학생부 분석이 아직 진행 중입니다. 분석이 끝나면 Step1·2와 학생부를 함께 읽고 필요한 확인 질문을 만들게요.");
       return;
@@ -621,6 +776,7 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
       setClarificationQuestions([]);
       setClarificationSummary("졸업자 학생부로 확인되어 로드맵은 만들지 않고, 분석·정리한 학생부 기록만 보여드립니다.");
       setClarificationBlocked(true);
+      setClarificationComplete(false);
       setStep(3);
       setClarificationBusy(false);
       return;
@@ -632,6 +788,16 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
     const fallbackQuestions = buildClarificationQuestions(form, onboardingRecordParse, onboardingRecordContext);
 
     try {
+      let hypothesis = restart ? null : roadmapHypothesis;
+      if (!hypothesis) {
+        const candidate = await jsonRequest<{ roadmap: Roadmap }>("/api/onboarding/preview", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(roadmapProfile(!restart)),
+        });
+        hypothesis = candidate.roadmap;
+        setRoadmapHypothesis(candidate.roadmap);
+      }
       const result = await jsonRequest<ClarificationResponse>("/api/onboarding/clarify", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -644,8 +810,8 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
             targetMajors: splitList(form.targetMajors),
             interests: splitList(form.interests),
             careerResolution: form.careerResolution,
-            concreteResearchQuestion: form.concreteResearchQuestion,
-            knowledgeLevel: form.knowledgeLevel,
+            concreteResearchQuestion: hasSpecificCareerGoal(form) ? form.concreteResearchQuestion : "",
+            knowledgeLevel: hasSpecificCareerGoal(form) ? form.knowledgeLevel : "",
             currentEngagement: splitList(form.currentEngagement),
             outputPreference: splitList(form.outputPreference),
             collaborationStyle: splitList(form.collaborationStyle),
@@ -667,21 +833,28 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
               }
             : null,
           recordContext: onboardingRecordContext,
+          roadmapHypothesis: hypothesis,
+          answers: restart ? [] : clarificationAnswers,
         }),
       });
       if (result.blocked) {
         setClarificationQuestions([]);
         setClarificationBlocked(true);
+        setClarificationComplete(false);
         setClarificationSummary(result.summary || "업로드한 학생부가 졸업자 학생부로 확인되어 진행할 수 없습니다.");
         setStep(3);
         return;
       }
-      const questions = Array.isArray(result.questions) && result.questions.length ? result.questions : fallbackQuestions;
+      const questions = Array.isArray(result.questions) ? result.questions : fallbackQuestions;
       setClarificationQuestions(questions);
-      setClarificationSummary(result.summary || "");
+      setClarificationComplete(Boolean(result.complete) && questions.length === 0);
+      setClarificationSummary(result.draftChangeSummary
+        ? `${result.summary || ""} ${result.draftChangeSummary}`.trim()
+        : result.summary || "");
       setStep(3);
     } catch {
       setClarificationQuestions(fallbackQuestions);
+      setClarificationComplete(false);
       setClarificationSummary(onboardingRecordParse
         ? "학생부의 기존 기록과 Step1·2 입력을 기준으로 확인 질문을 만들었습니다."
         : "Step1·2 입력을 기준으로 로드맵 구조 확인 질문을 만들었습니다.");
@@ -689,6 +862,23 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
     } finally {
       setClarificationBusy(false);
     }
+  }
+
+  function continueClarification() {
+    const unanswered = clarificationQuestions.some((question) => !clarificationAnswers.some((answer) => answer.id === question.id && answer.answer));
+    if (unanswered) {
+      setError("이번 확인 질문에 모두 답해주시면 답변을 반영해 다시 검토할게요.");
+      return;
+    }
+    void prepareClarification();
+  }
+
+  function startClarification() {
+    setRoadmapHypothesis(null);
+    setClarificationAnswers([]);
+    setClarificationComplete(false);
+    setForm((current) => ({ ...current, roadmapDesignNotes: removeClarificationAnswers(current.roadmapDesignNotes) }));
+    void prepareClarification(true);
   }
 
   async function analyzeOnboardingRecord(file: File | undefined) {
@@ -708,6 +898,9 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
     setClarificationQuestions([]);
     setClarificationSummary("");
     setClarificationBlocked(false);
+    setClarificationComplete(false);
+    setRoadmapHypothesis(null);
+    setClarificationAnswers([]);
     try {
       const fallbackGrade = isGraduatedGrade(form.grade) ? 3 : Number(form.grade || 1);
       const fallbackAcademicStartYear = new Date().getFullYear() - (fallbackGrade - 1);
@@ -751,6 +944,9 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
       setOnboardingRecordAutoFields(false);
       setOnboardingRecordContext({});
       setClarificationBlocked(false);
+      setClarificationComplete(false);
+      setRoadmapHypothesis(null);
+      setClarificationAnswers([]);
       setRecordOnlyMode(false);
     } finally {
       if (onboardingRecordAbortRef.current === controller) {
@@ -774,6 +970,9 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
     setClarificationQuestions([]);
     setClarificationSummary("");
     setClarificationBlocked(false);
+    setClarificationComplete(false);
+    setRoadmapHypothesis(null);
+    setClarificationAnswers([]);
     setError("");
     if (onboardingRecordRef.current) onboardingRecordRef.current.value = "";
   }
@@ -1124,7 +1323,7 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
                         <button
                           className={`clarity-choice${form.careerResolution === item.value ? " is-active" : ""}`}
                           key={item.value}
-                          onClick={() => update("careerResolution", item.value)}
+                          onClick={() => updateCareerResolution(item.value)}
                           type="button"
                         >
                           <strong>{item.label}</strong>
@@ -1186,66 +1385,7 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
 
           {step === 2 && (
             <div className="form-steps">
-              {/* Section 4: Output & Collaboration */}
-              <div className="ob-section">
-                <div className="ob-section-title">
-                  <small>가능한 활동 범위</small>
-                  <strong>학교생활에서 활용 가능한 방식 모두 선택</strong>
-                </div>
-                <div className="form-grid-1">
-                  <div className="form-field">
-                    <div className="choice-group-head">
-                      <label>산출물 형태</label>
-                      <small>불가능한 것만 해제하세요</small>
-                    </div>
-                    <div className="choice-grid evidence-choice-grid">
-                      {OUTPUT_EVIDENCE_OPTIONS.map((option) => (
-                        <label className="choice-card" key={option.label}>
-                          <input
-                            checked={splitList(form.outputPreference).includes(option.label)}
-                            onChange={() => toggleFormList("outputPreference", option.label)}
-                            type="checkbox"
-                          />
-                          <i className="choice-icon">{option.icon}</i>
-                          <span>
-                            <strong>{option.label}</strong>
-                            <small>{option.detail}</small>
-                          </span>
-                          <b className="choice-check">✓</b>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="form-field">
-                    <div className="choice-group-head">
-                      <label>활동 채널</label>
-                      <small>학교 여건상 불가능한 것만 해제하세요</small>
-                    </div>
-                    <div className="choice-grid">
-                      {ACTIVITY_CHANNEL_OPTIONS.map((option) => (
-                        <label className="choice-card" key={option.label}>
-                          <input
-                            checked={splitList(form.collaborationStyle).includes(option.label)}
-                            onChange={() => toggleFormList("collaborationStyle", option.label)}
-                            type="checkbox"
-                          />
-                          <i className="choice-icon">{option.icon}</i>
-                          <span>
-                            <strong>{option.label}</strong>
-                            <small>{option.detail}</small>
-                          </span>
-                          <b className="choice-check">✓</b>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="onboarding-record-note">
-                    선호도를 묻는 단계가 아닙니다. 수행평가·대회·보고서·독서는 로드맵상 필요하면 배치하고, 여기서는 현실적으로 불가능한 방식만 제외합니다.
-                  </p>
-                </div>
-              </div>
-
-              {/* Section 5: Constraints */}
+              {/* 현실 제약만 확인 */}
               <div className="ob-section">
                 <div className="ob-section-title">
                   <small>현실 조건</small>
@@ -1273,7 +1413,7 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
                 </div>
                 <div className="form-grid-1">
                   <p className="onboarding-record-note">
-                    학생부 기록, 희망 진로, 활동 가능 범위를 함께 보고 만든 질문입니다. 답변은 3개년 로드맵 설계 조건으로 반영됩니다.
+                    AI가 현재 입력을 바탕으로 1차 로드맵 가설을 내부에서 만들었습니다. 그 가설의 학기 전략·대표 활동·증거 방식이 달라질 수 있는 질문만 확인하고, 답변 뒤에도 필요한 질문이 있으면 계속 이어갑니다.
                   </p>
                   {clarificationSummary && (
                     <div className={`banner ${clarificationBlocked ? "banner-warning" : "banner-info"}`}>
@@ -1302,36 +1442,48 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
                     </div>
                   )}
                   {clarificationQuestions.map((question) => {
-                    const selected = readClarificationAnswer(form.roadmapDesignNotes, question.id);
+                    const selected = clarificationAnswers.find((answer) => answer.id === question.id)?.answer ?? readClarificationAnswer(form.roadmapDesignNotes, question.id);
+                    const selectedParts = clarificationAnswerParts(selected);
+                    const otherSelected = selectedParts.some((part) => part.startsWith("기타"));
+                    const otherValue = selectedParts.find((part) => part.startsWith("기타:"))?.replace(/^기타:\s*/, "") ?? "";
                     return (
                       <div className="branch-question-card" key={question.id}>
                         <div className="branch-question-head">
                           <strong>{question.question}</strong>
                           <small>{question.label}</small>
                         </div>
+                        {question.why && <p className="onboarding-record-note">이 답이 필요한 이유: {question.why}</p>}
                         <div className="clarity-choice-row">
-                          {question.options.map((option) => (
+                          {clarificationOptions(question).map((option) => (
                             <button
-                              className={`clarity-choice${selected.endsWith(option) ? " is-active" : ""}`}
+                              className={`clarity-choice${(option === OTHER_CLARIFICATION_OPTION ? otherSelected : selectedParts.includes(option)) ? " is-active" : ""}`}
                               key={option}
-                              onClick={() => answerClarification(question, option)}
+                              onClick={() => chooseClarificationOption(question, option)}
                               type="button"
                             >
                               <strong>{option}</strong>
                             </button>
                           ))}
                         </div>
+                        {allowsMultipleClarificationAnswers(question) && <small className="onboarding-record-note">복수 선택 가능</small>}
+                        {otherSelected && (
+                          <div className="form-field" style={{ marginTop: 10 }}>
+                            <label htmlFor={`other-${question.id}`}>직접 입력</label>
+                            <input id={`other-${question.id}`} value={otherValue} onChange={(event) => updateOtherClarificationAnswer(question, event.target.value)} placeholder="선택지에 없는 내용을 적어주세요" />
+                          </div>
+                        )}
                       </div>
                     );
                   })}
-                  {!clarificationBlocked && (
+                  {!clarificationBlocked && clarificationComplete && (
                     <div className="form-field">
-                      <label htmlFor="ob-roadmap-notes">추가로 꼭 반영할 방향</label>
+                      <label htmlFor="ob-roadmap-notes">선택지에 없던 추가 조건 (선택)</label>
+                      <small className="onboarding-record-note">위에서 선택한 답변은 자동으로 반영됩니다. 여기에는 선택지에 없던 학교 상황이나 꼭 지켜야 할 방향만 적어주세요.</small>
                       <textarea
                         id="ob-roadmap-notes"
                         value={form.roadmapDesignNotes}
                         onChange={(e) => update("roadmapDesignNotes", e.target.value)}
-                        placeholder="예: 1학년 기록은 자연스럽게 이어가되, 2학년부터는 반도체 공정 중심으로 강하게 전환하고 싶음"
+                        placeholder="예: 2학기에는 과학 과목에서만 새 주제를 시도할 수 있음"
                       />
                     </div>
                   )}
@@ -1362,10 +1514,10 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
                 <button
                   className="btn btn-primary"
                   disabled={clarificationBusy || onboardingRecordBusy}
-                  onClick={prepareClarification}
+                  onClick={startClarification}
                   type="button"
                 >
-                  {onboardingRecordBusy ? "학생부 분석이 끝나면 확인 가능" : clarificationBusy ? "Step1·2 분석 중…" : "다음: 설계 방향 확인 →"}
+                  {onboardingRecordBusy ? "학생부 분석이 끝나면 확인 가능" : clarificationBusy ? "1차 로드맵 가설 만드는 중…" : "다음: 설계 방향 확인 →"}
                 </button>
               </>
             ) : (
@@ -1379,11 +1531,11 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
                 </button>
                 <button
                   className="btn btn-primary"
-                  disabled={(!recordOnlyMode && clarificationBlocked) || busy || onboardingRecordBusy || !canPreview}
-                  onClick={recordOnlyMode ? confirmOnboarding : createPreview}
+                  disabled={(!recordOnlyMode && clarificationBlocked) || busy || clarificationBusy || onboardingRecordBusy || !canPreview}
+                  onClick={recordOnlyMode ? confirmOnboarding : clarificationComplete ? createPreview : continueClarification}
                   type="button"
                 >
-                  {recordOnlyMode ? "학생부 기록으로 메인 화면 보기 →" : clarificationBlocked ? "졸업자 학생부로 진행 불가" : onboardingRecordBusy ? "학생부 분석 대기 중…" : busy ? "로드맵 설계 중…" : "3개년 로드맵 설계하기 →"}
+                  {recordOnlyMode ? "학생부 기록으로 메인 화면 보기 →" : clarificationBlocked ? "졸업자 학생부로 진행 불가" : onboardingRecordBusy ? "학생부 분석 대기 중…" : clarificationBusy ? "답변 반영해 다시 검토 중…" : busy ? "로드맵 설계 중…" : clarificationComplete ? "최종 로드맵 초안 보기 →" : "답변 반영하고 다시 검토하기 →"}
                 </button>
               </>
             )}
@@ -1397,46 +1549,10 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
 /* ──────────────────────────────────────────────
    Overview
    ────────────────────────────────────────────── */
-function Overview({ workspace, onWorkspace, onNavigate }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void; onNavigate: (tab: TabId) => void }) {
+function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void; onConvertPlan: (draft: ActivityDraft) => void }) {
   const active = workspace.roadmap.nodes.find((n) => n.status === "active");
   const completed = workspace.roadmap.nodes.filter((n) => n.status === "completed").length;
-
-  function confirmPlan(nodeId: string, planEventId: string, newCategory: RoadmapEventCategory) {
-    const node = workspace.roadmap.nodes.find((n) => n.id === nodeId);
-    const ev = node?.planEvents?.find((p) => p.id === planEventId);
-    if (!node || !ev) return;
-    
-    const planYear = Number(workspace.profile.grade) > 1 ? new Date().getFullYear() : new Date().getFullYear(); // simplified year
-    const date = `${planYear}-${ev.monthDay}`;
-    const activityTypeMap: Record<string, string> = {
-      "활동": "세특", "상장": "수상", "봉사": "봉사", "독서": "독서", "시험": "시험"
-    };
-    const newActivity: StudentActivity = {
-      id: crypto.randomUUID(),
-      studentId: workspace.profile.id,
-      activityType: activityTypeMap[newCategory] || "세특",
-      subject: ev.subject,
-      title: ev.title,
-      summary: "",
-      concepts: [],
-      outputs: ["생활기록부"],
-      status: "completed",
-      roadmapNodeId: nodeId,
-      completedAt: date,
-    };
-    
-    const updatedNodes = workspace.roadmap.nodes.map((n) => 
-      n.id === nodeId 
-        ? { ...n, planEvents: n.planEvents?.filter((p) => p.id !== planEventId) }
-        : n
-    );
-    
-    onWorkspace({
-      ...workspace,
-      activities: [...workspace.activities, newActivity],
-      roadmap: { ...workspace.roadmap, nodes: updatedNodes }
-    });
-  }
+  const [selectedPlan, setSelectedPlan] = useState<RoadmapPlanEvent | null>(null);
 
   return (
     <div className="overview-page">
@@ -1450,39 +1566,33 @@ function Overview({ workspace, onWorkspace, onNavigate }: { workspace: ProductWo
           </div>
           
           <div className="overview-plans" style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
-            <h3 style={{ fontSize: "1rem", color: "var(--fg)" }}>남은 계획 리스트</h3>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+              <h3 style={{ fontSize: "1rem", color: "var(--fg)" }}>이번 학기 활동 주제 제안</h3>
+              <small style={{ color: "var(--fg-muted)" }}>★ 먼저 검토하면 좋은 주제</small>
+            </div>
             {active?.planEvents && active.planEvents.length > 0 ? (
-              active.planEvents.map(ev => (
-                <div key={ev.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 12, background: "var(--bg-elevated)", border: "1px dashed var(--border)", borderRadius: 8 }}>
+              active.planEvents.map((ev) => (
+                <div
+                  className="overview-plan-card"
+                  key={ev.id}
+                  onClick={() => setSelectedPlan(ev)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedPlan(ev); } }}
+                  role="button"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 12, background: "var(--bg-elevated)", border: "1px dashed var(--border)", borderRadius: 8, cursor: "pointer" }}
+                  tabIndex={0}
+                >
                   <div>
-                    <strong style={{ display: "block" }}>{ev.title}</strong>
-                    <small style={{ color: "var(--fg-muted)" }}>{ev.subject} · {ev.monthDay}</small>
+                    <strong style={{ display: "block" }}>{planTitleWithPriority(ev.title, ev.priority)}</strong>
+                    <small style={{ color: "var(--fg-muted)" }}>연결 과목 {ev.subject}</small>
+                    <p style={{ color: "var(--fg-muted)", margin: "6px 0 0", fontSize: "0.82rem", lineHeight: 1.5 }}>{ev.description || "이 학기의 목표와 연결되는 탐구 주제입니다."}</p>
                   </div>
-                  <select
-                    className="plan-confirm-select"
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        confirmPlan(active.id, ev.id, e.target.value as RoadmapEventCategory);
-                      }
-                    }}
-                    value=""
-                    style={{
-                      padding: "4px 8px", fontSize: "0.8rem",
-                      borderRadius: 4, border: "1px solid var(--border)",
-                      background: "var(--bg)", color: "var(--fg)", cursor: "pointer"
-                    }}
-                  >
-                    <option value="" disabled>✅ 확정하기</option>
-                    <option value="활동">활동</option>
-                    <option value="상장">상장</option>
-                    <option value="봉사">봉사</option>
-                    <option value="독서">독서</option>
-                    <option value="시험">시험</option>
-                  </select>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                    <button className="btn btn-secondary" onClick={(event) => { event.stopPropagation(); onConvertPlan({ title: ev.title, subject: ev.subject, planEventId: ev.id, roadmapNodeId: active.id }); }} type="button">이 주제를 실제 활동에 연결</button>
+                  </div>
                 </div>
               ))
             ) : (
-              <p style={{ color: "var(--fg-muted)" }}>이번 학기에 계획된 활동이 없습니다.</p>
+              <p style={{ color: "var(--fg-muted)" }}>이번 학기에 제안된 활동 주제가 없습니다.</p>
             )}
           </div>
         </div>
@@ -1605,6 +1715,7 @@ function Overview({ workspace, onWorkspace, onNavigate }: { workspace: ProductWo
           </div>
         )}
       </section>
+      {selectedPlan && active && <PlanDetailModal plan={selectedPlan} node={active} onClose={() => setSelectedPlan(null)} onConvertPlan={onConvertPlan} />}
     </div>
   );
 }
@@ -1612,7 +1723,7 @@ function Overview({ workspace, onWorkspace, onNavigate }: { workspace: ProductWo
 /* ──────────────────────────────────────────────
    RoadmapView
    ────────────────────────────────────────────── */
-function RoadmapView({ workspace, onWorkspace }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void }) {
+function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void; onConvertPlan: (draft: ActivityDraft) => void }) {
   const [editing, setEditing] = useState<RoadmapNode | null>(null);
   const [checkpointOpen, setCheckpointOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1620,6 +1731,7 @@ function RoadmapView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
   const [layoutMode, setLayoutMode] = useState<RoadmapLayoutMode>("map");
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<{ plan: RoadmapPlanEvent; node: RoadmapNode } | null>(null);
   const [studentNudge, setStudentNudge] = useState(false);
   const [studentHovering, setStudentHovering] = useState(false);
   const [recordFile, setRecordFile] = useState("");
@@ -1644,46 +1756,6 @@ function RoadmapView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
     } finally {
       setSummarizingNodeId(null);
     }
-  }
-
-  function confirmPlan(nodeId: string, planEventId: string, newCategory: RoadmapEventCategory) {
-    const node = workspace.roadmap.nodes.find((n) => n.id === nodeId);
-    const ev = node?.planEvents?.find((p) => p.id === planEventId);
-    if (!node || !ev) return;
-    
-    // Create new Activity
-    const planYear = academicStartYear + node.grade - 1;
-    const date = `${planYear}-${ev.monthDay}`;
-    // map UI category to backend activityType
-    const activityTypeMap: Record<string, string> = {
-      "활동": "세특", "상장": "수상", "봉사": "봉사", "독서": "독서", "시험": "시험"
-    };
-    const newActivity = {
-      id: crypto.randomUUID(),
-      studentId: workspace.profile.id,
-      activityType: activityTypeMap[newCategory] || "세특",
-      subject: ev.subject,
-      title: ev.title,
-      summary: "",
-      concepts: [],
-      outputs: ["생활기록부"],
-      status: "completed",
-      roadmapNodeId: nodeId,
-      completedAt: date,
-    };
-    
-    // Remove from planEvents
-    const updatedNodes = workspace.roadmap.nodes.map((n) => 
-      n.id === nodeId 
-        ? { ...n, planEvents: n.planEvents?.filter((p) => p.id !== planEventId) }
-        : n
-    );
-    
-    onWorkspace({
-      ...workspace,
-      activities: [...workspace.activities, newActivity],
-      roadmap: { ...workspace.roadmap, nodes: updatedNodes }
-    });
   }
 
   const focusedNode = workspace.roadmap.nodes.find((n) => n.id === focusedNodeId) ?? null;
@@ -1733,7 +1805,8 @@ function RoadmapView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
 
   const focusedEvents = focusedNode ? applyActivityFilter(eventsForNode(focusedNode)) : [];
   const focusedRecords = focusedEvents.filter((ev) => !ev.isPlan);
-  const focusedPlans = focusedEvents.filter((ev) => ev.isPlan);
+  const focusedPlanIds = new Set(focusedEvents.filter((ev) => ev.isPlan).map((ev) => ev.id));
+  const focusedPlans = focusedNode ? (focusedNode.planEvents ?? []).filter((ev) => focusedPlanIds.has(ev.id)) : [];
   const focusedImportedSubjects = focusedNode
     ? [...new Set(workspace.schoolRecordCourses
         .filter((c) => c.grade === focusedNode.grade && c.semester === focusedNode.semester)
@@ -2184,42 +2257,38 @@ function RoadmapView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
               <div className="focus-stream-column is-plan">
                 <div className="focus-stream-head">
                   <span className="kicker">PLANS</span>
-                  <strong>앞으로의 계획</strong>
+                  <strong>활동 주제 제안</strong>
+                  <small>★ 먼저 검토하면 좋은 주제</small>
                 </div>
                 <div className="focus-stream-list">
                   {focusedPlans.map((ev) => {
                     const cat = ROADMAP_CATEGORIES.find((c) => c.category === ev.category);
                     return (
-                      <div className="focus-event is-plan" key={ev.id} style={{ "--subj": subjectColor(ev.subject) } as CSSProperties}>
+                      <div
+                        className="focus-event is-plan"
+                        key={ev.id}
+                        onClick={() => setSelectedPlan({ plan: ev, node: focusedNode })}
+                        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedPlan({ plan: ev, node: focusedNode }); } }}
+                        role="button"
+                        style={{ "--subj": subjectColor(ev.subject), cursor: "pointer" } as CSSProperties}
+                        tabIndex={0}
+                      >
                         <span className="focus-ev-icon">{cat?.icon}</span>
                         <small>{ev.category}</small>
-                        <strong>{ev.title}</strong>
-                        <em>{ev.subject} · 계획</em>
-                        <select
-                          className="plan-confirm-select"
-                          onChange={(e) => {
-                            if (e.target.value && focusedNode) {
-                              confirmPlan(focusedNode.id, ev.id, e.target.value as RoadmapEventCategory);
-                            }
-                          }}
-                          value=""
-                          style={{
-                            marginTop: 8, padding: "4px 8px", fontSize: "0.8rem",
-                            borderRadius: 4, border: "1px solid var(--border)",
-                            background: "var(--bg)", color: "var(--fg)", cursor: "pointer"
-                          }}
+                        <strong>{planTitleWithPriority(ev.title, ev.priority)}</strong>
+                        <em>{ev.subject} · 학교 기회에 맞춰 선택</em>
+                        <p style={{ margin: "6px 0", fontSize: "0.82rem", lineHeight: 1.5 }}>{ev.description || "이 학기의 목표와 연결되는 탐구 주제입니다."}</p>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={(event) => { event.stopPropagation(); onConvertPlan({ title: ev.title, subject: ev.subject, planEventId: ev.id, roadmapNodeId: focusedNode?.id }); }}
+                          type="button"
                         >
-                          <option value="" disabled>✅ 확정하기</option>
-                          <option value="활동">활동</option>
-                          <option value="상장">상장</option>
-                          <option value="봉사">봉사</option>
-                          <option value="독서">독서</option>
-                          <option value="시험">시험</option>
-                        </select>
+                          이 주제를 실제 활동에 연결
+                        </button>
                       </div>
                     );
                   })}
-                  {!focusedPlans.length && <span className="focus-month-empty">추가 계획이 없습니다.</span>}
+                  {!focusedPlans.length && <span className="focus-month-empty">추가 활동 주제 제안이 없습니다.</span>}
                 </div>
               </div>
             </div>
@@ -2419,6 +2488,7 @@ function RoadmapView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
           </div>
         </div>
       )}
+      {selectedPlan && <PlanDetailModal plan={selectedPlan.plan} node={selectedPlan.node} onClose={() => setSelectedPlan(null)} onConvertPlan={onConvertPlan} />}
     </div>
   );
 }
@@ -2429,38 +2499,51 @@ function RoadmapView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
 function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   workspace: ProductWorkspace;
   onWorkspace: (workspace: ProductWorkspace) => void;
-  draft: { title: string; summary: string } | null;
+  draft: ActivityDraft | null;
   clearDraft: () => void;
 }) {
   const [form, setForm] = useState({
-    activityType: "활동",
-    subject: workspace.profile.preferredSubjects[0] ?? "통합과학",
+    activityType: "",
+    subject: draft?.subject ?? workspace.profile.preferredSubjects[0] ?? "통합과학",
     title: draft?.title ?? "",
     summary: draft?.summary ?? "",
-    concepts: workspace.profile.interests.join(", "),
-    outputs: "탐구 보고서",
+    concepts: "",
+    outputs: "",
     completedAt: new Date().toISOString().slice(0, 10),
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [lastLog, setLastLog] = useState<ReconciliationLog | null>(null);
+  const [planEventId, setPlanEventId] = useState(draft?.planEventId ?? "");
+  const [files, setFiles] = useState<File[]>([]);
+  const [lastReview, setLastReview] = useState<{ summary: string; gaps: string[]; nextSteps: string[] } | null>(null);
+  const selectablePlans = workspace.roadmap.nodes.flatMap((node) => (node.planEvents ?? []).map((event) => ({ ...event, nodeId: node.id, objective: node.objective })));
 
   async function submit() {
     setBusy(true); setError("");
     try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace; reconciliation: ReconciliationLog }>("/api/activities", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          studentId: workspace.profile.id,
-          activity: { ...form, concepts: splitList(form.concepts), outputs: splitList(form.outputs) },
-        }),
-      });
+      const selectedPlan = selectablePlans.find((plan) => plan.id === planEventId);
+      const payload = new FormData();
+      payload.append("studentId", workspace.profile.id);
+      payload.append("activity", JSON.stringify({ ...form, roadmapNodeId: selectedPlan?.nodeId, planEventId: planEventId || undefined, concepts: splitList(form.concepts), outputs: splitList(form.outputs) }));
+      files.forEach((file) => payload.append("files", file));
+      const response = await fetch("/api/activities", { method: "POST", body: payload });
+      const result = await response.json() as { workspace?: ProductWorkspace; reconciliation?: ReconciliationLog; error?: string };
+      if (!response.ok || !result.workspace || !result.reconciliation) throw new Error(result.error || "활동을 저장하지 못했습니다.");
       onWorkspace(result.workspace);
       setLastLog(result.reconciliation);
+      setLastReview(result.workspace.activityReviews.find((review) => review.activityId === result.reconciliation?.activityId) ?? null);
       clearDraft();
-      setForm((cur) => ({ ...cur, title: "", summary: "" }));
+      setPlanEventId(""); setFiles([]); setForm((cur) => ({ ...cur, title: "", summary: "", activityType: "" }));
     } catch (e) { setError(e instanceof Error ? e.message : "활동을 저장하지 못했습니다."); }
     finally { setBusy(false); }
+  }
+
+  async function deleteAttachment(id: string) {
+    if (!window.confirm("이 첨부 파일을 영구 삭제할까요?")) return;
+    const response = await fetch(`/api/activity-files/${encodeURIComponent(id)}?studentId=${encodeURIComponent(workspace.profile.id)}`, { method: "DELETE" });
+    if (!response.ok) { setError("파일을 삭제하지 못했습니다."); return; }
+    onWorkspace({ ...workspace, attachments: workspace.attachments.filter((attachment) => attachment.id !== id) });
   }
 
   return (
@@ -2475,15 +2558,22 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       {/* Form */}
       <div className="activity-form-card">
         <h2>활동 추가</h2>
+        <div className="form-field" style={{ marginBottom: "14px" }}>
+          <label htmlFor="act-plan">연결할 로드맵 활동 주제 (선택 · 변경 가능)</label>
+          <select id="act-plan" value={planEventId} onChange={(e) => setPlanEventId(e.target.value)}>
+            <option value="">로드맵과 별개의 실제 활동</option>
+            {selectablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.subject} · {planTitleWithPriority(plan.title, plan.priority)}</option>)}
+          </select>
+        </div>
         <div className="form-grid-3" style={{ marginBottom: "14px" }}>
           <div className="form-field">
             <label htmlFor="act-type">활동 유형</label>
             <select id="act-type" value={form.activityType} onChange={(e) => setForm({ ...form, activityType: e.target.value })}>
-              <option>상장</option>
-              <option>활동</option>
+              <option value="" disabled>실제로 진행한 유형 선택</option>
+              <option value="상장(대회)">상장(대회)</option>
+              <option value="활동">활동(세특용 보고서·그 외 활동)</option>
               <option>봉사</option>
               <option>독서</option>
-              <option>시험</option>
             </select>
           </div>
           <div className="form-field">
@@ -2503,25 +2593,21 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
           <label htmlFor="act-summary">무엇을 어떻게 했나요?</label>
           <textarea id="act-summary" value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} placeholder="탐구 과정, 발견한 내용, 적용한 방법을 간략히 적어주세요" />
         </div>
-        <div className="form-grid-2" style={{ marginBottom: "18px" }}>
-          <div className="form-field">
-            <label htmlFor="act-concepts">핵심 개념 (쉼표로 구분)</label>
-            <input id="act-concepts" value={form.concepts} onChange={(e) => setForm({ ...form, concepts: e.target.value })} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="act-outputs">산출물 (쉼표로 구분)</label>
-            <input id="act-outputs" value={form.outputs} onChange={(e) => setForm({ ...form, outputs: e.target.value })} />
-          </div>
+        <div className="form-field" style={{ marginBottom: "18px" }}>
+          <label htmlFor="act-files">발표자료·탐구보고서 첨부 (선택, PDF/PPTX/DOCX · 파일당 10MB)</label>
+          <input id="act-files" type="file" accept=".pdf,.pptx,.docx" multiple onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
+          {files.length > 0 && <small>{files.map((file) => file.name).join(", ")}</small>}
         </div>
         {error && <div className="banner banner-error" style={{ marginBottom: "14px" }}>{error}</div>}
         <button
           className="btn btn-primary"
-          disabled={busy || !form.title.trim() || !form.summary.trim()}
+          disabled={busy || !form.activityType || !form.title.trim() || !form.summary.trim()}
           onClick={submit}
           type="button"
         >
           {busy ? "저장·정합 중…" : "활동 저장하고 로드맵과 비교"}
         </button>
+        {lastReview && <div className="banner" style={{ marginTop: "14px" }}><strong>AI 활동 검토</strong><br />{lastReview.summary}{lastReview.gaps.length > 0 && <><br />보완: {lastReview.gaps.join(" · ")}</>}{lastReview.nextSteps.length > 0 && <><br />다음: {lastReview.nextSteps.join(" · ")}</>}</div>}
       </div>
 
       {/* Reconciliation result */}
@@ -2554,9 +2640,16 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
                     <span className="type-pill">{activity.activityType} · {activity.subject}</span>
                     <h3>{activity.title}</h3>
                     <p>{activity.summary}</p>
+                    {activity.linkedPlanTitle && <small style={{ color: "var(--fg-muted)", display: "block", marginBottom: 8 }}>연결한 로드맵 주제: {activity.linkedPlanTitle}</small>}
                     <div className="concept-tags">
                       {activity.concepts.map((c) => <span className="concept-tag" key={c}>{c}</span>)}
                     </div>
+                    {workspace.attachments.filter((attachment) => attachment.activityId === activity.id).map((attachment) => (
+                      <div key={attachment.id} style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+                        <a href={`/api/activity-files/${encodeURIComponent(attachment.id)}?studentId=${encodeURIComponent(workspace.profile.id)}`}>{attachment.fileName}</a>
+                        <button className="btn btn-ghost btn-sm" onClick={() => deleteAttachment(attachment.id)} type="button">삭제</button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -2597,6 +2690,16 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   );
 }
 
+function PortfolioView({ workspace }: { workspace: ProductWorkspace }) {
+  const records = [...workspace.activities].sort((a, b) => a.completedAt.localeCompare(b.completedAt));
+  const themes = [...new Set(records.flatMap((record) => record.concepts))].slice(0, 6);
+  return <div className="activities-page">
+    <div className="activities-header"><span className="kicker">ADMISSIONS PORTFOLIO</span><h1>수시 준비 자료</h1><p>3년 활동의 사실과 증거를 자소서 서사와 면접 대비 질문으로 정리합니다.</p></div>
+    <div className="activity-form-card"><h2>자소서 서사 초안</h2><p>{workspace.profile.targetCareer} 관심을 바탕으로 {records.length}개의 실제 활동을 축적했습니다. {themes.length ? `핵심 키워드는 ${themes.join(", ")}입니다.` : "활동을 더 기록하면 핵심 키워드가 자동으로 정리됩니다."}</p><ol>{records.map((record) => <li key={record.id}><strong>{record.completedAt} · {record.title}</strong><br />{record.summary}</li>)}</ol></div>
+    <div className="activity-form-card"><h2>면접 대비 질문</h2>{records.length ? <ol>{records.slice(-5).reverse().map((record) => <li key={record.id}>“{record.title}에서 무엇을 직접 탐구했고, 결과가 {workspace.profile.targetCareer} 관심과 어떻게 이어졌나요?”</li>)}</ol> : <p>실제 활동을 저장하면 활동별 면접 질문이 만들어집니다.</p>}</div>
+  </div>;
+}
+
 /* ──────────────────────────────────────────────
    ProfileView
    ────────────────────────────────────────────── */
@@ -2608,6 +2711,8 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
     targetCareer: workspace.profile.targetCareer,
     targetMajors: workspace.profile.targetMajors.join(", "),
     interests: workspace.profile.interests.join(", "),
+    concreteResearchQuestion: "",
+    knowledgeLevel: "",
     motivationTrigger: workspace.profile.motivationTrigger,
     careerResolution: workspace.profile.careerResolution,
     currentEngagement: workspace.profile.currentEngagement.join(", "),
@@ -2623,6 +2728,42 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  return (
+    <div className="profile-page">
+      <div className="profile-header">
+        <span className="kicker">STUDENT PROFILE</span>
+        <h1>학생 정보</h1>
+        <p>이 화면은 현재 학생과 확정된 로드맵 기준을 확인하는 용도입니다. 여기서 로드맵을 직접 수정하지 않습니다.</p>
+      </div>
+
+      <div className="profile-form-card">
+        <div className="form-grid-3" style={{ marginBottom: "20px" }}>
+          <div className="form-field"><label>이름</label><p>{workspace.profile.name || "미입력"}</p></div>
+          <div className="form-field"><label>현재 학년</label><p>{workspace.profile.grade}학년</p></div>
+          <div className="form-field"><label>현재 학기</label><p>{workspace.profile.semester}학기</p></div>
+        </div>
+        <div className="form-grid-2">
+          <div className="form-field form-span-2"><label>현재 관심 분야 또는 진로</label><p>{workspace.profile.targetCareer || "미입력"}</p></div>
+          <div className="form-field"><label>관심 학과</label><p>{workspace.profile.targetMajors.join(", ") || "미입력"}</p></div>
+          <div className="form-field"><label>로드맵 관심 축</label><p>{workspace.profile.interests.join(", ") || "미입력"}</p></div>
+        </div>
+        <div className="banner banner-info" style={{ marginTop: "20px" }}>
+          로드맵 기준을 바꾸고 싶다면 추후 챗봇에서 이유와 현재 기록을 함께 검토한 뒤 새 버전을 제안합니다. 과거 기록과 확정된 로드맵은 이 화면에서 임의로 바뀌지 않습니다.
+        </div>
+      </div>
+
+      <div className="data-priority-card">
+        <span className="kicker">DATA PRIORITY</span>
+        <h2>현재 저장 원칙</h2>
+        <div className="priority-list">
+          {["학생이 직접 확인한 기본 정보", "실제 활동과 첨부자료의 근거", "학생이 확인한 AI 해석", "아직 확인되지 않은 잠정 추론"].map((text, i) => (
+            <div className="priority-item" key={text}><span className="priority-num">{i + 1}</span>{text}</div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   function update<K extends keyof ProfileForm>(key: K, value: ProfileForm[K]) {
     setForm((cur) => ({ ...cur, [key]: value }));
   }
@@ -2633,6 +2774,12 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
       grade: value,
       semester: isGraduatedGrade(value) ? "" : isGraduatedGrade(cur.grade) ? "" : cur.semester,
     }));
+  }
+
+  function updateCareerResolution(value: string) {
+    setForm((current) => value === "넓은 분야만 정한 단계"
+      ? { ...current, careerResolution: value, knowledgeLevel: "", concreteResearchQuestion: "" }
+      : { ...current, careerResolution: value });
   }
 
   async function save(regenerate: boolean) {
@@ -2660,8 +2807,8 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
     <div className="profile-page">
       <div className="profile-header">
         <span className="kicker">MEMORY UPDATE</span>
-        <h1>학생 프로필과 진로 변화</h1>
-        <p>학생이 직접 입력한 정보가 AI 추론보다 우선합니다. 진로가 바뀌면 기존 로드맵을 덮어쓰지 않고 새 버전으로 만들 수 있어요.</p>
+        <h1>현재 상태와 로드맵 기준</h1>
+        <p>학생이 직접 확인한 현재 상태와 제약만 바꿉니다. 저장 후 새 버전을 만들면 과거 기록은 유지하고 현재 이후의 주제 제안만 다시 구성합니다.</p>
       </div>
 
       <div className="profile-form-card">
@@ -2685,7 +2832,7 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
         </div>
         <div className="form-grid-2">
           <div className="form-field form-span-2">
-            <label htmlFor="pf-career">희망 진로</label>
+            <label htmlFor="pf-career">현재 가장 끌리는 분야 또는 진로</label>
             <input id="pf-career" value={form.targetCareer} onChange={(e) => update("targetCareer", e.target.value)} />
           </div>
           <div className="form-field">
@@ -2697,63 +2844,22 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
             <textarea id="pf-interests" value={form.interests} onChange={(e) => update("interests", e.target.value)} />
           </div>
 
-          <div className="form-field">
-            <label htmlFor="pf-motivation">진로 관심 계기</label>
-            <select id="pf-motivation" value={form.motivationTrigger} onChange={(e) => update("motivationTrigger", e.target.value)}>
-              <option value="">선택해주세요</option>
-              <option value="순수 학문적 호기심과 탐구욕">순수 학문적 호기심과 탐구욕</option>
-              <option value="특정 사회 문제나 불편함을 해결하고 싶어서">사회적 문제 해결</option>
-              <option value="유망한 산업군이며 직업적 안정성이 높아서">직업적 안정성 / 유망함</option>
-              <option value="실생활에서의 직접적인 경험을 통해">실생활에서의 경험</option>
-            </select>
-          </div>
-          <div className="form-field">
-            <label htmlFor="pf-resolution">진로 해상도</label>
-            <select id="pf-resolution" value={form.careerResolution} onChange={(e) => update("careerResolution", e.target.value)}>
-              <option value="">선택해주세요</option>
-              <option value="막연히 관심만 가지고 있는 단계">이제 막 관심 생긴 단계</option>
-              <option value="관련 도서나 다큐멘터리 등을 찾아보며 알아가는 단계">조금씩 알아가는 단계</option>
-              <option value="구체적인 세부 전공과 희망 직업군을 확정한 상태">구체적 목표 확정 단계</option>
-            </select>
-          </div>
           <div className="form-field form-span-2">
-            <label htmlFor="pf-engagement">현재 진행 중인 관련 활동</label>
-            <textarea id="pf-engagement" value={form.currentEngagement} onChange={(e) => update("currentEngagement", e.target.value)} />
+            <label>현재 진로가 어느 정도 정해졌나요?</label>
+            <div className="clarity-choice-row is-two">
+              <button className={`clarity-choice${form.careerResolution === "넓은 분야만 정한 단계" ? " is-active" : ""}`} onClick={() => updateCareerResolution("넓은 분야만 정한 단계")} type="button"><strong>넓은 분야만 있음</strong><small>세부 키워드는 로드맵에서 천천히 좁혀갑니다.</small></button>
+              <button className={`clarity-choice${hasSpecificCareerGoal(form) ? " is-active" : ""}`} onClick={() => updateCareerResolution("구체적인 학과나 직무까지 정한 단계")} type="button"><strong>구체 목표가 있음</strong><small>세부 키워드와 현재 지식을 로드맵에 반영합니다.</small></button>
+            </div>
+          </div>
+          {hasSpecificCareerGoal(form) && <div className="form-field form-span-2">
+            <label htmlFor="pf-detail">특히 궁금한 세부 키워드나 문제</label>
+            <textarea id="pf-detail" value={form.concreteResearchQuestion} onChange={(event) => update("concreteResearchQuestion", event.target.value)} placeholder="예: 반도체 소자의 전력 효율과 집적회로 설계" />
+          </div>}
+          <div className="form-field form-span-2">
+            <label htmlFor="pf-engagement">현재 실제로 진행 중인 활동</label>
+            <textarea id="pf-engagement" value={form.currentEngagement} onChange={(e) => update("currentEngagement", e.target.value)} placeholder="실제로 참여 중이거나 시작한 활동만 적어주세요. 없으면 비워두세요." />
           </div>
 
-          <div className="form-field">
-            <label htmlFor="pf-output">선호 산출물 형태</label>
-            <select id="pf-output" value={form.outputPreference} onChange={(e) => update("outputPreference", e.target.value)}>
-              <option value="">선택해주세요</option>
-              <option value="논문, 보고서, 에세이 등 텍스트 중심">보고서 등 글쓰기</option>
-              <option value="코드, 프로토타입, 모형 등 실물 제작">코드/실물 제작</option>
-              <option value="발표자료, 인포그래픽 등 시각 자료">PPT 등 시각 자료</option>
-              <option value="발표, 토론, 발표회 등 구두 전달">발표/토론 구두 전달</option>
-            </select>
-          </div>
-          <div className="form-field">
-            <label htmlFor="pf-collab">팀플 선호 역할</label>
-            <select id="pf-collab" value={form.collaborationStyle} onChange={(e) => update("collaborationStyle", e.target.value)}>
-              <option value="">선택해주세요</option>
-              <option value="팀을 이끌고 계획을 주도하는 리더">리더 (계획 및 주도)</option>
-              <option value="새로운 아이디어와 관점을 제시하는 기획자">기획자 (아이디어 제시)</option>
-              <option value="주어진 역할을 확실하게 완수하는 팔로워">실행자 (역할 수행)</option>
-              <option value="혼자 깊게 몰입하는 개인 연구 선호">개인 연구 선호</option>
-            </select>
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="pf-subjects">선호 과목</label>
-            <textarea id="pf-subjects" value={form.preferredSubjects} onChange={(e) => update("preferredSubjects", e.target.value)} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="pf-strengths">강점</label>
-            <textarea id="pf-strengths" value={form.strengths} onChange={(e) => update("strengths", e.target.value)} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="pf-gaps">보완 역량</label>
-            <textarea id="pf-gaps" value={form.gaps} onChange={(e) => update("gaps", e.target.value)} />
-          </div>
           <div className="form-field">
             <label htmlFor="pf-constraints">제약 조건</label>
             <textarea id="pf-constraints" value={form.constraints} onChange={(e) => update("constraints", e.target.value)} />
@@ -2799,18 +2905,19 @@ function ProductShell({ workspace, onWorkspace, onNewStudent }: {
   onNewStudent: () => void;
 }) {
   const [tab, setTab] = useState<TabId>("roadmap");
-  const [activityDraft, setActivityDraft] = useState<{ title: string; summary: string } | null>(null);
+  const [activityDraft, setActivityDraft] = useState<ActivityDraft | null>(null);
   const initials = workspace.profile.name.slice(-2);
 
   const tabs: Array<{ id: TabId; label: string; icon: string }> = [
     { id: "roadmap",    label: "3개년 기록",    icon: "3Y" },
     { id: "overview",   label: "이번 학기",     icon: "●" },
     { id: "activities", label: "활동 기록",      icon: "◎"  },
+    { id: "portfolio",  label: "수시 준비",      icon: "↗"  },
     { id: "profile",    label: "프로필",         icon: "◉"  },
   ];
 
-  function startActivity(title: string, summary: string) {
-    setActivityDraft({ title, summary });
+  function startActivity(draft: ActivityDraft) {
+    setActivityDraft(draft);
     setTab("activities");
   }
 
@@ -2869,9 +2976,8 @@ function ProductShell({ workspace, onWorkspace, onNewStudent }: {
         </header>
 
         <div className="product-content">
-          {tab === "overview"   && <Overview    workspace={workspace} onNavigate={setTab} />}
-          {tab === "roadmap"    && <RoadmapView workspace={workspace} onWorkspace={onWorkspace} />}
-          {tab === "assignment" && <AssignmentView workspace={workspace} onWorkspace={onWorkspace} onStartActivity={startActivity} />}
+          {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} />}
+          {tab === "roadmap"    && <RoadmapView workspace={workspace} onWorkspace={onWorkspace} onConvertPlan={startActivity} />}
           {tab === "activities" && (
             <ActivitiesView
               key={activityDraft?.title ?? "activity-entry"}
@@ -2881,6 +2987,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent }: {
               clearDraft={() => setActivityDraft(null)}
             />
           )}
+          {tab === "portfolio" && <PortfolioView workspace={workspace} />}
           {tab === "profile"    && <ProfileView workspace={workspace} onWorkspace={onWorkspace} />}
         </div>
       </section>

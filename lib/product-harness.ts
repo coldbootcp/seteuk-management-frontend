@@ -44,7 +44,9 @@ export type RoadmapPlanEvent = {
   monthDay: string;
   category: "상장" | "활동" | "봉사" | "독서" | "시험";
   subject: string;
+  priority: "core" | "optional";
   title: string;
+  description: string;
 };
 
 export type Roadmap = {
@@ -68,8 +70,32 @@ export type StudentActivity = {
   outputs: string[];
   status: string;
   roadmapNodeId?: string | null;
+  /** 계획에서 전환된 실제 기록일 때만 원래 계획을 가리킨다. */
+  planEventId?: string | null;
+  linkedPlanTitle?: string | null;
   completedAt: string;
   createdAt?: string;
+};
+
+export type ActivityAttachment = {
+  id: string;
+  activityId: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  storageKey: string;
+  extractedText?: string;
+};
+
+export type ActivityReview = {
+  activityId: string;
+  planEventId?: string | null;
+  alignment: "aligned" | "partial" | "separate";
+  summary: string;
+  evidence: string[];
+  gaps: string[];
+  nextSteps: string[];
+  provider: "deepseek" | "rule";
 };
 
 export type SchoolRecordCourseRecord = {
@@ -131,6 +157,8 @@ export type ProductWorkspace = {
   profile: StudentWorkspaceProfile;
   roadmap: Roadmap;
   activities: StudentActivity[];
+  attachments: ActivityAttachment[];
+  activityReviews: ActivityReview[];
   schoolRecordCourses: SchoolRecordCourseRecord[];
   reconciliations: ReconciliationLog[];
   dna: DnaDiagnosis;
@@ -144,13 +172,13 @@ export type ProductWorkspace = {
   latestAnalysis?: AssignmentAnalysis | null;
 };
 
-const SEMICONDUCTOR_STAGES = [
+const GENERIC_ROADMAP_STAGES = [
   {
     grade: 1,
     semester: 1,
     stage: "탐색",
-    title: "반도체 산업과 나의 관심 지점 찾기",
-    objective: "반도체가 일상 기술에 쓰이는 방식을 살펴보고 공정·소재, 회로·소자, 장비·데이터 중 관심 경로를 가설로 세웁니다.",
+    title: "관심 분야와 교과의 첫 연결 찾기",
+    objective: "관심 분야가 일상·산업·사회에서 쓰이는 방식을 살펴보고, 교과 개념과 연결되는 탐구 출발점을 찾습니다.",
     subjects: ["통합과학", "정보"],
     competencies: ["진로 탐색", "기술 이해"],
   },
@@ -158,8 +186,8 @@ const SEMICONDUCTOR_STAGES = [
     grade: 1,
     semester: 2,
     stage: "기초",
-    title: "물질의 전기적 성질과 반도체 원리 연결",
-    objective: "도체·부도체·반도체의 차이와 규소의 특성을 교과 개념으로 설명하고 간단한 데이터나 회로로 확인합니다.",
+    title: "핵심 교과 개념을 관심 분야의 원리와 연결",
+    objective: "관심 분야의 핵심 원리를 교과 개념으로 설명하고, 사례·자료·비교 질문을 통해 이해를 구체화합니다.",
     subjects: ["통합과학", "수학", "정보"],
     competencies: ["개념 연결", "기초 모델링"],
   },
@@ -167,8 +195,8 @@ const SEMICONDUCTOR_STAGES = [
     grade: 2,
     semester: 1,
     stage: "연결",
-    title: "소자 원리와 회로 동작을 증거로 설명",
-    objective: "다이오드·트랜지스터의 물리적 성질이 전압-전류 그래프와 회로 동작으로 이어지는 과정을 분석합니다.",
+    title: "원리와 실제 사례를 근거로 설명",
+    objective: "교과 원리와 실제 사례가 이어지는 과정을 비교하고, 근거를 바탕으로 자신의 설명을 만듭니다.",
     subjects: ["물리학", "수학", "정보"],
     competencies: ["정량 분석", "모형 해석"],
   },
@@ -176,8 +204,8 @@ const SEMICONDUCTOR_STAGES = [
     grade: 2,
     semester: 2,
     stage: "분화",
-    title: "세부 경로를 선택해 공정·회로·장비 문제 심화",
-    objective: "학생의 관심과 이전 활동을 바탕으로 하나의 세부 경로를 선택하고 실제 데이터가 포함된 후속 탐구를 수행합니다.",
+    title: "세부 관심축을 선택해 탐구 심화",
+    objective: "기존 기록과 관심을 바탕으로 한 세부 축을 선택하고, 비교·분석·해석을 통해 탐구를 심화합니다.",
     subjects: ["물리학", "화학", "수학과제 탐구", "정보"],
     competencies: ["탐구 설계", "데이터 해석"],
   },
@@ -185,8 +213,8 @@ const SEMICONDUCTOR_STAGES = [
     grade: 3,
     semester: 1,
     stage: "독립 탐구",
-    title: "반도체 문제를 데이터 기반 독립 프로젝트로 해결",
-    objective: "공개 데이터, 시뮬레이션 또는 안전한 교육용 실험을 활용해 가설·방법·결론을 갖춘 독립 탐구를 완성합니다.",
+    title: "근거 기반의 독립 탐구로 확장",
+    objective: "공개 자료와 교과 지식을 활용해 가설·비교 기준·해석이 갖춰진 독립 탐구를 발전시킵니다.",
     subjects: ["전자기와 양자", "물질과 에너지", "융합과학 탐구"],
     competencies: ["문제 해결", "근거 기반 결론"],
   },
@@ -194,8 +222,8 @@ const SEMICONDUCTOR_STAGES = [
     grade: 3,
     semester: 2,
     stage: "종합",
-    title: "기술의 한계와 사회적 영향을 포함해 서사 종합",
-    objective: "이전 활동의 발전 과정을 정리하고 반도체 기술의 환경·안전·공급망 상충 관계를 포함한 최종 관점을 제시합니다.",
+    title: "한계와 사회적 영향까지 포함해 관점 종합",
+    objective: "이전 기록의 발전 과정을 정리하고, 관심 분야의 한계와 사회적 영향을 포함한 최종 관점을 만듭니다.",
     subjects: ["융합과학 탐구", "사회문제 탐구", "국어"],
     competencies: ["비판적 사고", "서사 구성"],
   },
@@ -203,6 +231,29 @@ const SEMICONDUCTOR_STAGES = [
 
 function activeIndex(profile: ProfileInput) {
   return Math.max(0, Math.min(5, (profile.grade - 1) * 2 + (profile.semester - 1)));
+}
+
+function suggestedTopicsForSemester(
+  focus: string,
+  stage: { subjects: string[]; competencies: string[] },
+  semester: number,
+): RoadmapPlanEvent[] {
+  const startMonth = semester === 1 ? "04" : "09";
+  const subject = stage.subjects[0] ?? "자율 탐구";
+  const competency = stage.competencies[0] ?? "탐구 설계";
+  const topics = [
+    ["core", `${focus}의 핵심 개념과 실제 사례 연결`, `교과의 핵심 개념이 ${focus}의 실제 사례에서 어떻게 쓰이는지 비교해 설명하는 주제입니다.`],
+    ["core", `${focus}에서 ${competency}을(를) 보여줄 수 있는 비교 질문`, "조건이 다른 사례를 비교해 어떤 기준으로 판단해야 하는지 탐구하는 주제입니다."],
+    ["core", `${focus}의 작동 원리와 한계 함께 살피기`, "기술 또는 현상이 잘 작동하는 조건과 한계를 함께 정리해 균형 잡힌 관점을 만드는 주제입니다."],
+    ["core", `${focus}와 현재 교과의 연결 고리 찾기`, `현재 ${subject}에서 배우는 개념을 출발점으로 진로 관심을 자연스럽게 연결하는 주제입니다.`],
+    ["optional", `${focus} 관련 공개 자료의 해석 차이 비교`, "같은 주제라도 자료마다 결론이 달라지는 이유와 신뢰할 근거를 살피는 확장 주제입니다."],
+    ["optional", `${focus}가 해결하는 문제와 남는 문제`, "기술의 장점만 소개하지 않고 해결되지 않은 문제를 함께 정의해 보는 주제입니다."],
+    ["optional", `${focus}의 사회·환경적 영향`, "진로 관심을 사회, 환경, 윤리 관점과 연결해 판단 기준을 세워 보는 주제입니다."],
+    ["optional", `${focus}와 인접 분야의 공통점과 차이`, "인접 전공 또는 교과와 비교해 자신의 관심 분야를 더 구체화하는 주제입니다."],
+    ["optional", `${focus}의 핵심 용어를 학생 언어로 재구성`, "어려운 개념을 정확하면서도 쉽게 설명할 수 있는지 점검하는 주제입니다."],
+    ["optional", `${focus}에서 이어질 다음 탐구 질문 만들기`, "이번 학기에서 바로 실행하지 않아도 다음 학기 심화로 이어질 질문을 남기는 주제입니다."],
+  ] as const;
+  return topics.map(([priority, title, description], index) => ({ id: crypto.randomUUID(), monthDay: `${String(Number(startMonth) + Math.min(index, 2)).padStart(2, "0")}-15`, category: "활동" as const, subject, priority, title, description }));
 }
 
 export function generateRoadmap(
@@ -214,7 +265,7 @@ export function generateRoadmap(
   const currentIndex = activeIndex(profile);
   const focus = profile.interests[0] ?? profile.targetMajors[0] ?? "반도체 기술";
 
-  const nodes = SEMICONDUCTOR_STAGES.map((stage, index): RoadmapNode => ({
+  const nodes = GENERIC_ROADMAP_STAGES.map((stage, index): RoadmapNode => ({
     id: crypto.randomUUID(),
     roadmapId,
     studentId,
@@ -228,7 +279,7 @@ export function generateRoadmap(
     competencyGoals: index < currentIndex ? [] : stage.competencies,
     status: index < currentIndex ? "skipped" : index === currentIndex ? "active" : "planned",
     instantiatedActivityId: null,
-    planEvents: [],
+    planEvents: index < currentIndex ? [] : suggestedTopicsForSemester(focus, stage, stage.semester),
   }));
 
   return {

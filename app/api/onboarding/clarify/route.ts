@@ -4,6 +4,8 @@ type ClarificationQuestion = {
   id: string;
   label: string;
   question: string;
+  why?: string;
+  selectionMode?: "single" | "multiple";
   options: string[];
 };
 
@@ -40,7 +42,21 @@ type ClarifyRequest = {
     expectedGrade?: string | null;
     studentName?: string;
   };
+  roadmapHypothesis?: unknown;
+  answers?: Array<{ id?: string; question?: string; answer?: string }>;
 };
+
+const AI_JUDGEMENT_OPTION = "잘 모르겠음 — AI 판단에 맡길게요";
+
+function withAiJudgementOption(question: ClarificationQuestion): ClarificationQuestion {
+  if (question.options.some((option) => option.includes("잘 모르겠") || option.includes("AI 판단"))) return question;
+  return { ...question, options: [...question.options.slice(0, 3), AI_JUDGEMENT_OPTION] };
+}
+
+function defaultSelectionMode(question: ClarificationQuestion): ClarificationQuestion {
+  if (question.selectionMode) return question;
+  return { ...question, selectionMode: /(identity_conflict|grade_conflict|이름 확인|학년 확인)/.test(`${question.id} ${question.label}`) ? "single" : "multiple" };
+}
 
 function gradeLabel(value?: string | null) {
   if (!value) return "";
@@ -59,7 +75,6 @@ function recordIsFinalized(record: ClarifyRequest["schoolRecord"], form: Clarify
 function fallbackClarification(input: ClarifyRequest): { summary: string; questions: ClarificationQuestion[] } {
   const form = input.form ?? {};
   const career = form.targetCareer?.trim() || "희망 진로";
-  const interests = form.interests?.filter(Boolean).slice(0, 4).join(", ") || "관심 분야";
   const expectedGrade = input.recordContext?.expectedGrade;
   const record = input.schoolRecord;
   const subjects = record?.subjects?.filter(Boolean).slice(0, 5) ?? [];
@@ -75,6 +90,7 @@ function fallbackClarification(input: ClarifyRequest): { summary: string; questi
       id: "identity_conflict",
       label: "학생부 이름 확인",
       question: `업로드한 학생부의 이름은 ${recordName}이고 입력한 이름은 ${typedName}입니다. 동일 학생의 자료인지 먼저 확인해주세요.`,
+      why: "다른 학생의 기록을 근거로 로드맵을 설계하는 오류를 막기 위해서입니다.",
       options: [`${recordName}이 맞습니다`, `${typedName}이 맞습니다`, "이름을 확인한 뒤 다시 업로드할게요"],
     });
   }
@@ -84,6 +100,7 @@ function fallbackClarification(input: ClarifyRequest): { summary: string; questi
       id: "grade_conflict",
       label: "학년 확인",
       question: `학생부 기준 현재 상태 후보는 ${gradeLabel(expectedGrade)}인데, 입력값은 ${gradeLabel(form.grade)}입니다. 어느 쪽을 기준으로 할까요?`,
+      why: "남은 학기 수가 바뀌면 각 학기의 활동 난이도와 우선순위가 달라집니다.",
       options: [`${gradeLabel(expectedGrade)} 기준으로 로드맵 생성`, `${gradeLabel(form.grade)} 기준 유지`, "학년은 유지하되 학생부는 확정 기록으로만 반영"],
     });
   }
@@ -98,30 +115,8 @@ function fallbackClarification(input: ClarifyRequest): { summary: string; questi
       id: "record_career_bridge",
       label: "학생부-진로 연결",
       question: `학생부의 ${recordContextLabel}을(를) ${career} 로드맵의 어느 지점에 연결할까요?`,
+      why: "기존 기록을 이어갈지 새 축을 세울지에 따라 첫 대표 활동과 증거의 구성이 달라집니다.",
       options: ["기존 기록을 먼저 살리고 진로로 점진 전환", "기존 기록과 진로를 융합 주제로 연결", "새 진로축을 강하게 세우되 기존 기록은 근거로 활용"],
-    });
-  }
-
-  if (!finalized && (form.grade === "2" || form.grade === "3")) {
-    const remaining = form.grade === "2" ? "2학년 2학기부터 3학년까지" : "남은 3학년 학기";
-    questions.push({
-      id: "remaining_record_strategy",
-      label: "남은 학생부 전략",
-      question: `현재 ${gradeLabel(form.grade)}이므로 새로 반영할 수 있는 기간은 ${remaining}입니다. 남은 학생부에서 무엇을 가장 우선할까요?`,
-      options: ["기존 기록의 강점을 희망 진로와 연결", "희망 진로의 핵심 역량을 짧은 기간에 집중 보완", "기존 방향과 새 진로를 융합한 대표 탐구 완성", "이미 확정된 기록은 유지하고 입시용 산출물 완성에 집중"],
-    });
-  }
-
-  if (!finalized) {
-    const architectureLabel = form.grade === "2" || form.grade === "3" ? "남은 학기 구조" : "6학기 구조";
-    const architectureQuestion = form.grade === "2" || form.grade === "3"
-      ? `${gradeLabel(form.grade)}부터 남은 학기를 어떤 순서로 설계할까요?`
-      : `${interests}를 6학기 로드맵 안에서 어떤 큰 구조로 펼칠까요?`;
-    questions.push({
-      id: "roadmap_architecture",
-      label: architectureLabel,
-      question: architectureQuestion,
-      options: ["기초 개념→응용 탐구→심화 산출물", "여러 관심축을 학기별로 고르게 분산", "핵심 1~2개 축을 반복 심화", "기존 학생부 기록과 가까운 축부터 시작"],
     });
   }
 
@@ -130,14 +125,49 @@ function fallbackClarification(input: ClarifyRequest): { summary: string; questi
       ? "졸업생 학생부는 이미 마감된 확정 기록으로 반영하고, 추가 확인 질문 없이 입력한 진로를 기준으로 정리합니다."
       : hasRecords
       ? "학생부의 기존 기록과 희망 진로를 연결하는 방식이 로드맵 품질을 좌우합니다."
-      : "학생부 기록 없이 시작하므로 6학기 전체 성장 구조와 실행 가능성을 먼저 확인합니다.",
+      : "학생부 기록 없이 시작하므로 6학기 전체 성장 구조에 영향을 주는 정보만 확인합니다.",
     questions: questions.slice(0, 4),
   };
 }
 
-function sanitizeQuestions(values: unknown): ClarificationQuestion[] {
+function normalizeQuestion(value: string) {
+  return value.toLowerCase().replace(/[^가-힣a-z0-9]/g, "");
+}
+
+function isNearDuplicateQuestion(question: string, previous: string) {
+  const left = normalizeQuestion(question);
+  const right = normalizeQuestion(previous);
+  if (!left || !right) return false;
+  if (left.includes(right) || right.includes(left)) return true;
+  const grams = (value: string) => new Set(Array.from({ length: Math.max(0, value.length - 2) }, (_, index) => value.slice(index, index + 3)));
+  const leftGrams = grams(left);
+  const rightGrams = grams(right);
+  if (!leftGrams.size || !rightGrams.size) return false;
+  const overlap = [...leftGrams].filter((gram) => rightGrams.has(gram)).length;
+  return overlap / Math.min(leftGrams.size, rightGrams.size) >= 0.62;
+}
+
+function mentionsUnsupportedStudentFact(question: string, input: ClarifyRequest) {
+  const evidence = [
+    ...(input.form?.currentEngagement ?? []),
+    ...(input.form?.interests ?? []),
+    input.form?.concreteResearchQuestion ?? "",
+    ...(input.schoolRecord?.entries ?? []).flatMap((entry) => [entry.title ?? "", entry.summary ?? "", entry.subject ?? ""]),
+  ].join(" ").toLowerCase();
+  const claims = ["파이썬", "데이터 분석", "동아리"];
+  return claims.some((claim) => question.includes(claim) && !evidence.includes(claim));
+}
+
+function sanitizeQuestions(values: unknown, input: ClarifyRequest): ClarificationQuestion[] {
   if (!Array.isArray(values)) return [];
-  return values
+  const typedName = input.form?.name?.trim();
+  const recordName = input.recordContext?.studentName?.trim();
+  const hasIdentityConflict = Boolean(typedName && recordName && typedName !== recordName);
+  const expectedGrade = input.recordContext?.expectedGrade;
+  const hasGradeConflict = Boolean(expectedGrade && input.form?.grade && expectedGrade !== input.form.grade);
+  const hasRecordEntries = Boolean(input.schoolRecord?.entries?.length);
+  const priorQuestions = (input.answers ?? []).map((answer) => answer.question).filter((question): question is string => typeof question === "string" && question.trim().length > 0);
+  const candidates = values
     .map((value, index) => {
       if (!value || typeof value !== "object") return null;
       const item = value as Partial<ClarificationQuestion>;
@@ -145,15 +175,34 @@ function sanitizeQuestions(values: unknown): ClarificationQuestion[] {
         ? item.options.filter((option): option is string => typeof option === "string" && option.trim().length > 0).map((option) => option.trim()).slice(0, 4)
         : [];
       if (typeof item.question !== "string" || !item.question.trim() || options.length < 2) return null;
+      const questionText = `${item.label ?? ""} ${item.question ?? ""}`;
+      // 모델이 입력에 없는 학생부 불일치를 만들어내지 않도록, 객관적으로
+      // 확인 가능한 충돌 질문은 실제 충돌이 있을 때만 통과시킨다.
+      if (!hasIdentityConflict && /(이름|동일 학생)/.test(questionText)) return null;
+      if (!hasGradeConflict && /(학생부.*학년|학년.*학생부|기록.*학년)/.test(questionText)) return null;
+      if (!hasRecordEntries && /학생부/.test(questionText)) return null;
+      if (mentionsUnsupportedStudentFact(questionText, input)) return null;
+      if ((input.form?.grade === "2" || input.form?.grade === "3") && /(6학기|전체에.*구조|전체.*구조)/.test(questionText)) return null;
+      if (/(관심.*계기|관심을.*갖)/.test(questionText)) return null;
+      if ((input.form?.outputPreference?.length || input.form?.collaborationStyle?.length) && /(활동.*선호|어떤 유형.*선호)/.test(questionText)) return null;
+      if (/(주\s*[0-9]+\s*시간|[0-9]+\s*시간.*투자|시간.*투자|현실적.*가능|가능.*생각|프로젝트.*완료)/.test(questionText)) return null;
+      if (priorQuestions.some((previous) => isNearDuplicateQuestion(item.question!.trim(), previous))) return null;
       return {
         id: typeof item.id === "string" && item.id.trim() ? item.id.trim() : `clarify_${index + 1}`,
         label: typeof item.label === "string" && item.label.trim() ? item.label.trim() : "확인 질문",
         question: item.question.trim(),
+        why: typeof item.why === "string" && item.why.trim() ? item.why.trim() : "이 답에 따라 로드맵의 학기별 전략과 대표 활동이 달라질 수 있습니다.",
+        selectionMode: item.selectionMode === "single" || item.selectionMode === "multiple" ? item.selectionMode : undefined,
         options,
       };
     })
     .filter((value): value is ClarificationQuestion => Boolean(value))
     .slice(0, 5);
+
+  return candidates
+    .filter((question, index) => !candidates.slice(0, index).some((previous) => isNearDuplicateQuestion(question.question, previous.question)))
+    .map(withAiJudgementOption)
+    .map(defaultSelectionMode);
 }
 
 export async function POST(request: Request) {
@@ -169,17 +218,21 @@ export async function POST(request: Request) {
         provider: "fallback",
       });
     }
+    const answeredIds = new Set((input.answers ?? []).map((answer) => answer.id).filter((id): id is string => typeof id === "string" && id.length > 0));
     const ai = await generateOnboardingClarificationWithDeepSeek(input);
-    // 질문의 순서와 내용은 먼저 구조화한 Step1·2/학생부 판단을 따른다.
-    // AI가 반환한 임의의 일반 질문으로 핵심 쟁점을 덮어쓰지 않는다.
-    const coreQuestions = fallback.questions;
+    const aiQuestions = sanitizeQuestions(ai?.questions, input).filter((question) => !answeredIds.has(question.id));
+    const remainingFallbackQuestions = fallback.questions.filter((question) => !answeredIds.has(question.id)).map(withAiJudgementOption).map(defaultSelectionMode);
+    const questions = aiQuestions.length ? aiQuestions : remainingFallbackQuestions;
+    const complete = questions.length === 0 && (ai?.complete === true || remainingFallbackQuestions.length === 0);
     return Response.json({
       summary: ai?.summary?.trim() || fallback.summary,
-      questions: coreQuestions,
+      questions,
+      complete,
+      draftChangeSummary: ai?.draftChangeSummary?.trim() || "",
       provider: ai?.summary ? "deepseek-guided" : "fallback",
     });
   } catch {
     const fallback = fallbackClarification({});
-    return Response.json({ ...fallback, provider: "fallback" });
+    return Response.json({ ...fallback, questions: fallback.questions.map(withAiJudgementOption).map(defaultSelectionMode), provider: "fallback" });
   }
 }

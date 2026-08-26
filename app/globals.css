@@ -1373,8 +1373,8 @@ a { color: inherit; text-decoration: none; }
 /* ── Mission Hero ── */
 .mission-hero {
   align-items: flex-end;
-  background: var(--primary-subtle);
-  border: 1px solid var(--primary-200);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-lg);
   color: var(--text);
   display: grid;
@@ -1855,37 +1855,38 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Grid Timeline Section (3x2 Board) ── */
 .grid-timeline {
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 20px;
 }
 
 .grid-year-row {
   display: grid;
-  gap: 24px;
-  grid-template-columns: 88px 1fr;
+  border-bottom: 1px solid var(--border);
+  gap: 0;
+  grid-template-columns: 136px 1fr;
+  min-height: 220px;
 }
 
 .grid-year-row.is-current-year .grid-year-label {
-  background: var(--primary-subtle);
-  border-color: var(--primary-200);
+  border-left: 3px solid var(--primary);
 }
 
 .grid-year-label {
-  align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  align-items: flex-start;
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 24px 14px;
+  justify-content: flex-start;
+  padding: 26px 20px;
 }
 
 .grid-year-num {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 42px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;
@@ -1901,43 +1902,44 @@ a { color: inherit; text-decoration: none; }
 .grid-year-range {
   color: var(--subtle);
   font-size: 10px;
-  margin-top: 8px;
+  margin-top: 7px;
 }
 
 .grid-semesters {
   display: grid;
-  gap: 24px;
+  gap: 0;
   grid-template-columns: 1fr 1fr;
 }
 
 .grid-semester {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: box-shadow var(--t-fast);
 }
 
-.grid-semester:hover { border-color: var(--border-2); }
+.grid-semester:hover { background: #fcfcfd; }
 
 .grid-sem-header {
   align-items: flex-start;
-  background: var(--surface-2);
+  background: transparent;
   border: none;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   display: flex;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 23px 24px 16px;
   text-align: left;
   transition: background var(--t-fast);
   width: 100%;
 }
 
 .grid-sem-header:hover {
-  background: var(--border-subtle);
+  background: var(--surface-2);
 }
 
 .grid-sem-title {
@@ -1961,8 +1963,8 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px 20px;
+  gap: 0;
+  padding: 0 24px 20px;
 }
 
 .grid-sem-empty {
@@ -1977,25 +1979,26 @@ a { color: inherit; text-decoration: none; }
 
 .grid-event-card {
   align-items: flex-start;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--border-subtle);
   display: flex;
   gap: 14px;
   overflow: hidden;
-  padding: 14px 16px;
+  padding: 13px 4px 13px 16px;
   position: relative;
   transition: border-color var(--t-fast), background var(--t-fast);
 }
 
 .grid-event-card:hover {
   background: var(--surface-2);
-  border-color: var(--border-2);
 }
 
 .grid-event-card.is-plan {
-  background: rgba(250,250,252,0.5);
-  border: 1px dashed var(--border-2);
+  background: transparent;
+  border: none;
+  border-top: 1px dashed var(--border-2);
 }
 
 .grid-event-indicator {
@@ -2004,12 +2007,24 @@ a { color: inherit; text-decoration: none; }
   left: 0;
   position: absolute;
   top: 0;
-  width: 4px;
+  width: 2px;
 }
 
 .grid-event-card.is-plan .grid-event-indicator {
   background: transparent;
-  border-left: 4px dashed var(--subj, var(--border-2));
+  border-left: 2px dashed var(--subj, var(--border-2));
+}
+
+.overview-plan-card {
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+}
+
+.overview-plan-card:hover,
+.overview-plan-card:focus-visible {
+  border-color: var(--primary-200) !important;
+  box-shadow: var(--shadow-sm);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .grid-event-icon {
@@ -2535,7 +2550,6 @@ a { color: inherit; text-decoration: none; }
   border: 1.5px dashed var(--subj, var(--border-2));
 }
 
-
 /* ======================================================
    8. SEMESTER FOCUS PANEL (modal)
    ====================================================== */
@@ -2723,6 +2737,15 @@ a { color: inherit; text-decoration: none; }
 
 .focus-event.is-plan {
   border-left-style: dashed;
+  cursor: pointer;
+  transition: background var(--t-fast), transform var(--t-fast);
+}
+
+.focus-event.is-plan:hover,
+.focus-event.is-plan:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+  transform: translateX(2px);
 }
 
 .focus-footer {
@@ -3544,6 +3567,67 @@ a { color: inherit; text-decoration: none; }
 .modal-head > div > h2 { font-size: 20px; }
 
 .modal-body { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+
+.plan-detail-panel { max-width: 680px; }
+
+.plan-detail-panel {
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.plan-detail-body > section {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.plan-detail-body h3 {
+  color: var(--text);
+  font-size: 13px;
+  margin-bottom: 7px;
+}
+
+.plan-detail-body p,
+.plan-detail-body li {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.plan-detail-body ul { margin: 0; padding-left: 19px; }
+.plan-detail-body li + li { margin-top: 4px; }
+
+.plan-detail-note {
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  padding: 11px 12px;
+}
+
+.plan-subject-selector > button {
+  background: white;
+  border: 1px solid var(--primary-200);
+  border-radius: var(--r-full);
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 9px;
+}
+
+.plan-subject-selector > button.is-selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.plan-subject-tip {
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  margin-top: 11px;
+  padding: 11px 12px;
+}
+
+.plan-subject-tip > strong { color: var(--text); font-size: 12px; }
+.plan-subject-tip > p { margin-top: 4px; }
 
 .modal-foot {
   border-top: 1px solid var(--border);

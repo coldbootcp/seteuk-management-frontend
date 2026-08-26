@@ -19,7 +19,9 @@ export const activities = sqliteTable("activities", {
     .notNull()
     .references(() => students.id, { onDelete: "cascade" }),
   subject: text("subject").notNull(),
+  priority: text("priority").notNull().default("core"),
   title: text("title").notNull(),
+  description: text("description").notNull().default(""),
   summary: text("summary").notNull(),
   concepts: text("concepts").notNull(),
   completedAt: text("completed_at").notNull(),
@@ -116,6 +118,8 @@ export const studentActivitiesV2 = sqliteTable("student_activities_v2", {
   outputsJson: text("outputs_json").notNull(),
   status: text("status").notNull(),
   roadmapNodeId: text("roadmap_node_id"),
+  planEventId: text("plan_event_id"),
+  linkedPlanTitle: text("linked_plan_title"),
   completedAt: text("completed_at").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -131,6 +135,12 @@ export const reconciliationLogs = sqliteTable("reconciliation_logs", {
   action: text("action").notNull(),
   confidence: integer("confidence").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const activityAttachments = sqliteTable("activity_attachments", {
+  id: text("id").primaryKey(), activityId: text("activity_id").notNull(), studentId: text("student_id").notNull(),
+  fileName: text("file_name").notNull(), contentType: text("content_type").notNull(), sizeBytes: integer("size_bytes").notNull(),
+  storageKey: text("storage_key").notNull(), extractedText: text("extracted_text").notNull().default(""), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const assignmentAnalyses = sqliteTable("assignment_analyses", {

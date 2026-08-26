@@ -1,5 +1,5 @@
 import { summarizeNodeWithDeepSeek } from "../../../../lib/deepseek-provider";
-import { getWorkspace, updateRoadmapNode } from "../../../../lib/workspace-store";
+import { loadWorkspace, updateRoadmapNode } from "../../../../lib/workspace-store";
 
 export async function POST(request: Request) {
   try {
@@ -8,10 +8,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "studentId와 nodeId가 필요합니다." }, { status: 400 });
     }
 
-    const workspace = await getWorkspace(payload.studentId);
-    if (!workspace) {
-      return Response.json({ error: "워크스페이스를 찾을 수 없습니다." }, { status: 404 });
-    }
+    const workspace = await loadWorkspace(payload.studentId);
 
     const node = workspace.roadmap.nodes.find((n) => n.id === payload.nodeId);
     if (!node) {

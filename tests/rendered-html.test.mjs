@@ -34,9 +34,12 @@ test("the product starts with onboarding and exposes every primary surface", asy
   assert.match(app, /useState<TabId>\("roadmap"\)/);
   assert.match(app, /v\{APP_VERSION\} · 로드맵 v/);
   assert.match(app, /MAJOR NARRATIVE DNA/);
-  assert.match(app, /수행평가 분석과 후속 탐구/);
-  assert.match(app, /활동 기록과 로드맵 정합/);
-  assert.match(app, /학생 프로필과 진로 변화/);
+  assert.match(app, /활동 주제 제안/);
+  assert.match(app, /학교 기회에 맞춰 선택/);
+  assert.match(app, /이 주제를 실제 활동에 연결/);
+  assert.match(app, /연결할 로드맵 활동 주제 \(선택 · 변경 가능\)/);
+  assert.match(app, /모든 활동 기록과 정합/);
+  assert.match(app, /현재 상태와 로드맵 기준/);
   assert.doesNotMatch(app, /Codex is working|react-loading-skeleton|codex-preview/);
 });
 
@@ -48,6 +51,9 @@ test("planning, execution, memory, feedback, and reconciliation persist explicit
   ]);
 
   assert.match(harness, /generateRoadmap/);
+  assert.match(harness, /suggestedTopicsForSemester/);
+  assert.match(harness, /priority: "core" \| "optional"/);
+  assert.match(harness, /description: string/);
   assert.match(harness, /diagnoseStudent/);
   assert.match(harness, /analyzeAssignment/);
   assert.match(harness, /reconcileActivity/);
@@ -58,7 +64,11 @@ test("planning, execution, memory, feedback, and reconciliation persist explicit
   assert.match(store, /saveOnboarding/);
   assert.match(store, /regenerateRoadmap/);
   assert.match(store, /roadmap_plan_events/);
+  assert.match(store, /plan_event_id/);
+  assert.match(store, /linked_plan_title/);
+  assert.match(store, /DELETE FROM roadmap_plan_events/);
   assert.match(schema, /roadmap_plan_events/);
+  assert.match(schema, /planEventId/);
   assert.match(store, /saveRecommendationFeedback/);
   assert.match(schema, /student_workspaces/);
   assert.match(schema, /roadmap_nodes/);

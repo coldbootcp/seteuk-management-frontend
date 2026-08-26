@@ -18,3 +18,9 @@ export function getD1() {
   }
   return env.DB;
 }
+
+export function getActivityFilesBucket() {
+  const bucket = (env as unknown as { ACTIVITY_FILES?: R2Bucket }).ACTIVITY_FILES;
+  if (!bucket) throw new Error("활동 파일 저장소를 준비하지 못했습니다.");
+  return bucket;
+}

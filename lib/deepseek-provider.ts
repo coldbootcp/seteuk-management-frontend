@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import {
   type AssignmentAnalysis,
+  type ActivityReview,
   type DnaDiagnosis,
   type ProductWorkspace,
   type ProfileInput,
@@ -39,7 +40,9 @@ type RoadmapPayload = {
       monthDay?: string;
       category?: RoadmapPlanEvent["category"];
       subject?: string;
+      priority?: "core" | "optional";
       title?: string;
+      description?: string;
     }>;
   }>;
 };
@@ -82,13 +85,27 @@ export type OnboardingClarificationQuestionPayload = {
   id?: string;
   label?: string;
   question?: string;
+  why?: string;
+  selectionMode?: "single" | "multiple";
   options?: string[];
 };
 
 export type OnboardingClarificationPayload = {
   summary?: string;
   questions?: OnboardingClarificationQuestionPayload[];
+  complete?: boolean;
+  draftChangeSummary?: string;
 };
+
+type ActivityReviewPayload = { alignment?: "aligned" | "partial" | "separate"; summary?: string; evidence?: string[]; gaps?: string[]; nextSteps?: string[] };
+
+export async function reviewActivityWithDeepSeek(input: { activity: { title: string; subject: string; summary: string; concepts: string[]; outputs: string[] }; plan?: { title: string; objective: string; subject: string } | null; attachmentText: string[] }): Promise<ActivityReview | null> {
+  try {
+    const payload = await requestJson<ActivityReviewPayload>("학생의 실제 활동이 선택한 로드맵 계획의 의도에 부합하는지, 첨부한 발표자료·보고서의 텍스트와 학생 작성 기록을 근거로 검토하는 교육 코치입니다.", JSON.stringify({ task: "실제 활동 정합 검토", ...input, schema: { alignment: "aligned | partial | separate", summary: "판단 요약", evidence: ["근거"], gaps: ["부족한 점"], nextSteps: ["실행 가능한 보완 행동"] }, constraints: ["실제로 제공된 기록과 첨부 텍스트에 있는 사실만 근거로 쓸 것", "계획을 선택하지 않았으면 separate로 판단", "부족한 점이 없으면 gaps는 빈 배열", "한국어"] }), 1800);
+    if (!payload?.alignment || !payload.summary) return null;
+    return { activityId: "", alignment: payload.alignment, summary: payload.summary.trim(), evidence: cleanStrings(payload.evidence), gaps: cleanStrings(payload.gaps), nextSteps: cleanStrings(payload.nextSteps), provider: "deepseek" };
+  } catch { return null; }
+}
 
 function runtimeEnv() {
   const workerEnv = env as unknown as RuntimeEnv;
@@ -161,10 +178,16 @@ export async function generateRoadmapWithDeepSeek(
 ): Promise<Roadmap | null> {
   try {
     const payload = await requestJson<RoadmapPayload>(
-      "고등학교 생활기록부와 반도체 진로를 연결하는 진로 코치입니다. 학생의 현재 학년부터 3학년까지 성장 서사가 이어지는 로드맵을 설계하세요.",
+      "세특연구소 Pro의 개인화 로드맵 설계 엔진입니다. 학생의 실제 학교 기록과 앞으로 가능한 학기만 구분하고, 학교가 정해지지 않은 활동 방식은 지시하지 않는 진로 설계 코치입니다.",
       JSON.stringify({
-        task: "반도체 진로 학생의 3개년 로드맵 6개 노드 생성",
+        task: "학생 개인화 3개년 기록 지도와 현재 이후 활동 주제 후보 생성",
         profile,
+        productContract: {
+          pastSemesters: "현재 학기 이전 노드는 이미 끝난 사실 기록이다. 새 활동 계획·수정 지시·가상의 완료를 만들지 않는다.",
+          currentAndFuture: "현재 학기부터 3학년 2학기까지만 새 주제 후보를 제안한다.",
+          planEvents: "계획 항목은 프로젝트·과제·결과물이 아니라 학생이 학교에서 실제 기회를 만났을 때 선택할 수 있는 탐구 주제 후보이다.",
+          execution: "수행평가·대회·발표·보고서·동아리·산출물 형식은 학교 기회가 생긴 뒤 학생이 정한다. 로드맵에서 강제하거나 전제하지 않는다.",
+        },
         schema: {
           nodes: [
             {
@@ -175,20 +198,25 @@ export async function generateRoadmapWithDeepSeek(
               objective: "학생이 수행할 수 있는 구체적인 목표",
               candidateSubjects: ["통합과학"],
               competencyGoals: ["진로 탐색"],
-              planEvents: [{ monthDay: "03-20", category: "활동", subject: "통합과학", title: "활동 제목" }],
+              planEvents: [{ monthDay: "03-20", category: "활동", subject: "통합과학", priority: "core", title: "활동 주제", description: "이 주제에서 무엇을 탐구하고 왜 중요한지 설명" }],
             },
           ],
         },
         constraints: [
-          "nodes는 정확히 6개이며 1·2·3학년의 1·2학기를 하나씩 포함",
-          "각 학기는 이전 활동에서 다음 활동으로 발전하는 서사를 가져야 함",
-          "학생의 관심분야, 기존 기록, 보완해야 할 증거를 제목과 목표에 반영",
+          "nodes는 화면의 시간축을 위해 정확히 6개이며 1·2·3학년의 1·2학기를 하나씩 포함한다. 단, 새 계획은 profile.grade·profile.semester 이후에만 둔다",
+          "현재 학기 이전 노드는 기존 기록 자리로만 남기고 planEvents를 빈 배열로 둘 것",
+          "현재·미래 노드는 이전 실제 기록에서 다음 관심으로 이어지는 서사를 갖되, 실제로 한 적 없는 활동을 했다고 쓰지 말 것",
+          "학생의 관심분야, 직접 입력한 현재 활동, 보완해야 할 근거를 제목과 목표에 반영. 반도체를 기본값으로 가정하지 말 것",
+          "profile.careerResolution이 '넓은 분야만 정한 단계'이면 세부 탐구 질문이나 배경지식처럼 보이는 잔여 텍스트를 확정 목표로 해석하지 말고, 넓은 관심 축에서 탐색하는 로드맵으로 작성할 것",
           "interests 안에 '로드맵 설계 전 확인 답변'이 있으면 그것을 단순 관심 키워드보다 우선하는 설계 조건으로 반영",
           "작은 키워드 하나에 6학기 전체가 매몰되지 않도록, 큰 성장 서사와 단계적 전개를 먼저 설계",
           "진로 선택의 동기(motivationTrigger)와 목표 해상도(careerResolution)를 로드맵 서사의 핵심 방향성으로 사용할 것",
-          "산출물 선호도(outputPreference)와 실행 전략(collaborationStyle)을 반영하여 미래 활동(planEvents)의 방식을 제안할 것",
-          "학교에서 실제로 수행 가능한 탐구·보고서·발표 중심으로 작성",
-          "각 노드에 2~4개의 미래 활동을 만들고, 날짜는 해당 학기 안의 MM-DD 형식으로 작성",
+          "planEvents는 학생이 해당 학기에 학교에서 생기는 수행평가·동아리·대회·발표·독서 등의 기회에 골라 녹일 수 있는 '탐구 주제 제안'이다. 특정 형식이나 행사 참여를 지시하는 계획이 아니다",
+          "각 노드에 정확히 10개의 서로 다른 주제를 만들 것. priority가 core인 꼭 하면 좋은 주제 4개를 먼저, optional인 여유가 있을 때 좋은 주제 6개를 뒤에 둘 것",
+          "각 주제에는 description으로 학생이 무엇을 탐구·비교·판단하면 되는지, 왜 이 학기와 연결되는지를 2문장 이내로 구체적으로 설명할 것",
+          "'보고서로 작성', '대회에 출전', '발표하기', '수행평가로 하기'처럼 방식·형식을 제목에 넣거나 강요하지 말 것. 학교에서 실제 기회가 생겼을 때 학생이 형식을 선택한다",
+          "학생의 관심·기존 기록·보완할 증거와 연결되지만, 한 학기에 모두 해야 하는 할 일 목록처럼 쓰지 말 것",
+          "날짜는 단지 해당 학기 안의 권장 검토 시점이며 마감이나 실행 지시가 아니다. 해당 학기 안의 MM-DD 형식으로 작성",
           "미래 활동의 카테고리는 상장·활동·봉사·독서·시험 중 하나. 대회와 수행평가는 별도 카테고리로 쓰지 말고 활동으로 통합할 것",
         ],
       }),
@@ -234,7 +262,9 @@ export async function generateRoadmapWithDeepSeek(
                   monthDay: event.monthDay!,
                   category: "계획",
                   subject: event.subject!.trim(),
+                  priority: event.priority === "optional" ? "optional" : "core",
                   title: event.title!.trim(),
+                  description: event.description?.trim() || "이 학기의 목표와 연결되는 탐구 주제입니다. 학교에서 적절한 기회가 생겼을 때 실제 활동으로 연결하세요.",
                 }))
             : [],
           status: index < current ? "skipped" : index === current ? "active" : "planned",
@@ -243,7 +273,7 @@ export async function generateRoadmapWithDeepSeek(
       })
       .filter((node): node is NonNullable<typeof node> => Boolean(node));
 
-    if (nodes.length !== 6 || seen.size !== 6 || nodes.some((node) => node.status !== "skipped" && !node.planEvents?.length)) return null;
+    if (nodes.length !== 6 || seen.size !== 6 || nodes.some((node) => node.status !== "skipped" && node.planEvents?.length !== 10)) return null;
     nodes.sort((a, b) => a.orderIndex - b.orderIndex);
     return {
       id: roadmapId,
@@ -338,37 +368,57 @@ export async function generateOnboardingClarificationWithDeepSeek(
 ): Promise<OnboardingClarificationPayload | null> {
   try {
     const payload = await requestJson<OnboardingClarificationPayload>(
-      "학생의 Step1 기본정보, Step2 실행조건, 그리고 학생부 분석 결과를 모두 읽은 뒤 3개년 로드맵 설계 전에 꼭 확인해야 할 질문만 뽑는 진로 설계 코치입니다.",
+      "세특연구소 Pro의 로드맵 검증 엔진입니다. 일반 진로 설문을 만들지 않고, 내부 1차 가설에서 현재 이후 학기의 주제 우선순위가 실제로 달라질 때만 확인하는 코치입니다.",
       JSON.stringify({
-        task: "온보딩 Step1·Step2·학생부 분석 기반 로드맵 설계 전 확인 질문 생성",
+        task: "1차 로드맵 가설 검토 및 반복 확인 질문 생성",
         input,
+        productContract: {
+          roadmap: "로드맵은 현재 이후 학기에 학교 기회가 생겼을 때 선택할 탐구 주제 후보의 우선순위다. 프로젝트·결과물·활동 채널을 미리 확정하지 않는다.",
+          past: "현재 학기 이전은 학생의 확정 기록이며 질문이나 새 계획의 대상이 아니다.",
+          clarification: "확인 질문은 학년·학생부 사실의 충돌, 기존 기록과 새 관심의 연결 방식처럼 가설을 바꾸는 불확실성에 한정한다.",
+          default: "불확실성이 없거나 이미 입력에 답이 있으면 questions는 빈 배열, complete는 true다.",
+        },
         schema: {
-          summary: "Step1·Step2·학생부를 함께 보고 생긴 핵심 판단 요약 1문장",
+          summary: "현재 가설을 어떻게 보고 있는지와 이번 확인의 이유를 설명하는 1~2문장",
+          complete: "추가 답변이 로드맵의 학기 전략·대표 활동·증거 방식에 영향을 주지 않으면 true, 아니면 false",
+          draftChangeSummary: "답변을 반영하면 바뀌는 로드맵 방향 요약",
           questions: [
             {
               id: "짧은 영문 snake_case",
               label: "질문 분류",
               question: "학생에게 물어볼 구체 질문",
+              why: "이 답이 어느 학기 전략·대표 활동·증거 방식에 영향을 주는지",
+              selectionMode: "single | multiple (복수 선택이 실제로 필요할 때만 multiple)",
               options: ["선택지 2~4개"],
             },
           ],
         },
         constraints: [
-          "Step1과 Step2에서 이미 답한 내용을 다시 묻지 말 것",
+          "이미 받은 답변은 다시 묻지 말 것. input.answers의 내용과 동일한 주제는 답변이 충분하지 않을 때만 더 구체적으로 물을 것",
+          "input.form, input.schoolRecord, input.roadmapHypothesis에 명시되지 않은 동아리·프로그래밍 언어·수업·활동을 학생이 했다고 전제하거나 질문에 언급하지 말 것. 예를 들어 파이썬, 데이터 분석 동아리는 입력 근거가 있을 때만 언급 가능하다",
+          "input.form.careerResolution이 '넓은 분야만 정한 단계'이면 input.form.concreteResearchQuestion과 knowledgeLevel은 무시하고, 넓은 관심 축을 탐색하는 가설만 검토할 것",
+          "학생이 '잘 모르겠음 — AI 판단에 맡길게요'를 선택하면 그 변수는 제공된 학생부·입력 정보·1차 가설을 근거로 AI가 판단할 것. 같은 내용을 다시 물어보지 말 것",
+          "설계 전 확인 단계에서는 아직 학생에게 개별 활동 주제가 제시되지 않았다는 점을 지킬 것. '주 1~2시간 투자 가능 여부', '어떤 프로젝트를 완료할 수 있는지', 특정 프로젝트의 난이도·분량·완료 가능성은 절대 묻지 말 것",
+          "시간·학교 환경 같은 제약은 Step2의 constraints에 이미 있는 범위만 반영할 것. 구체적인 학교 기회와 활동 주제가 연결된 뒤에만 실행 방식이나 부담을 판단한다",
+          "같은 의도를 표현만 바꿔 반복하지 말 것. input.answers에 있는 질문과 의미가 겹치면 새 질문을 만들지 말고, 로드맵에 영향이 없으면 complete를 true로 할 것",
+          "input.roadmapHypothesis는 학생에게 아직 보여주지 않는 내부 1차 가설이다. 일반 설문을 만들지 말고, 이 가설의 시작 학기·학기별 전략·대표 활동·증거 방식이 실제로 달라질 수 있는 불확실성만 물을 것",
+          "질문마다 why에 해당 답변이 바꾸는 가설의 지점을 구체적으로 설명할 것",
+          "이름·학년처럼 사실을 하나로 확정해야 하는 질문만 selectionMode를 single로 작성할 것. 그 외 관심축·기존 기록 연결·우선순위 질문은 여러 답이 함께 성립할 수 있으므로 기본적으로 multiple로 작성할 것",
+          "질문 횟수의 총량에는 제한이 없다. 이번 묶음에서 필요한 질문이 없으면 questions를 빈 배열로 두고 complete를 true로 할 것. 질문이 필요하면 complete는 false로 할 것",
           "학생부 이름과 입력 이름이 다르면 동일 학생 자료인지 확인하는 질문을 반드시 포함할 것. 이름 질문은 단순 행정 확인이지만 분석 신뢰도를 위해 필요하다",
           "재학생일 때만 학생부의 확정 마지막 학년과 입력 학년이 실제로 충돌하는지 검토할 것. 단순히 학생부가 1학년까지 있다는 이유로 현재 학년을 단정하거나 묻지 말 것",
           "학생부가 3학년까지 확정됐거나 Step1 학년이 졸업이면 마감된 기록에 대한 진로 연결 질문은 만들지 말되, 이름이 다르면 이름 확인 질문은 유지할 것",
           "재학생 학생부 분석 결과가 있으면 기존 기록과 희망 진로의 연결/충돌, 이미 쌓인 과목·활동의 결을 우선 검토할 것",
-          "현재 2학년 또는 3학년이면 남은 학기 수를 계산하고, 이미 확정된 기록과 남은 기록에서 무엇을 보완·전환할 수 있는지 질문할 것",
-          "2학년은 3~4학기, 3학년은 1~2학기만 새 활동을 반영할 수 있다는 점을 고려해 질문의 선택지를 남은 기간에 맞출 것",
+          "현재 학년과 학기를 함께 써서 남은 학기 수를 정확히 계산할 것. 현재 학기를 포함해 2학년 1학기는 4개, 2학년 2학기는 3개, 3학년 1학기는 2개, 3학년 2학기는 1개 학기만 설계 대상이다",
+          "2학년·3학년 학생에게 '6학기 전체'나 지난 학기를 새 계획처럼 묻지 말 것. 남은 학기에서 이미 확정된 기록을 어떻게 잇거나 보완할지만 물을 것",
           "학생부의 활동이 희망 진로와 다르면 관심의 출처를 막연히 묻지 말고, 기존 기록 중 어떤 강점/주제를 새 진로의 근거로 살릴지 또는 남은 학기에 어떤 다리를 놓을지 물을 것",
           "학생부 분석 결과가 비어 있거나 없으면 그 사실을 전제로 로드맵 전략상 정말 필요한 질문만 만들 것",
           "관심을 갖게 된 계기·동기·출처처럼 심리적 배경을 일반적으로 묻지 말 것. 학생부의 기존 방향과 현재 진로가 달라 실제 연결 전략이 달라지는 경우에만 '무엇이 어떻게 바뀌었는지'를 물을 것",
-          "질문은 6학기 로드맵의 큰 방향을 바꿀 수 있는 것만 포함하고, 작은 세부 키워드 하나에 매몰되지 말 것",
-          "예: 반도체 8대공정 관심이라면 8대공정을 6학기에 고르게 펼칠지, 기초과학/소자/재료 지식 후 공정으로 갈지, 기존 학생부 기록과 어떤 축으로 연결할지처럼 구조적 선택을 물을 것",
-          "선택지는 서로 다른 로드맵 설계 전략이 되도록 작성할 것",
+          "질문은 학생에게 실제로 남은 학기의 큰 방향을 바꿀 수 있는 것만 포함하고, 작은 세부 키워드 하나에 매몰되지 말 것",
+          "6학기 전체 구조 질문은 1학년에게만 가능하다. 2·3학년에게는 남은 학기의 시작점, 기존 기록과의 연결, 대표 주제의 우선순위처럼 구조적 선택만 물을 것",
+          "선택지는 서로 다른 로드맵 설계 전략이 되도록 2~3개만 작성할 것. 시스템이 별도로 '잘 모르겠음 — AI 판단에 맡길게요' 선택지를 붙인다",
           "이름·학년 불일치처럼 객관적 충돌이 있으면 가장 앞 질문으로 둘 것",
-          "질문은 이름 확인을 포함해 2~5개만 만들 것",
+          "한 번의 질문 묶음은 학생이 부담 없이 답할 수 있도록 1~4개로 제한할 것. 단, 추가 확인이 필요하면 다음 묶음에서 이어갈 수 있다",
           "한국어로 작성할 것",
         ],
       }),
@@ -380,15 +430,20 @@ export async function generateOnboardingClarificationWithDeepSeek(
             id: question.id?.trim() || `clarify_${index + 1}`,
             label: question.label?.trim() || "확인 질문",
             question: question.question?.trim() || "",
+            why: question.why?.trim() || "",
+            selectionMode: question.selectionMode === "multiple" ? "multiple" : "single",
             options: cleanStrings(question.options).slice(0, 4),
           }))
           .filter((question) => question.question && question.options.length >= 2)
-          .slice(0, 5)
+          .slice(0, 4)
       : [];
-    if (!questions.length) return null;
+    const complete = payload?.complete === true && questions.length === 0;
+    if (!questions.length && !complete) return null;
     return {
       summary: payload?.summary?.trim() || "",
       questions,
+      complete,
+      draftChangeSummary: payload?.draftChangeSummary?.trim() || "",
     };
   } catch (error) {
     console.warn("DeepSeek onboarding clarification fallback:", error instanceof Error ? error.message : "unknown error");

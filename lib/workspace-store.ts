@@ -6,6 +6,8 @@ import {
   makeNextMission,
   reconcileActivity,
   type AssignmentAnalysis,
+  type ActivityAttachment,
+  type ActivityReview,
   type ProductWorkspace,
   type ProfileInput,
   type ReconciliationLog,
@@ -76,9 +78,13 @@ const SCHEMA_STATEMENTS = [
     outputs_json TEXT NOT NULL,
     status TEXT NOT NULL,
     roadmap_node_id TEXT,
+    plan_event_id TEXT,
+    linked_plan_title TEXT,
     completed_at TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS activity_attachments (id TEXT PRIMARY KEY, activity_id TEXT NOT NULL, student_id TEXT NOT NULL, file_name TEXT NOT NULL, content_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, storage_key TEXT NOT NULL, extracted_text TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS activity_reviews (activity_id TEXT PRIMARY KEY, student_id TEXT NOT NULL, plan_event_id TEXT, alignment TEXT NOT NULL, result_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE TABLE IF NOT EXISTS roadmap_plan_events (
     id TEXT PRIMARY KEY,
     roadmap_id TEXT NOT NULL,
@@ -87,7 +93,9 @@ const SCHEMA_STATEMENTS = [
     month_day TEXT NOT NULL,
     category TEXT NOT NULL,
     subject TEXT NOT NULL,
+    priority TEXT NOT NULL DEFAULT 'core',
     title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS reconciliation_logs (
@@ -154,6 +162,8 @@ const SCHEMA_STATEMENTS = [
   "CREATE INDEX IF NOT EXISTS idx_reconciliation_student_created ON reconciliation_logs(student_id, created_at)",
   "CREATE INDEX IF NOT EXISTS idx_school_record_courses_student_period ON school_record_courses(student_id, grade, semester)",
   "CREATE INDEX IF NOT EXISTS idx_school_record_items_import ON school_record_import_items(import_id)",
+  "CREATE INDEX IF NOT EXISTS idx_activity_attachments_student_activity ON activity_attachments(student_id, activity_id)",
+  "CREATE INDEX IF NOT EXISTS idx_activity_reviews_student_created ON activity_reviews(student_id, created_at)",
 ];
 
 function parseList(value: string | null | undefined) {
@@ -168,6 +178,17 @@ function parseList(value: string | null | undefined) {
 export async function ensureWorkspaceSchema() {
   const d1 = getD1();
   await d1.batch(SCHEMA_STATEMENTS.map((statement) => d1.prepare(statement)));
+  // 개발 DB에는 이미 생성된 테이블이 있을 수 있으므로 새 연결 필드만 안전하게 보강한다.
+  const columns = await d1.prepare("PRAGMA table_info(student_activities_v2)").all<{ name: string }>();
+  if (!columns.results.some((column) => column.name === "plan_event_id")) {
+    await d1.prepare("ALTER TABLE student_activities_v2 ADD COLUMN plan_event_id TEXT").run();
+  }
+  if (!columns.results.some((column) => column.name === "linked_plan_title")) {
+    await d1.prepare("ALTER TABLE student_activities_v2 ADD COLUMN linked_plan_title TEXT").run();
+  }
+  const planColumns = await d1.prepare("PRAGMA table_info(roadmap_plan_events)").all<{ name: string }>();
+  if (!planColumns.results.some((column) => column.name === "priority")) await d1.prepare("ALTER TABLE roadmap_plan_events ADD COLUMN priority TEXT NOT NULL DEFAULT 'core'").run();
+  if (!planColumns.results.some((column) => column.name === "description")) await d1.prepare("ALTER TABLE roadmap_plan_events ADD COLUMN description TEXT NOT NULL DEFAULT ''").run();
 }
 
 type ProfileRow = {
@@ -227,9 +248,13 @@ type ActivityRow = {
   outputs_json: string;
   status: string;
   roadmap_node_id: string | null;
+  plan_event_id: string | null;
+  linked_plan_title: string | null;
   completed_at: string;
   created_at: string;
 };
+type AttachmentRow = { id: string; activity_id: string; file_name: string; content_type: string; size_bytes: number; storage_key: string; extracted_text: string };
+type ReviewRow = { result_json: string };
 
 type PlanEventRow = {
   id: string;
@@ -239,7 +264,9 @@ type PlanEventRow = {
   month_day: string;
   category: RoadmapPlanEvent["category"];
   subject: string;
+  priority: "core" | "optional";
   title: string;
+  description: string;
 };
 
 type ReconciliationRow = {
@@ -312,7 +339,9 @@ function toPlanEvent(row: PlanEventRow): RoadmapPlanEvent {
     monthDay: row.month_day,
     category: row.category,
     subject: row.subject,
+    priority: row.priority === "optional" ? "optional" : "core",
     title: row.title,
+    description: row.description || "이 학기의 목표와 연결되는 탐구 주제입니다.",
   };
 }
 
@@ -328,6 +357,8 @@ function toActivity(row: ActivityRow): StudentActivity {
     outputs: parseList(row.outputs_json),
     status: row.status,
     roadmapNodeId: row.roadmap_node_id,
+    planEventId: row.plan_event_id,
+    linkedPlanTitle: row.linked_plan_title,
     completedAt: row.completed_at,
     createdAt: row.created_at,
   };
@@ -426,8 +457,8 @@ export async function saveOnboarding(profileInput: ProfileInput, roadmapInput: R
     ...roadmap.nodes.flatMap((node) => (node.planEvents ?? []).map((event) =>
       d1.prepare(
         `INSERT INTO roadmap_plan_events (
-          id, roadmap_id, node_id, student_id, month_day, category, subject, title
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, roadmap_id, node_id, student_id, month_day, category, subject, priority, title, description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         event.id,
         roadmap.id,
@@ -436,7 +467,9 @@ export async function saveOnboarding(profileInput: ProfileInput, roadmapInput: R
         event.monthDay,
         event.category,
         event.subject,
+        event.priority,
         event.title,
+        event.description,
       ),
     )),
   ];
@@ -459,13 +492,15 @@ export async function loadWorkspace(studentId: string): Promise<ProductWorkspace
     .first<RoadmapRow>();
   if (!roadmapRow) throw new Error("활성 로드맵을 찾지 못했습니다.");
 
-  const [nodeResult, planEventResult, activityResult, courseResult, reconciliationResult, analysisRow] = await Promise.all([
+  const [nodeResult, planEventResult, activityResult, courseResult, reconciliationResult, analysisRow, attachmentResult, reviewResult] = await Promise.all([
     d1.prepare("SELECT * FROM roadmap_nodes WHERE roadmap_id = ? ORDER BY order_index ASC").bind(roadmapRow.id).all<NodeRow>(),
-    d1.prepare("SELECT * FROM roadmap_plan_events WHERE roadmap_id = ? ORDER BY month_day ASC").bind(roadmapRow.id).all<PlanEventRow>(),
+    d1.prepare("SELECT * FROM roadmap_plan_events WHERE roadmap_id = ? ORDER BY CASE priority WHEN 'core' THEN 0 ELSE 1 END, month_day ASC").bind(roadmapRow.id).all<PlanEventRow>(),
     d1.prepare("SELECT * FROM student_activities_v2 WHERE student_id = ? ORDER BY completed_at DESC, created_at DESC").bind(studentId).all<ActivityRow>(),
     d1.prepare("SELECT * FROM school_record_courses WHERE student_id = ? ORDER BY grade, semester, subject").bind(studentId).all<SchoolRecordCourseRow>(),
     d1.prepare("SELECT * FROM reconciliation_logs WHERE student_id = ? ORDER BY created_at DESC").bind(studentId).all<ReconciliationRow>(),
     d1.prepare("SELECT result_json FROM assignment_analyses WHERE student_id = ? ORDER BY created_at DESC LIMIT 1").bind(studentId).first<{ result_json: string }>(),
+    d1.prepare("SELECT * FROM activity_attachments WHERE student_id = ? ORDER BY created_at DESC").bind(studentId).all<AttachmentRow>(),
+    d1.prepare("SELECT result_json FROM activity_reviews WHERE student_id = ? ORDER BY created_at DESC").bind(studentId).all<ReviewRow>(),
   ]);
 
   const profile = toProfile(profileRow);
@@ -500,6 +535,8 @@ export async function loadWorkspace(studentId: string): Promise<ProductWorkspace
     profile,
     roadmap,
     activities,
+    attachments: attachmentResult.results.map((row) => ({ id: row.id, activityId: row.activity_id, fileName: row.file_name, contentType: row.content_type, sizeBytes: row.size_bytes, storageKey: row.storage_key, extractedText: row.extracted_text })),
+    activityReviews: reviewResult.results.flatMap((row) => { try { return [JSON.parse(row.result_json) as ActivityReview]; } catch { return []; } }),
     schoolRecordCourses,
     reconciliations,
     dna: diagnoseStudent(profile, activities),
@@ -577,8 +614,19 @@ export async function importSchoolRecord(input: {
 export async function addActivity(
   studentId: string,
   input: Omit<StudentActivity, "id" | "studentId" | "status">,
+  attachments: Array<Omit<ActivityAttachment, "id" | "activityId">> = [],
+  review?: ActivityReview,
 ) {
   const workspace = await loadWorkspace(studentId);
+  const linkedPlan = input.planEventId
+    ? await getD1()
+        .prepare("SELECT * FROM roadmap_plan_events WHERE id = ? AND student_id = ?")
+        .bind(input.planEventId, studentId)
+        .first<PlanEventRow>()
+    : null;
+  if (input.planEventId && !linkedPlan) {
+    throw new Error("전환하려는 계획을 찾을 수 없습니다. 로드맵을 새로고침한 뒤 다시 시도해주세요.");
+  }
   const activity: StudentActivity = {
     ...input,
     id: crypto.randomUUID(),
@@ -593,15 +641,18 @@ export async function addActivity(
     activityId: activity.id,
     roadmapId: workspace.roadmap.id,
   };
-  activity.roadmapNodeId = result.matchType === "DIVERGE" ? null : result.nodeId;
+  // 계획에서 전환한 기록은 자동 추측보다 학생이 선택한 원래 계획의 학기에 연결한다.
+  activity.roadmapNodeId = linkedPlan?.node_id ?? (result.matchType === "DIVERGE" ? null : result.nodeId);
+  activity.planEventId = linkedPlan?.id ?? null;
+  activity.linkedPlanTitle = linkedPlan?.title ?? null;
 
   const d1 = getD1();
   const statements = [
     d1.prepare(
       `INSERT INTO student_activities_v2 (
         id, student_id, activity_type, subject, title, summary, concepts_json,
-        outputs_json, status, roadmap_node_id, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        outputs_json, status, roadmap_node_id, plan_event_id, linked_plan_title, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       activity.id,
       studentId,
@@ -613,6 +664,8 @@ export async function addActivity(
       JSON.stringify(activity.outputs),
       activity.status,
       activity.roadmapNodeId ?? null,
+      activity.planEventId ?? null,
+      activity.linkedPlanTitle ?? null,
       activity.completedAt,
     ),
     d1.prepare(
@@ -632,6 +685,15 @@ export async function addActivity(
       log.confidence,
     ),
   ];
+
+  // 실제 기록이 저장되는 같은 작업에서만 계획을 제거한다. 저장 실패 시 계획은 남는다.
+  if (linkedPlan) {
+    statements.push(
+      d1.prepare("DELETE FROM roadmap_plan_events WHERE id = ? AND student_id = ?").bind(linkedPlan.id, studentId),
+    );
+  }
+  for (const attachment of attachments) statements.push(d1.prepare("INSERT INTO activity_attachments (id, activity_id, student_id, file_name, content_type, size_bytes, storage_key, extracted_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), activity.id, studentId, attachment.fileName, attachment.contentType, attachment.sizeBytes, attachment.storageKey, attachment.extractedText ?? ""));
+  if (review) statements.push(d1.prepare("INSERT INTO activity_reviews (activity_id, student_id, plan_event_id, alignment, result_json) VALUES (?, ?, ?, ?, ?)").bind(activity.id, studentId, linkedPlan?.id ?? null, review.alignment, JSON.stringify({ ...review, activityId: activity.id, planEventId: linkedPlan?.id ?? null })));
 
   if ((result.matchType === "MATCH" || result.matchType === "PARTIAL_MATCH") && result.nodeId) {
     const current = workspace.roadmap.nodes.find((node) => node.id === result.nodeId);
@@ -736,8 +798,8 @@ export async function regenerateRoadmap(studentId: string) {
     ...newRoadmap.nodes.flatMap((node) => (node.planEvents ?? []).map((event) =>
       d1.prepare(
         `INSERT INTO roadmap_plan_events (
-          id, roadmap_id, node_id, student_id, month_day, category, subject, title
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, roadmap_id, node_id, student_id, month_day, category, subject, priority, title, description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         event.id,
         newRoadmap.id,
@@ -746,7 +808,9 @@ export async function regenerateRoadmap(studentId: string) {
         event.monthDay,
         event.category,
         event.subject,
+        event.priority,
         event.title,
+        event.description,
       ),
     )),
   ];
