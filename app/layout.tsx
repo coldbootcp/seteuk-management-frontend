@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   description:
     "AI 기반 세부능력 및 특기사항 분석 · 3개년 로드맵 · 수행평가 정합 시스템. 학생 개인의 강점과 목표에 맞춘 전략적 학교생활을 설계합니다.",
   keywords: ["세특", "생활기록부", "수행평가", "고교", "입시", "로드맵", "AI"],
+  icons: {
+    icon: "/logo.png?v=2",
+  },
 };
 
 export default function RootLayout({

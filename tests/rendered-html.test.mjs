@@ -16,25 +16,24 @@ test("the product starts with onboarding and exposes every primary surface", asy
   ]);
 
   assert.match(page, /WorkspaceApp/);
-  assert.match(layout, /세특연구소 Personal Coach/);
-  assert.match(app, /New Student Onboarding/);
-  assert.match(app, /3개년 로드맵 미리보기/);
+  assert.match(layout, /세특연구소/);
+  assert.match(app, /NEW STUDENT ONBOARDING/);
+  assert.match(app, /고교 3개년 로드맵/);
   assert.match(app, /3-YEAR SCHOOL RECORD/);
   assert.match(app, /생기부 PDF 분석/);
   assert.match(app, /SCHOOL RECORD REVIEW/);
   assert.match(app, /원본 파일은 저장하지 않습니다/);
-  assert.match(app, /3개년 연속 타임라인/);
+  assert.match(app, /활동 타임라인/);
   assert.match(app, /SEMESTER FOCUS/);
   assert.match(app, /상장/);
-  assert.match(app, /대회/);
-  assert.match(app, /수행평가/);
-  assert.match(app, /보고서/);
+  assert.match(app, /활동/);
+  assert.match(app, /봉사/);
   assert.match(app, /독서/);
   assert.match(app, /시험/);
-  assert.match(app, /과목별 색상/);
+  assert.match(app, /subjectColor/);
   assert.match(app, /useState<TabId>\("roadmap"\)/);
-  assert.match(app, /앱 v\{APP_VERSION\} · 학생 로드맵 v/);
-  assert.match(app, /STUDENT DNA/);
+  assert.match(app, /v\{APP_VERSION\} · 로드맵 v/);
+  assert.match(app, /MAJOR NARRATIVE DNA/);
   assert.match(app, /수행평가 분석과 후속 탐구/);
   assert.match(app, /활동 기록과 로드맵 정합/);
   assert.match(app, /학생 프로필과 진로 변화/);
@@ -70,18 +69,24 @@ test("planning, execution, memory, feedback, and reconciliation persist explicit
   assert.match(schema, /school_record_import_items/);
 });
 
-test("school record PDFs are parsed, reviewed, and imported through explicit boundaries", async () => {
-  const [parser, parseRoute, importRoute, store] = await Promise.all([
+test("school record PDFs use the async parser API, review, and explicit import boundaries", async () => {
+  const [app, parser, parseRoute, statusRoute, importRoute, store] = await Promise.all([
+    source("app/workspace-app.tsx"),
     source("lib/school-record-parser.ts"),
     source("app/api/school-record/parse/route.ts"),
+    source("app/api/school-record/status/[taskId]/route.ts"),
     source("app/api/school-record/import/route.ts"),
     source("lib/workspace-store.ts"),
   ]);
 
-  assert.match(parseRoute, /getDocumentProxy/);
-  assert.match(parseRoute, /extractText/);
+  assert.match(parseRoute, /seteukApiUrl\("\/analyze", request\.url\)/);
+  assert.match(statusRoute, /seteukApiUrl\(`\/status\//);
+  assert.match(app, /analyzeSchoolRecordPdf/);
+  assert.match(app, /task\.status === "completed"/);
   assert.match(parser, /50MB/);
-  assert.match(parser, /parseSchoolRecordText/);
+  assert.match(parser, /academic_performance/);
+  assert.match(parser, /reading_activities/);
+  assert.match(parser, /result\.activities/);
   assert.match(parser, /dateBasis/);
   assert.match(parser, /인식 신뢰도|confidence/);
   assert.doesNotMatch(parser, /\.slice\(0,\s*(60|120)\)/);

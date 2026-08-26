@@ -42,7 +42,7 @@ export type RoadmapNode = {
 export type RoadmapPlanEvent = {
   id: string;
   monthDay: string;
-  category: "상장" | "대회" | "수행평가" | "보고서" | "독서" | "시험";
+  category: "상장" | "활동" | "봉사" | "독서" | "시험";
   subject: string;
   title: string;
 };
@@ -221,11 +221,11 @@ export function generateRoadmap(
     orderIndex: index,
     grade: stage.grade,
     semester: stage.semester,
-    narrativeStage: stage.stage,
-    title: index === currentIndex ? `${focus} 관점으로 ${stage.title}` : stage.title,
-    objective: stage.objective,
-    candidateSubjects: stage.subjects,
-    competencyGoals: stage.competencies,
+    narrativeStage: index < currentIndex ? "회고" : stage.stage,
+    title: index < currentIndex ? "기존 활동 기록" : (index === currentIndex ? `${focus} 관점으로 ${stage.title}` : stage.title),
+    objective: index < currentIndex ? "생기부 연동을 통해 과거 활동을 확인하세요." : stage.objective,
+    candidateSubjects: index < currentIndex ? [] : stage.subjects,
+    competencyGoals: index < currentIndex ? [] : stage.competencies,
     status: index < currentIndex ? "skipped" : index === currentIndex ? "active" : "planned",
     instantiatedActivityId: null,
     planEvents: [],

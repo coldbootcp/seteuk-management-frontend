@@ -1,5 +1,5 @@
-import { extractText, getDocumentProxy } from "unpdf";
-import { parseSchoolRecordText, SCHOOL_RECORD_MAX_FILE_SIZE, SCHOOL_RECORD_MAX_FILE_SIZE_LABEL } from "../../../../lib/school-record-parser";
+import { SCHOOL_RECORD_MAX_FILE_SIZE, SCHOOL_RECORD_MAX_FILE_SIZE_LABEL } from "../../../../lib/school-record-parser";
+import { seteukApiUrl, upstreamError } from "../../../../lib/seteuk-api";
 
 export async function POST(request: Request) {
   try {
@@ -13,17 +13,26 @@ export async function POST(request: Request) {
       return Response.json({ error: "현재 실제 분석은 텍스트형 PDF를 지원합니다." }, { status: 415 });
     }
 
-    const pdf = await getDocumentProxy(new Uint8Array(await file.arrayBuffer()));
-    const extracted = await extractText(pdf, { mergePages: true });
-    const text = Array.isArray(extracted.text) ? extracted.text.join("\n") : extracted.text;
-    const result = parseSchoolRecordText(text, {
-      fileName: file.name,
-      totalPages: extracted.totalPages,
-      academicStartYear,
+    const externalForm = new FormData();
+    externalForm.append("file", file, file.name);
+
+    const response = await fetch(seteukApiUrl("/analyze", request.url), {
+      method: "POST",
+      body: externalForm,
     });
-    return Response.json({ result });
+
+    if (!response.ok) {
+      const message = await upstreamError(response, "분석 서버가 요청을 처리하지 못했습니다.");
+      return Response.json({ error: message }, { status: response.status });
+    }
+
+    const data = await response.json() as { task_id?: unknown; status?: unknown; message?: unknown };
+    if (typeof data.task_id !== "string" || !data.task_id) {
+      return Response.json({ error: "분석 서버가 작업 ID를 반환하지 않았습니다." }, { status: 502 });
+    }
+    return Response.json(data, { status: 202 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "PDF에서 텍스트를 추출하지 못했습니다.";
-    return Response.json({ error: `생기부 분석에 실패했습니다. ${message}` }, { status: 500 });
+    const message = error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
+    return Response.json({ error: `생기부 분석 요청에 실패했습니다. ${message}` }, { status: 502 });
   }
 }
