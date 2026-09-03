@@ -48,6 +48,10 @@ export async function uploadActivityFiles(studentId: string, files: File[]) {
   }
 }
 
+export async function discardPendingActivityFiles(attachments: PendingAttachment[]) {
+  await Promise.all(attachments.map((attachment) => getActivityFilesBucket().delete(attachment.storageKey)));
+}
+
 export async function getActivityFile(studentId: string, attachmentId: string) {
   const row = await getD1().prepare("SELECT file_name, content_type, storage_key FROM activity_attachments WHERE id = ? AND student_id = ?").bind(attachmentId, studentId).first<{ file_name: string; content_type: string; storage_key: string }>();
   if (!row) throw new Error("첨부 파일을 찾을 수 없습니다.");

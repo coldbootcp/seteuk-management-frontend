@@ -66,7 +66,8 @@ test("planning, execution, memory, feedback, and reconciliation persist explicit
   assert.match(store, /roadmap_plan_events/);
   assert.match(store, /plan_event_id/);
   assert.match(store, /linked_plan_title/);
-  assert.match(store, /DELETE FROM roadmap_plan_events/);
+  assert.doesNotMatch(store, /DELETE FROM roadmap_plan_events/);
+  assert.match(store, /하나의 탐구 주제는 여러 실제 활동으로 이어질 수 있으므로/);
   assert.match(schema, /roadmap_plan_events/);
   assert.match(schema, /planEventId/);
   assert.match(store, /saveRecommendationFeedback/);

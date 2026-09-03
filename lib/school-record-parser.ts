@@ -9,6 +9,7 @@ export type SchoolRecordCourse = {
   grade: number;
   semester: number;
   subject: string;
+  rank?: number | null;
 };
 
 export type SchoolRecordDraft = {
@@ -336,8 +337,13 @@ export function parseSchoolRecordJson(
       const subject = textValue(item.subject, "독서");
 
       const id = `${grade}-${semester}-${subject}`;
-      if (!courses.has(id)) {
-        courses.set(id, { id, grade, semester, subject });
+      const parsedRank = Number.parseInt(textValue(item.rank), 10);
+      const rank = Number.isInteger(parsedRank) && parsedRank >= 1 && parsedRank <= 5 ? parsedRank : null;
+      const existingCourse = courses.get(id);
+      if (!existingCourse) {
+        courses.set(id, { id, grade, semester, subject, rank });
+      } else if (rank !== null) {
+        courses.set(id, { ...existingCourse, rank });
       }
 
       const entryId = keyFor(grade, semester, subject, title);

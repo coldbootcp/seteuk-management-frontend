@@ -66,6 +66,7 @@ export type StudentActivity = {
   subject: string;
   title: string;
   summary: string;
+  reflection: string;
   concepts: string[];
   outputs: string[];
   status: string;
@@ -153,12 +154,32 @@ export type AssignmentAnalysis = {
   checklist: string[];
 };
 
+export type StudentSemesterCourse = {
+  id: string;
+  studentId: string;
+  roadmapNodeId: string;
+  grade: number;
+  semester: number;
+  subject: string;
+};
+
+export type StudentCourseGrade = {
+  id: string;
+  studentId: string;
+  semesterCourseId: string;
+  rank: number | null;
+  score: number | null;
+  note: string;
+};
+
 export type ProductWorkspace = {
   profile: StudentWorkspaceProfile;
   roadmap: Roadmap;
   activities: StudentActivity[];
   attachments: ActivityAttachment[];
   activityReviews: ActivityReview[];
+  semesterCourses: StudentSemesterCourse[];
+  courseGrades: StudentCourseGrade[];
   schoolRecordCourses: SchoolRecordCourseRecord[];
   reconciliations: ReconciliationLog[];
   dna: DnaDiagnosis;
@@ -448,10 +469,10 @@ export function reconcileActivity(
       confidence: 45,
     };
   }
-  const activityTokens = tokens(`${activity.subject} ${activity.title} ${activity.summary} ${activity.concepts.join(" ")}`);
+  const activityTokens = tokens(`${activity.subject} ${activity.title} ${activity.summary} ${activity.reflection} ${activity.concepts.join(" ")}`);
   const nodeTokens = tokens(`${active.title} ${active.objective} ${active.candidateSubjects.join(" ")} ${active.competencyGoals.join(" ")}`);
   const overlap = [...activityTokens].filter((token) => nodeTokens.has(token)).length;
-  const semiconductorSignal = includesAny(`${activity.title} ${activity.summary}`, ["반도체", "다이오드", "트랜지스터", "공정", "센서", "회로", "규소", "데이터"]);
+  const semiconductorSignal = includesAny(`${activity.title} ${activity.summary} ${activity.reflection}`, ["반도체", "다이오드", "트랜지스터", "공정", "센서", "회로", "규소", "데이터"]);
   const subjectMatch = active.candidateSubjects.some((subject) => subject.includes(activity.subject) || activity.subject.includes(subject));
   const score = overlap * 2 + (semiconductorSignal ? 2 : 0) + (subjectMatch ? 2 : 0);
 

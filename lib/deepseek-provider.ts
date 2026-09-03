@@ -99,7 +99,7 @@ export type OnboardingClarificationPayload = {
 
 type ActivityReviewPayload = { alignment?: "aligned" | "partial" | "separate"; summary?: string; evidence?: string[]; gaps?: string[]; nextSteps?: string[] };
 
-export async function reviewActivityWithDeepSeek(input: { activity: { title: string; subject: string; summary: string; concepts: string[]; outputs: string[] }; plan?: { title: string; objective: string; subject: string } | null; attachmentText: string[] }): Promise<ActivityReview | null> {
+export async function reviewActivityWithDeepSeek(input: { activity: { title: string; subject: string; summary: string; reflection: string; concepts: string[]; outputs: string[] }; plan?: { title: string; objective: string; subject: string } | null; attachmentText: string[] }): Promise<ActivityReview | null> {
   try {
     const payload = await requestJson<ActivityReviewPayload>("학생의 실제 활동이 선택한 로드맵 계획의 의도에 부합하는지, 첨부한 발표자료·보고서의 텍스트와 학생 작성 기록을 근거로 검토하는 교육 코치입니다.", JSON.stringify({ task: "실제 활동 정합 검토", ...input, schema: { alignment: "aligned | partial | separate", summary: "판단 요약", evidence: ["근거"], gaps: ["부족한 점"], nextSteps: ["실행 가능한 보완 행동"] }, constraints: ["실제로 제공된 기록과 첨부 텍스트에 있는 사실만 근거로 쓸 것", "계획을 선택하지 않았으면 separate로 판단", "부족한 점이 없으면 gaps는 빈 배열", "한국어"] }), 1800);
     if (!payload?.alignment || !payload.summary) return null;

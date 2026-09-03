@@ -114,6 +114,7 @@ export const studentActivitiesV2 = sqliteTable("student_activities_v2", {
   subject: text("subject").notNull(),
   title: text("title").notNull(),
   summary: text("summary").notNull(),
+  reflection: text("reflection").notNull().default(""),
   conceptsJson: text("concepts_json").notNull(),
   outputsJson: text("outputs_json").notNull(),
   status: text("status").notNull(),
@@ -122,6 +123,26 @@ export const studentActivitiesV2 = sqliteTable("student_activities_v2", {
   linkedPlanTitle: text("linked_plan_title"),
   completedAt: text("completed_at").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const studentSemesterCourses = sqliteTable("student_semester_courses", {
+  id: text("id").primaryKey(),
+  studentId: text("student_id").notNull(),
+  roadmapNodeId: text("roadmap_node_id").notNull(),
+  grade: integer("grade").notNull(),
+  semester: integer("semester").notNull(),
+  subject: text("subject").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const studentCourseGrades = sqliteTable("student_course_grades", {
+  id: text("id").primaryKey(),
+  studentId: text("student_id").notNull(),
+  semesterCourseId: text("semester_course_id").notNull(),
+  rank: integer("rank"),
+  score: integer("score"),
+  note: text("note").notNull().default(""),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const reconciliationLogs = sqliteTable("reconciliation_logs", {

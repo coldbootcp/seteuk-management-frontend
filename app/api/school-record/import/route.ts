@@ -9,6 +9,7 @@ export async function POST(request: Request) {
       totalPages?: number;
       courses?: SchoolRecordCourse[];
       entries?: SchoolRecordDraft[];
+      courseGradeChoices?: Record<string, "keep" | "replace">;
     };
     if (!payload.studentId || !payload.fileName || !Array.isArray(payload.entries) || !Array.isArray(payload.courses)) {
       return Response.json({ error: "확정할 생기부 분석 결과가 필요합니다." }, { status: 400 });
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       totalPages: payload.totalPages ?? 0,
       courses: payload.courses,
       entries: payload.entries,
+      courseGradeChoices: payload.courseGradeChoices,
     });
     return Response.json(result, { status: 201 });
   } catch (error) {

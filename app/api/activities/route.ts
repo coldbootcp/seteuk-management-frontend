@@ -1,6 +1,6 @@
 import type { StudentActivity } from "../../../lib/product-harness";
 import { addActivity, loadWorkspace } from "../../../lib/workspace-store";
-import { uploadActivityFiles } from "../../../lib/activity-files";
+import { discardPendingActivityFiles, uploadActivityFiles } from "../../../lib/activity-files";
 import { reviewActivityWithDeepSeek } from "../../../lib/deepseek-provider";
 
 export async function POST(request: Request) {
@@ -19,6 +19,13 @@ export async function POST(request: Request) {
     const attachmentText = attachments.map((item) => item.extractedText).filter(Boolean);
     const review = (await reviewActivityWithDeepSeek({ activity: payload.activity, plan, attachmentText }))
       ?? { activityId: "", alignment: plan ? "partial" as const : "separate" as const, summary: plan ? "선택한 계획과의 정합성은 저장된 활동 내용을 바탕으로 계속 검토할 수 있습니다." : "로드맵과 별개로 보관한 활동입니다.", evidence: attachmentText.length ? ["첨부 자료 텍스트를 함께 보관했습니다."] : ["학생이 직접 입력한 활동 기록"], gaps: attachmentText.length ? [] : ["발표자료나 탐구보고서를 첨부하면 활동 근거를 더 구체적으로 정리할 수 있습니다."], nextSteps: plan ? ["계획의 목표와 실제 결과가 어떻게 이어졌는지 활동 요약에 한 문장으로 보완하세요."] : [], provider: "rule" as const };
+    if (plan && review.alignment === "separate") {
+      await discardPendingActivityFiles(attachments);
+      return Response.json({
+        error: "선택한 로드맵 주제와 실제 활동의 연결 근거가 충분하지 않습니다. ‘로드맵과 별개의 실제 활동’으로 저장하거나, 연결할 주제를 다시 선택해주세요.",
+        review,
+      }, { status: 422 });
+    }
     const result = await addActivity(payload.studentId, payload.activity, attachments, review);
     return Response.json(result, { status: 201 });
   } catch (error) {
