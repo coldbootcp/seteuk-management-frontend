@@ -8,6 +8,9 @@ async function source(path) {
   return readFile(new URL(path, root), "utf8");
 }
 
+// 이 리포는 화면만 담당한다. 예전에 여기 있던 영속화·정합·파서 검사는 서버 로직과
+// 함께 백엔드로 옮겨갔고, 그쪽 pytest 스위트가 이어받는다.
+
 test("the product starts with onboarding and exposes every primary surface", async () => {
   const [app, page, layout] = await Promise.all([
     source("app/workspace-app.tsx"),
@@ -22,7 +25,6 @@ test("the product starts with onboarding and exposes every primary surface", asy
   assert.match(app, /3-YEAR SCHOOL RECORD/);
   assert.match(app, /생기부 PDF 분석/);
   assert.match(app, /SCHOOL RECORD REVIEW/);
-  assert.match(app, /원본 파일은 저장하지 않습니다/);
   assert.match(app, /활동 타임라인/);
   assert.match(app, /SEMESTER FOCUS/);
   assert.match(app, /상장/);
@@ -43,65 +45,36 @@ test("the product starts with onboarding and exposes every primary surface", asy
   assert.doesNotMatch(app, /Codex is working|react-loading-skeleton|codex-preview/);
 });
 
-test("planning, execution, memory, feedback, and reconciliation persist explicitly", async () => {
-  const [harness, store, schema] = await Promise.all([
-    source("lib/product-harness.ts"),
-    source("lib/workspace-store.ts"),
-    source("db/schema.ts"),
-  ]);
-
-  assert.match(harness, /generateRoadmap/);
-  assert.match(harness, /suggestedTopicsForSemester/);
-  assert.match(harness, /priority: "core" \| "optional"/);
-  assert.match(harness, /description: string/);
-  assert.match(harness, /diagnoseStudent/);
-  assert.match(harness, /analyzeAssignment/);
-  assert.match(harness, /reconcileActivity/);
-  assert.match(harness, /MATCH/);
-  assert.match(harness, /PARTIAL_MATCH/);
-  assert.match(harness, /DIVERGE/);
-  assert.match(harness, /MISS/);
-  assert.match(store, /saveOnboarding/);
-  assert.match(store, /regenerateRoadmap/);
-  assert.match(store, /roadmap_plan_events/);
-  assert.match(store, /plan_event_id/);
-  assert.match(store, /linked_plan_title/);
-  assert.doesNotMatch(store, /DELETE FROM roadmap_plan_events/);
-  assert.match(store, /하나의 탐구 주제는 여러 실제 활동으로 이어질 수 있으므로/);
-  assert.match(schema, /roadmap_plan_events/);
-  assert.match(schema, /planEventId/);
-  assert.match(store, /saveRecommendationFeedback/);
-  assert.match(schema, /student_workspaces/);
-  assert.match(schema, /roadmap_nodes/);
-  assert.match(schema, /reconciliation_logs/);
-  assert.match(schema, /recommendation_feedback_v2/);
-  assert.match(schema, /school_record_imports/);
-  assert.match(schema, /school_record_courses/);
-  assert.match(schema, /school_record_import_items/);
-});
-
-test("school record PDFs use the async parser API, review, and explicit import boundaries", async () => {
-  const [app, parser, parseRoute, statusRoute, importRoute, store] = await Promise.all([
+test("the school record review stays client-side and states the real storage policy", async () => {
+  const [app, parser] = await Promise.all([
     source("app/workspace-app.tsx"),
     source("lib/school-record-parser.ts"),
-    source("app/api/school-record/parse/route.ts"),
-    source("app/api/school-record/status/[taskId]/route.ts"),
-    source("app/api/school-record/import/route.ts"),
-    source("lib/workspace-store.ts"),
   ]);
 
-  assert.match(parseRoute, /seteukApiUrl\("\/analyze", request\.url\)/);
-  assert.match(statusRoute, /seteukApiUrl\(`\/status\//);
+  // 업로드 → 폴링 → 검토 흐름은 화면이 계속 소유한다.
   assert.match(app, /analyzeSchoolRecordPdf/);
   assert.match(app, /task\.status === "completed"/);
+
+  // 원본을 보관하기로 정했으므로(P-1), 저장하지 않는다는 옛 약속이 남아 있으면 안 된다.
+  assert.doesNotMatch(app, /원본 파일은 저장하지 않습니다/);
+
+  // 응답 JSON을 화면용 초안으로 빚는 헬퍼는 프론트에 남았다.
   assert.match(parser, /50MB/);
   assert.match(parser, /academic_performance/);
   assert.match(parser, /reading_activities/);
   assert.match(parser, /result\.activities/);
   assert.match(parser, /dateBasis/);
   assert.match(parser, /인식 신뢰도|confidence/);
-  assert.doesNotMatch(parser, /\.slice\(0,\s*(60|120)\)/);
-  assert.match(importRoute, /importSchoolRecord/);
-  assert.match(store, /school_record_imports/);
-  assert.match(store, /school_record_import_items/);
+
+  // 파싱 자체는 백엔드가 한다 — TypeScript 파서가 되살아나면 안 된다.
+  assert.doesNotMatch(parser, /export function parseSchoolRecordText/);
+});
+
+test("no server-side or Workers code is left in the frontend", async () => {
+  const pkg = JSON.parse(await source("package.json"));
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+  for (const banned of ["drizzle-orm", "drizzle-kit", "wrangler", "vinext", "@cloudflare/vite-plugin", "unpdf", "mammoth"]) {
+    assert.equal(deps[banned], undefined, `${banned} should be gone`);
+  }
 });

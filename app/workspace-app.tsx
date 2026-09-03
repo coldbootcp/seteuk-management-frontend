@@ -51,6 +51,7 @@ type RoadmapTimelineEvent = {
 type ActivityDraft = {
   title: string;
   subject: string;
+  summary?: string;
   planEventId?: string;
   roadmapNodeId?: string;
 };
@@ -2438,7 +2439,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
               )}
               <div className="focus-course-add">
                 <input aria-label="수강 과목 직접 추가" disabled={courseBusy} onChange={(event) => setCourseDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addFocusedCourse(); } }} placeholder="직접 입력 · 예: 수학Ⅰ" value={courseDraft} />
-                <button className="btn btn-secondary btn-sm" disabled={courseBusy || !courseDraft.trim()} onClick={addFocusedCourse} type="button">추가</button>
+                <button className="btn btn-secondary btn-sm" disabled={courseBusy || !courseDraft.trim()} onClick={() => void addFocusedCourse()} type="button">추가</button>
               </div>
             </div>
           </section>
@@ -2459,7 +2460,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
             </div>
             <div className="record-review-body">
               <div className="rr-privacy-note">
-                <strong>원본 파일은 저장하지 않습니다.</strong>
+                <strong>업로드한 생기부 원본은 계정에 보관됩니다.</strong>
                 <span>아래에서 선택한 과목과 활동만 학생 기록에 반영됩니다.</span>
               </div>
               {recordParse.warnings.map((w) => <div className="rr-warning" key={w}>! {w}</div>)}
@@ -2558,7 +2559,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
               <button
                 className="btn btn-primary"
                 disabled={recordBusy || (importCategory === "시험" ? (!recordParse.courses.length && !recordParse.entries.some((e) => e.category === importCategory && e.selected)) : !recordParse.entries.some((e) => e.category === importCategory && e.selected))}
-                onClick={confirmRecordImport}
+                onClick={() => void confirmRecordImport()}
                 type="button"
               >
                 {recordBusy ? "반영 중…" : `선택한 [${importCategory}] 항목 로드맵에 반영`}
