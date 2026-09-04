@@ -1791,7 +1791,9 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
   const [recordParse, setRecordParse] = useState<SchoolRecordParseResult | null>(null);
   const [recordBusy, setRecordBusy] = useState(false);
   const [recordMessage, setRecordMessage] = useState("");
-  const [recordRestored, setRecordRestored] = useState(false);
+  // state가 아니라 ref다. state로 두면 이 값을 바꾸는 순간 리렌더가 일어나고,
+  // 복구 effect의 cleanup이 돌면서 자기가 띄운 요청을 스스로 취소해 버린다.
+  const recordRestored = useRef(false);
   const [gradeImportConflicts, setGradeImportConflicts] = useState<Array<{ courseId: string; grade: number; semester: number; subject: string; currentRank: number; importedRank: number }>>([]);
   const [gradeImportChoices, setGradeImportChoices] = useState<Record<string, "keep" | "replace">>({});
   const [courseDraft, setCourseDraft] = useState("");
@@ -1827,9 +1829,8 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
   // 업로드 id도 파싱 결과도 이 컴포넌트의 state에만 있었기 때문이다. 백엔드는
   // 마지막 업로드와 그 결과를 갖고 있으므로 화면을 그릴 때 되찾는다.
   useEffect(() => {
-    if (recordRestored) return;
-    setRecordRestored(true);
-    let cancelled = false;
+    if (recordRestored.current) return;
+    recordRestored.current = true;
     (async () => {
       try {
         const { latest } = await jsonRequest<{
@@ -1842,7 +1843,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
             result: unknown;
           } | null;
         }>("/api/school-record/latest");
-        if (cancelled || !latest) return;
+        if (!latest) return;
         if (latest.fileName) setRecordFile(latest.fileName);
         if (latest.status === "failed") {
           setError(latest.error || "생기부 분석에 실패했습니다.");
@@ -1852,15 +1853,14 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
         if (latest.status !== "done" || latest.importedAt || !latest.result) return;
         const parsed = parseSchoolRecordJson(latest.result, academicStartYear);
         parsed.fileName = latest.fileName ?? parsed.fileName;
-        if (!cancelled) setRecordParse(parsed);
-      } catch {
-        // 되찾기는 부가 기능이다 — 실패해도 화면은 평소대로 동작해야 한다.
+        setRecordParse(parsed);
+      } catch (e) {
+        // 되찾기는 부가 기능이라 화면을 막지는 않지만, 조용히 삼키면 왜 검토 화면이
+        // 안 뜨는지 알 길이 없다.
+        console.warn("마지막 생기부 업로드를 되찾지 못했습니다", e);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [recordRestored, academicStartYear]);
+  }, [academicStartYear]);
   const allSubjects = [...new Set([
     ...workspace.roadmap.nodes.flatMap((n) => n.candidateSubjects),
     ...workspace.activities.map((a) => a.subject),
