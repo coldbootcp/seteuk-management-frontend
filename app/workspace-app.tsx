@@ -1795,6 +1795,11 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
   // state가 아니라 ref다. state로 두면 이 값을 바꾸는 순간 리렌더가 일어나고,
   // 복구 effect의 cleanup이 돌면서 자기가 띄운 요청을 스스로 취소해 버린다.
   const recordRestored = useRef(false);
+  // 이미 반영한 항목. 화면의 카테고리(상장·활동·봉사·독서·시험)와 백엔드의 영역은
+  // 1:1이 아니다 — 이름에 "봉사"가 든 활동은 봉사 탭에 보이지만 실제로는 activities
+  // 영역에 있다. 그래서 한 카테고리만 보내면 백엔드가 그 영역을 "이게 전부"로 알고
+  // 앞서 반영한 것을 지운다. 반영한 것을 모아 두었다가 매번 함께 보낸다.
+  const importedEntries = useRef<Map<string, SchoolRecordDraft>>(new Map());
   const [gradeImportConflicts, setGradeImportConflicts] = useState<Array<{ courseId: string; grade: number; semester: number; subject: string; currentRank: number; importedRank: number }>>([]);
   const [gradeImportChoices, setGradeImportChoices] = useState<Record<string, "keep" | "replace">>({});
   const [courseDraft, setCourseDraft] = useState("");
@@ -1854,6 +1859,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
         if (latest.status !== "done" || latest.importedAt || !latest.result) return;
         const parsed = parseSchoolRecordJson(latest.result, academicStartYear);
         parsed.fileName = latest.fileName ?? parsed.fileName;
+        importedEntries.current = new Map();
         setRecordParse(parsed);
       } catch (e) {
         // 되찾기는 부가 기능이라 화면을 막지는 않지만, 조용히 삼키면 왜 검토 화면이
@@ -1975,6 +1981,8 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
       const parsedResult = parseSchoolRecordJson(resultJson, academicStartYear);
       parsedResult.fileName = file.name;
 
+      // index는 이 파싱 결과 안에서만 유효하므로 지난 누적을 버린다.
+      importedEntries.current = new Map();
       setRecordParse(parsedResult);
       // 첫 번째 카테고리로 탭 초기화
       setImportCategory("상장");
@@ -2017,10 +2025,14 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
           fileName: recordParse.fileName,
           totalPages: recordParse.totalPages,
           courses: targetCourses,
-          entries: targetEntries,
+          // 이번 카테고리 + 앞서 반영한 것을 함께 보낸다. 백엔드는 영역 단위로
+          // 교체하므로, 이번 것만 보내면 같은 영역에 있던 지난 반영분이 사라진다.
+          entries: [...importedEntries.current.values(), ...targetEntries],
+          newEntryIds: targetEntries.map((entry) => entry.id),
           courseGradeChoices,
         }),
       });
+      for (const entry of targetEntries) importedEntries.current.set(entry.id, entry);
       onWorkspace(result.workspace);
       setGradeImportConflicts([]); setGradeImportChoices({});
 

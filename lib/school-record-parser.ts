@@ -52,7 +52,11 @@ type SeteukReadingActivity = {
 };
 
 type SeteukAcademicPerformance = {
+  // 백엔드가 주는 이름은 achievement_grade다. 예전에는 achievement로 읽어서 성적이
+  // 한 건도 검토 화면에 오르지 못했고, "교과 성적을 찾지 못했습니다" 경고만 떴다.
+  achievement_grade?: unknown;
   achievement?: unknown;
+  raw_score?: unknown;
   category?: unknown;
   grade?: unknown;
   rank?: unknown;
@@ -296,8 +300,10 @@ export function parseSchoolRecordJson(
   });
 
   (result.academic_performance ?? []).forEach((item, index) => {
-    const achievement = textValue(item.achievement);
-    if (achievement) {
+    const achievement = textValue(item.achievement_grade) || textValue(item.achievement);
+    // 성취도가 비어 있어도 석차나 원점수가 있으면 성적으로서 의미가 있다 — P 과목처럼
+    // 성취도만 없는 경우가 실제로 있다.
+    if (achievement || item.rank || item.raw_score != null) {
       const grade = gradeValue(item.grade);
       const semester = semesterValue(item.semester);
       const subject = textValue(item.subject, "공통");
@@ -311,7 +317,7 @@ export function parseSchoolRecordJson(
       const entryId = keyFor(grade, semester, subject, title);
       const rank = textValue(item.rank);
       const units = textValue(item.units, "-");
-      const summary = `성취도: ${achievement}, 석차등급: ${rank ? `${rank}등급` : "석차없음"}, 단위: ${units}`;
+      const summary = `성취도: ${achievement || "-"}, 석차등급: ${rank ? `${rank}등급` : "석차없음"}, 단위: ${units}`;
 
       if (!entries.has(entryId)) {
         entries.set(entryId, {

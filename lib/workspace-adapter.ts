@@ -488,8 +488,11 @@ function toImportSelection(
     volunteer: "volunteer_records",
     activity: "activities",
   };
+  // 영역을 아예 빼면 백엔드가 "이번에 손대지 않는다"로 읽고, 빈 배열로 보내면
+  // "이 영역을 비워라"로 읽는다. 화면은 카테고리를 하나씩 반영하므로 고른 영역만
+  // 담아야 한다 — 예전에는 여섯 개를 전부 빈 배열로 보내서 [활동]을 반영하는
+  // 순간 앞서 반영한 상장·봉사·독서가 통째로 지워졌다.
   const picked: Record<string, number[]> = {};
-  for (const section of Object.values(sections)) picked[section] = [];
   // 생기부는 어느 활동이 몇 학기인지 말해 주지 않는 경우가 많다(세특은 과목당 한
   // 덩어리로 쓰여 있다). 검토 화면에서 학생이 고른 학년-학기를 함께 보낸다 —
   // 예전에는 index만 보내서 학생이 고친 값이 버려졌다.
@@ -501,7 +504,7 @@ function toImportSelection(
     if (!match) continue;
     const section = sections[match[1]];
     const index = Number(match[2]);
-    picked[section].push(index);
+    (picked[section] ??= []).push(index);
     if (entry.grade || entry.semester) {
       overrides.push({ section, index, grade: entry.grade, semester: entry.semester });
     }
@@ -846,7 +849,16 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
         method: "POST",
         body: toImportSelection(body.entries ?? []),
       });
-      return { workspace: await loadWorkspace(), importedCount: (body.entries ?? []).filter((e: { selected: boolean }) => e.selected).length };
+      // entries에는 앞서 반영한 것도 함께 실려 온다(영역이 지워지지 않게 하려고).
+      // 화면 메시지는 이번에 새로 반영한 것만 세야 한다.
+      const justImported = (body.newEntryIds ?? null) as string[] | null;
+      const selected = (body.entries ?? []) as { id: string; selected: boolean }[];
+      return {
+        workspace: await loadWorkspace(),
+        importedCount: justImported
+          ? justImported.length
+          : selected.filter((e) => e.selected).length,
+      };
     }
 
     case path === "/api/recommendation-feedback": {
