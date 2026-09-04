@@ -1807,6 +1807,21 @@ export interface components {
          * @enum {string}
          */
         ChatMode: "normal" | "edit";
+        /**
+         * ClarifyAnswer
+         * @description 앞선 질문에 학생이 이미 준 답.
+         */
+        ClarifyAnswer: {
+            /** Key */
+            key: string;
+            /**
+             * Question
+             * @default
+             */
+            question: string;
+            /** Answer */
+            answer: string;
+        };
         /** ClarifyQuestion */
         ClarifyQuestion: {
             /** Key */
@@ -1835,6 +1850,9 @@ export interface components {
         /**
          * ClarifyRequest
          * @description 지금까지 채운 값. 전부 선택이라 폼을 반쯤 채운 상태에서도 물어볼 수 있다.
+         *
+         *     `answers`가 중요하다 — 이걸 빼고 부르면 학생이 방금 답한 것을 모른 채 같은 질문을
+         *     다시 내서 온보딩이 끝나지 않는다.
          */
         ClarifyRequest: {
             /** Name */
@@ -1856,6 +1874,11 @@ export interface components {
             self_assessed_strengths?: string | null;
             /** Self Assessed Weaknesses */
             self_assessed_weaknesses?: string | null;
+            /**
+             * Answers
+             * @default []
+             */
+            answers: components["schemas"]["ClarifyAnswer"][];
         };
         /** ClarifyResponse */
         ClarifyResponse: {
@@ -1864,6 +1887,11 @@ export interface components {
              * @default []
              */
             questions: components["schemas"]["ClarifyQuestion"][];
+            /**
+             * Complete
+             * @default false
+             */
+            complete: boolean;
         };
         /** ConversationRead */
         ConversationRead: {

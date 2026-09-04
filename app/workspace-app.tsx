@@ -731,12 +731,14 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
     setSuggestBusy(true);
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch("/api/onboarding/suggest", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ targetCareer: topic }),
-        });
-        const result = await response.json();
+        const result = await jsonRequest<{ majors?: string[]; keywords?: string[]; provider?: "deepseek" | "fallback" }>(
+          "/api/onboarding/suggest",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ targetCareer: topic }),
+          },
+        );
         if (!cancelled) setSuggestions({
           majors: Array.isArray(result.majors) ? result.majors : [],
           keywords: Array.isArray(result.keywords) ? result.keywords : [],
@@ -1226,7 +1228,7 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
                     <small>
                       {onboardingRecordBusy
                         ? `${onboardingRecordStage} · 약 1~2분 소요됩니다. 기다리는 동안 아래 기본 정보와 관심분야를 먼저 입력해 주세요.`
-                        : onboardingRecordFile || "올리면 이름과 마지막 확정 학년을 읽어 기본 정보를 자동 입력합니다. 원본 PDF는 저장하지 않습니다."}
+                        : onboardingRecordFile || "올리면 이름과 마지막 확정 학년을 읽어 기본 정보를 자동 입력합니다. 업로드한 원본은 계정에 보관됩니다."}
                     </small>
                   </div>
                   <input
@@ -2051,7 +2053,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
         </div>
       </div>
 
-      {recordMessage && <div className="banner banner-success">✓ {recordMessage} 원본 PDF는 저장하지 않았습니다.</div>}
+      {recordMessage && <div className="banner banner-success">✓ {recordMessage}</div>}
       {error && !editing && !checkpointOpen && <div className="banner banner-error">{error}</div>}
 
       {/* Toolbar */}
@@ -2732,12 +2734,10 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       payload.append("studentId", workspace.profile.id);
       payload.append("activity", JSON.stringify({ ...form, roadmapNodeId: selectedPlan?.nodeId, planEventId: planEventId || undefined, concepts: splitList(form.concepts), outputs: splitList(form.outputs) }));
       files.forEach((file) => payload.append("files", file));
-      const response = await fetch("/api/activities", { method: "POST", body: payload });
-      const result = await response.json() as { workspace?: ProductWorkspace; reconciliation?: ReconciliationLog; review?: ActivityReview; error?: string };
-      if (!response.ok) {
-        if (result.review) setLastReview(result.review);
-        throw new Error(result.error || "활동을 저장하지 못했습니다.");
-      }
+      const result = await jsonRequest<{ workspace?: ProductWorkspace; reconciliation?: ReconciliationLog; review?: ActivityReview; error?: string }>(
+        "/api/activities",
+        { method: "POST", body: payload },
+      );
       if (!result.workspace || !result.reconciliation) throw new Error(result.error || "활동을 저장하지 못했습니다.");
       onWorkspace(result.workspace);
       setLastReview(result.workspace.activityReviews.find((review) => review.activityId === result.reconciliation?.activityId) ?? null);
@@ -2750,9 +2750,15 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
 
   async function deleteAttachment(id: string) {
     if (!window.confirm("이 첨부 파일을 영구 삭제할까요?")) return;
-    const response = await fetch(`/api/activity-files/${encodeURIComponent(id)}?studentId=${encodeURIComponent(workspace.profile.id)}`, { method: "DELETE" });
-    if (!response.ok) { setError("파일을 삭제하지 못했습니다."); return; }
-    onWorkspace({ ...workspace, attachments: workspace.attachments.filter((attachment) => attachment.id !== id) });
+    try {
+      const result = await jsonRequest<{ workspace: ProductWorkspace }>(
+        `/api/activity-files/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      onWorkspace(result.workspace);
+    } catch {
+      setError("파일을 삭제하지 못했습니다.");
+    }
   }
 
   return (
@@ -3334,6 +3340,7 @@ export function WorkspaceApp() {
     if (!options?.quiet) setLoading(true);
     loadWorkspace()
       .then((next) => {
+        // null이면 아직 온보딩 전이다 — 화면이 온보딩 폼을 띄운다.
         setWorkspace(next);
         setError("");
       })

@@ -55,8 +55,10 @@ test("the school record review stays client-side and states the real storage pol
   assert.match(app, /analyzeSchoolRecordPdf/);
   assert.match(app, /task\.status === "completed"/);
 
-  // 원본을 보관하기로 정했으므로(P-1), 저장하지 않는다는 옛 약속이 남아 있으면 안 된다.
-  assert.doesNotMatch(app, /원본 파일은 저장하지 않습니다/);
+  // 원본을 보관하기로 정했으므로(P-1), "저장하지 않는다"는 옛 약속이 어디에도
+  // 남아 있으면 안 된다. 처음엔 문자열 하나만 검사했는데 다른 문구로 두 군데가 더
+  // 살아 있었다 — 학생에게 하는 약속이라 표현이 아니라 주장 자체를 막는다.
+  assert.doesNotMatch(app, /원본[^.\n]{0,12}저장하지 않/);
 
   // 응답 JSON을 화면용 초안으로 빚는 헬퍼는 프론트에 남았다.
   assert.match(parser, /50MB/);

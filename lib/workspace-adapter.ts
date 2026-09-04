@@ -171,8 +171,14 @@ async function optional<T>(request: Promise<T>): Promise<T | null> {
   }
 }
 
-export async function loadWorkspace(): Promise<ProductWorkspace> {
+/**
+ * 온보딩 전에는 프로필이 200을 주되 값이 전부 비어 있다. 그 상태로 작업공간을
+ * 조립하면 "○○의 고교 3개년"처럼 조사만 남은 화면이 뜨므로, 여기서 걸러 null을
+ * 돌려주고 화면이 온보딩을 보여주게 한다.
+ */
+export async function loadWorkspace(): Promise<ProductWorkspace | null> {
   const profileRaw = await api<Json>("/profile/me");
+  if (!profileRaw.name || profileRaw.grade == null) return null;
   const [roadmapRaw, diagnosisRaw, activityList, reconciliations] = await Promise.all([
     optional(api<Json>("/roadmaps/active")),
     optional(api<Json>("/diagnosis/latest")),
@@ -365,7 +371,10 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
     }
     case path === "/api/onboarding/clarify": {
       const form = body.form ?? {};
-      return api("/profile/clarify", {
+      // answers를 빼면 학생이 방금 답한 것을 백엔드가 모른 채 같은 질문을 다시 내서
+      // 온보딩이 끝나지 않는다.
+      const answers = (body.answers ?? []) as { id?: string; key?: string; question?: string; answer?: unknown }[];
+      const result = await api<{ questions: Json[]; complete: boolean }>("/profile/clarify", {
         method: "POST",
         body: {
           name: form.name || null,
@@ -374,8 +383,26 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
           career_goal: form.targetCareer || null,
           target_department: (form.targetMajors ?? [])[0] || null,
           interest_keywords: form.interests ?? [],
+          answers: answers
+            .filter((entry) => entry.answer)
+            .map((entry) => ({
+              key: entry.key ?? entry.id ?? "",
+              question: entry.question ?? "",
+              answer: Array.isArray(entry.answer) ? entry.answer.join(", ") : String(entry.answer),
+            })),
         },
       });
+      // 화면은 질문을 `id`로 구분해 답을 쌓는데 백엔드는 `key`를 준다. 옮겨 주지
+      // 않으면 모든 답의 id가 undefined가 되어 서로를 덮어써 한 개만 남고, 그러면
+      // 확인 질문이 영영 끝나지 않는다.
+      return {
+        ...result,
+        questions: (result.questions ?? []).map((question) => ({
+          ...question,
+          id: question.key,
+          selectionMode: question.selection_mode,
+        })),
+      };
     }
     case path === "/api/onboarding/preview": {
       // 미리보기는 draft 로드맵이다 — 확정 전이라 화면에서 고칠 수 있다.
@@ -412,19 +439,73 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
     }
 
     case path === "/api/activities": {
-      await api("/activities", {
+      // 활동 저장 화면은 multipart로 온다 — 활동 본문 JSON과 첨부파일이 함께 실린다.
+      const form = init?.body as FormData;
+      const activity = JSON.parse(String(form.get("activity") ?? "{}"));
+
+      const created = await api<Json>("/activities", {
         method: "POST",
         body: {
-          grade: body.grade ?? 1,
-          semester: body.semester ?? null,
-          activity_category: body.activityCategory ?? "과목세부특기사항",
-          subject: body.subject || null,
-          activity_name: body.title,
-          activity_type: body.activityType ?? "other",
-          description: body.summary ?? body.title,
-          keywords: body.concepts ?? [],
+          grade: Number(activity.grade) || 1,
+          semester: activity.semester ? Number(activity.semester) : null,
+          activity_category: activity.activityCategory ?? "과목세부특기사항",
+          subject: activity.subject || null,
+          activity_name: activity.title,
+          activity_type: activity.activityType || "other",
+          description: activity.summary || activity.title,
+          keywords: activity.concepts ?? [],
+          performed_on: activity.completedAt || null,
         },
       });
+      const activityId = created.id as string;
+
+      // 첨부파일은 활동이 생긴 뒤에 하나씩 붙인다.
+      for (const file of form.getAll("files")) {
+        if (!(file instanceof File) || file.size === 0) continue;
+        const payload = new FormData();
+        payload.append("file", file);
+        await api(`/activities/${activityId}/attachments`, { method: "POST", form: payload });
+      }
+
+      // 저장 직후 이 활동이 로드맵의 어디에 해당하는지와, 무엇이 근거로 남았는지를
+      // 함께 보여준다. 정합은 저장할 때 백엔드가 이미 판정했으므로 읽어 오기만 하고,
+      // 검토는 여기서 한 번 돌린다.
+      const logs = (await optional(api<Json[]>("/roadmaps/reconciliations/history"))) ?? [];
+      const reconciliation = logs.find((log) => log.activity_id === activityId);
+      await optional(api(`/activities/${activityId}/review`, { method: "POST" }));
+
+      return {
+        workspace: await loadWorkspace(),
+        reconciliation: reconciliation
+          ? {
+              id: reconciliation.id,
+              studentId: "",
+              activityId,
+              roadmapId: reconciliation.roadmap_id,
+              nodeId: reconciliation.node_id ?? null,
+              matchType: reconciliation.match_type,
+              rationale: reconciliation.rationale,
+              action: reconciliation.action,
+              confidence: reconciliation.confidence,
+            }
+          : // 로드맵이 아직 없으면 판정이 없다. 화면이 이 값을 요구하므로 그때는
+            // 분류 불가로 채워 보낸다.
+            {
+              id: "",
+              studentId: "",
+              activityId,
+              roadmapId: "",
+              nodeId: null,
+              matchType: "UNCLASSIFIABLE",
+              rationale: "아직 로드맵이 없어 활동을 독립 기록으로 저장했습니다.",
+              action: "로드맵을 만들면 이 활동이 어디에 해당하는지 알려드립니다",
+              confidence: 0,
+            },
+      };
+    }
+    case path.startsWith("/api/activity-files/"): {
+      const attachmentId = path.split("/").pop()!;
+      await api(`/activities/attachments/${attachmentId}`, { method: "DELETE" });
       return { workspace: await loadWorkspace() };
     }
 
