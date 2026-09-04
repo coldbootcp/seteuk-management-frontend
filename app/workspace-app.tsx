@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ApiError, logout, tokens } from "../lib/api-client";
+import { handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
+import { SignIn } from "./sign-in";
 import type { CSSProperties } from "react";
 import type {
   AssignmentAnalysis,
@@ -290,16 +293,20 @@ function buildRecordOnlyRoadmap(studentId: string, career: string): Roadmap {
   };
 }
 
+/**
+ * 예전에는 이 앱 안의 /api/* 라우트를 부르는 함수였다. 서버 로직이 전부 백엔드로
+ * 옮겨간 뒤로는 어댑터가 그 경로를 백엔드 호출로 바꿔 준다 — 화면 코드를 그대로
+ * 두기 위한 얇은 층이다.
+ */
 async function jsonRequest<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  const raw = await response.text();
-  let payload: (T & { error?: string }) | null = null;
-  try { payload = JSON.parse(raw) as T & { error?: string }; } catch {
-    if (response.status === 413) throw new Error(`파일이 너무 큽니다. ${SCHOOL_RECORD_MAX_FILE_SIZE_LABEL} 이하의 PDF를 선택해주세요.`);
-    throw new Error("서버가 분석 결과를 정상적으로 반환하지 못했습니다.");
+  try {
+    return (await handleLegacyRoute(url, options)) as T;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 413) {
+      throw new Error(`파일이 너무 큽니다. ${SCHOOL_RECORD_MAX_FILE_SIZE_LABEL} 이하의 PDF를 선택해주세요.`);
+    }
+    throw error instanceof Error ? error : new Error("요청을 처리하지 못했습니다.");
   }
-  if (!response.ok) throw new Error(payload!.error ?? "요청을 처리하지 못했습니다.");
-  return payload!;
 }
 
 type SchoolRecordProgress = {
@@ -1738,7 +1745,7 @@ function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: Product
               <span className="activity-subj-pill">{activity.subject}</span>
               <div className="activity-compact-info">
                 <strong>{activity.title}</strong>
-                <small>{activity.completedAt}</small>
+                <small>{activity.completedAt || activity.periodLabel}</small>
               </div>
             </div>
           ))
@@ -2863,7 +2870,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             <div className="history-list">
               {workspace.activities.map((activity) => (
                 <div className="history-item" key={activity.id}>
-                  <time className="history-time">{activity.completedAt}</time>
+                  <time className="history-time">{activity.completedAt || activity.periodLabel}</time>
                   <div className="history-info">
                     <span className="type-pill">{activity.activityType} · {activity.subject}</span>
                     <h3>{activity.title}</h3>
@@ -2927,7 +2934,7 @@ function PortfolioView({ workspace }: { workspace: ProductWorkspace }) {
   const themes = [...new Set(records.flatMap((record) => record.concepts))].slice(0, 6);
   return <div className="activities-page">
     <div className="activities-header"><span className="kicker">ADMISSIONS PORTFOLIO</span><h1>수시 준비 자료</h1><p>3년 활동의 사실과 증거를 자소서 서사와 면접 대비 질문으로 정리합니다.</p></div>
-    <div className="activity-form-card"><h2>자소서 서사 초안</h2><p>{workspace.profile.targetCareer} 관심을 바탕으로 {records.length}개의 실제 활동을 축적했습니다. {themes.length ? `핵심 키워드는 ${themes.join(", ")}입니다.` : "활동을 더 기록하면 핵심 키워드가 자동으로 정리됩니다."}</p><ol>{records.map((record) => <li key={record.id}><strong>{record.completedAt} · {record.title}</strong><br />{record.summary}{record.reflection && <><br /><small>배운 점·느낀 점: {record.reflection}</small></>}</li>)}</ol></div>
+    <div className="activity-form-card"><h2>자소서 서사 초안</h2><p>{workspace.profile.targetCareer} 관심을 바탕으로 {records.length}개의 실제 활동을 축적했습니다. {themes.length ? `핵심 키워드는 ${themes.join(", ")}입니다.` : "활동을 더 기록하면 핵심 키워드가 자동으로 정리됩니다."}</p><ol>{records.map((record) => <li key={record.id}><strong>{record.completedAt || record.periodLabel} · {record.title}</strong><br />{record.summary}{record.reflection && <><br /><small>배운 점·느낀 점: {record.reflection}</small></>}</li>)}</ol></div>
     <div className="activity-form-card"><h2>면접 대비 질문</h2>{records.length ? <ol>{records.slice(-5).reverse().map((record) => <li key={record.id}>“{record.title}에서 무엇을 직접 탐구했고, 결과가 {workspace.profile.targetCareer} 관심과 어떻게 이어졌나요?”</li>)}</ol> : <p>실제 활동을 저장하면 활동별 면접 질문이 만들어집니다.</p>}</div>
   </div>;
 }
@@ -3309,20 +3316,51 @@ export function WorkspaceApp() {
   const [workspace, setWorkspace] = useState<ProductWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // 학생 식별은 이제 백엔드 JWT가 한다 — localStorage의 studentId로 작업공간을 찾던
+  // 방식은 서버 로직이 이 앱을 떠나면서 함께 사라졌다.
+  const [signedIn, setSignedIn] = useState(false);
 
-  useEffect(() => {
-    const studentId = window.localStorage.getItem("seteuk-current-student");
-    if (!studentId) { queueMicrotask(() => setLoading(false)); return; }
-    jsonRequest<{ workspace: ProductWorkspace }>(`/api/workspace?studentId=${encodeURIComponent(studentId)}`)
-      .then((result) => setWorkspace(result.workspace))
-      .catch(() => {
-        window.localStorage.removeItem("seteuk-current-student");
-        setError("이전 작업공간을 찾지 못해 신규 가입 화면으로 돌아왔습니다.");
+  const refresh = useCallback(() => {
+    setLoading(true);
+    loadWorkspace()
+      .then((next) => {
+        setWorkspace(next);
+        setError("");
+      })
+      .catch((caught) => {
+        // 온보딩 전에는 프로필이 비어 있어 실패하는 것이 정상이다 — 신규 가입
+        // 화면으로 보내면 된다.
+        setWorkspace(null);
+        if (caught instanceof ApiError && caught.status !== 404) setError(caught.message);
       })
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!tokens.access) {
+      setSignedIn(false);
+      setLoading(false);
+      return;
+    }
+    setSignedIn(true);
+    refresh();
+  }, [refresh]);
+
+
   const loadingCopy = useMemo(() => (loading ? "학생 작업공간을 불러오는 중…" : ""), [loading]);
+
+  // 조기 반환은 훅을 전부 부른 뒤에 온다. 훅보다 앞에 두면 로그인 전후로 호출
+  // 순서가 달라져 Rules of Hooks를 어긴다.
+  if (!signedIn) {
+    return (
+      <SignIn
+        onSignedIn={() => {
+          setSignedIn(true);
+          refresh();
+        }}
+      />
+    );
+  }
 
   if (loading) {
     return (

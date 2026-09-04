@@ -85,6 +85,9 @@ export type StudentActivity = {
   planEventId?: string | null;
   linkedPlanTitle?: string | null;
   completedAt: string;
+  /** 학년-학기 표시용. 활동 시점의 정본은 날짜가 아니라 학년-학기다 —
+   *  생기부에서 온 활동은 날짜를 알 수 없기 때문이다. */
+  periodLabel?: string;
   createdAt?: string;
 };
 
