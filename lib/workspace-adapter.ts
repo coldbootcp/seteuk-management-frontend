@@ -179,6 +179,7 @@ export async function loadWorkspace(): Promise<ProductWorkspace> {
     api<{ items: Json[] }>("/activities?limit=200"),
     optional(api<Json[]>("/roadmaps/reconciliations/history")),
   ]);
+  const reviews = await optional(api<Json[]>("/activities/reviews/history"));
 
   // 사용자 id를 따로 주는 엔드포인트가 없어 로드맵/활동에서 얻는다. 화면은 이 값을
   // 키로만 쓰므로 없으면 빈 문자열이어도 동작한다.
@@ -253,9 +254,16 @@ export async function loadWorkspace(): Promise<ProductWorkspace> {
     roadmap,
     activities,
     attachments: attachmentLists.flat(),
-    // 활동 리뷰와 수행평가 안내문 분석은 아직 백엔드에 없다. 화면이 빈 목록을
-    // 견디도록 되어 있어 자리만 비워 둔다.
-    activityReviews: [],
+    activityReviews: ((reviews ?? []) as Json[]).map((raw) => ({
+      activityId: raw.activity_id as string,
+      planEventId: null,
+      alignment: raw.alignment as "aligned" | "partial" | "separate",
+      summary: raw.summary as string,
+      evidence: (raw.evidence as string[]) ?? [],
+      gaps: (raw.gaps as string[]) ?? [],
+      nextSteps: (raw.next_steps as string[]) ?? [],
+      provider: "deepseek" as const,
+    })),
     semesterCourses,
     courseGrades,
     schoolRecordCourses: [],

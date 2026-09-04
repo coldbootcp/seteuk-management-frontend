@@ -589,6 +589,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/activities/{activity_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Activity
+         * @description 이 활동이 생기부에 어떻게 남을지 검토한다 — 근거·빈 곳·다음 한 걸음.
+         *     로드맵 진척을 옮기는 정합 판정과 달리, 이건 학생에게 방향을 준다.
+         */
+        post: operations["review_activity_api_v1_activities__activity_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activities/reviews/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Activity Reviews
+         * @description 활동별 가장 최근 검토.
+         */
+        get: operations["list_activity_reviews_api_v1_activities_reviews_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/activities/{activity_id}/attachments": {
         parameters: {
             query?: never;
@@ -1448,6 +1489,38 @@ export interface components {
             parsing_confidence: number | null;
             /** Performed On */
             performed_on: string | null;
+        };
+        /** ActivityReviewRead */
+        ActivityReviewRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /** Roadmap Node Id */
+            roadmap_node_id: string | null;
+            /** Alignment */
+            alignment: string;
+            /** Summary */
+            summary: string;
+            /** Evidence */
+            evidence: string[];
+            /** Gaps */
+            gaps: string[];
+            /** Next Steps */
+            next_steps: string[];
+            /** Provider */
+            provider: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * ActivityType
@@ -4516,6 +4589,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_activity_api_v1_activities__activity_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityReviewRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_activity_reviews_api_v1_activities_reviews_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityReviewRead"][];
                 };
             };
         };

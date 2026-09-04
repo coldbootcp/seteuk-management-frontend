@@ -15,6 +15,12 @@
   남은 `lib/school-record-parser.ts`는 백엔드 응답을 화면용 초안으로 빚는
   클라이언트 헬퍼일 뿐입니다.
 - API 타입은 손으로 적지 말고 백엔드 `/openapi.json`에서 생성하세요.
+- 화면은 `jsonRequest(경로) → { workspace }` 패턴을 씁니다. 그 경로를 백엔드
+  호출로 옮기는 것은 `lib/workspace-adapter.ts`이고, **거기에 도메인 판단을 넣지
+  마세요** — 무엇을 저장할지·무엇을 제안할지는 백엔드가 정하고 어댑터는 모양만
+  바꿉니다.
+- 챗봇 스트리밍에 `EventSource`를 쓸 수 없습니다(Authorization 헤더를 못 붙이고
+  POST도 안 됩니다). `lib/chat.ts`가 fetch로 열고 SSE 프레임을 직접 파싱합니다.
 - Cloudflare Workers·D1·R2는 쓰지 않습니다. 일반 Next.js입니다.
 
 ## 제품 규칙

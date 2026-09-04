@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, logout, tokens } from "../lib/api-client";
 import { handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
 import { SignIn } from "./sign-in";
+import { ChatView } from "./chat-view";
 import type { CSSProperties } from "react";
 import type {
   AssignmentAnalysis,
@@ -29,7 +30,7 @@ import {
 /* ──────────────────────────────────────────────
    Types
    ────────────────────────────────────────────── */
-type TabId = "overview" | "roadmap" | "activities" | "grades" | "portfolio" | "profile";
+type TabId = "overview" | "roadmap" | "activities" | "grades" | "portfolio" | "chat" | "profile";
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
@@ -3211,10 +3212,12 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
 /* ──────────────────────────────────────────────
    ProductShell
    ────────────────────────────────────────────── */
-function ProductShell({ workspace, onWorkspace, onNewStudent }: {
+function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
   workspace: ProductWorkspace;
   onWorkspace: (workspace: ProductWorkspace) => void;
   onNewStudent: () => void;
+  /** 챗봇 수정 모드가 기록을 바꾸면 다른 화면도 최신으로 맞춘다. */
+  onRefresh: () => void;
 }) {
   const [tab, setTab] = useState<TabId>("roadmap");
   const [activityDraft, setActivityDraft] = useState<ActivityDraft | null>(null);
@@ -3226,6 +3229,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent }: {
     { id: "activities", label: "활동 기록",      icon: "◎"  },
     { id: "grades",     label: "성적",          icon: "A"  },
     { id: "portfolio",  label: "수시 준비",      icon: "↗"  },
+    { id: "chat",       label: "챗봇",          icon: "◍"  },
     { id: "profile",    label: "프로필",         icon: "◉"  },
   ];
 
@@ -3302,6 +3306,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent }: {
           )}
           {tab === "grades"     && <GradesView workspace={workspace} onNavigate={setTab} onWorkspace={onWorkspace} />}
           {tab === "portfolio" && <PortfolioView workspace={workspace} />}
+          {tab === "chat"       && <ChatView onRecordsChanged={onRefresh} />}
           {tab === "profile"    && <ProfileView workspace={workspace} onWorkspace={onWorkspace} />}
         </div>
       </section>
@@ -3320,8 +3325,13 @@ export function WorkspaceApp() {
   // 방식은 서버 로직이 이 앱을 떠나면서 함께 사라졌다.
   const [signedIn, setSignedIn] = useState(false);
 
-  const refresh = useCallback(() => {
-    setLoading(true);
+  /**
+   * `quiet`는 로딩 화면을 띄우지 않고 데이터만 갈아 끼운다. 챗봇 수정 모드가 기록을
+   * 바꿨을 때 쓰는데, 전체 로딩을 띄우면 셸이 다시 마운트되면서 보고 있던 탭에서
+   * 튕겨 나간다.
+   */
+  const refresh = useCallback((options?: { quiet?: boolean }) => {
+    if (!options?.quiet) setLoading(true);
     loadWorkspace()
       .then((next) => {
         setWorkspace(next);
@@ -3333,7 +3343,9 @@ export function WorkspaceApp() {
         setWorkspace(null);
         if (caught instanceof ApiError && caught.status !== 404) setError(caught.message);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!options?.quiet) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -3389,9 +3401,13 @@ export function WorkspaceApp() {
     <ProductShell
       workspace={workspace}
       onWorkspace={setWorkspace}
+      onRefresh={() => refresh({ quiet: true })}
       onNewStudent={() => {
-        window.localStorage.removeItem("seteuk-current-student");
-        setWorkspace(null);
+        // 학생 전환은 이제 계정 전환이다 — 토큰을 지우고 로그인 화면으로 돌아간다.
+        void logout().then(() => {
+          setWorkspace(null);
+          setSignedIn(false);
+        });
       }}
     />
   );
