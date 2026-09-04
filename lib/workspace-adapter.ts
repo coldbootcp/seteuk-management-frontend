@@ -405,9 +405,16 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       };
     }
     case path === "/api/onboarding/preview": {
-      // 미리보기는 draft 로드맵이다 — 확정 전이라 화면에서 고칠 수 있다.
+      // 미리보기는 draft 로드맵이다 — 확정 전이라 화면에서 고칠 수 있고, 다시 눌러도
+      // 버전이 오르지 않는다.
       const roadmap = await api<Json>("/roadmaps", { method: "POST", body: {} });
-      return { roadmap: toRoadmap(roadmap, roadmap.id as string), dna: EMPTY_DNA };
+      // 화면이 preview.profile.name을 그대로 읽으므로 프로필도 함께 돌려줘야 한다.
+      // 아직 저장 전이라 백엔드에는 없고, 요청에 실려 온 값이 곧 그 프로필이다.
+      return {
+        profile: { ...(body as ProfileInput), id: roadmap.id as string },
+        roadmap: toRoadmap(roadmap, roadmap.id as string),
+        dna: EMPTY_DNA,
+      };
     }
     case path === "/api/profile": {
       if ((init?.method ?? "GET") === "GET") return { workspace: await loadWorkspace() };
