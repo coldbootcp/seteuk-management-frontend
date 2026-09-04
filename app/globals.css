@@ -4358,6 +4358,18 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 .signin-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+/* 카카오 브랜드 색을 그대로 쓴다 — 사용자가 어느 서비스로 넘어가는지 색으로 안다. */
+.signin-kakao {
+  padding: 11px;
+  border: 0;
+  border-radius: 8px;
+  background: #fee500;
+  color: #191600;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.signin-kakao:disabled { opacity: 0.55; cursor: not-allowed; }
 .signin-switch {
   border: 0;
   background: none;

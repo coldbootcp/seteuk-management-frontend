@@ -3349,8 +3349,11 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
         </nav>
 
         <div className="sidebar-footer">
+          {/* 이 버튼은 실제로 로그아웃한다(토큰을 지우고 로그인 화면으로 보낸다).
+              "신규 학생 시작"이라는 이름은 계정마다 학생이 하나인 지금 구조에서
+              무슨 일이 일어나는지 감추기만 한다. */}
           <button className="new-student-btn" id="btn-new-student" onClick={onNewStudent} type="button">
-            ＋ 신규 학생 시작
+            로그아웃
           </button>
         </div>
       </aside>
