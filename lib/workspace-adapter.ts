@@ -20,6 +20,7 @@ import type {
   ReconciliationLog,
   Roadmap,
   RoadmapNode,
+  SchoolRecordCourseRecord,
   StudentActivity,
   StudentCourseGrade,
   StudentSemesterCourse,
@@ -209,6 +210,9 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
 
   const semesterCourses: StudentSemesterCourse[] = [];
   const courseGrades: StudentCourseGrade[] = [];
+  // 생기부에서 들어온 과목. source_upload_id가 채워진 행이 곧 "업로드에서 온 것"이라,
+  // 화면의 '생기부 연결됨' 판정이 이 목록 하나로 정직해진다.
+  const schoolRecordCourses: SchoolRecordCourseRecord[] = [];
   const courseLists = await Promise.all(
     roadmap.nodes.map((node) =>
       optional(api<Json[]>(`/roadmaps/nodes/${node.id}/courses`)).then((rows) => ({
@@ -227,6 +231,16 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
         semester: row.semester as number,
         subject: row.subject as string,
       });
+      if (row.source_upload_id) {
+        schoolRecordCourses.push({
+          id: row.id as string,
+          studentId,
+          importId: row.source_upload_id as string,
+          grade: row.grade as number,
+          semester: row.semester as number,
+          subject: row.subject as string,
+        });
+      }
       // 성적은 같은 행에 들어 있다(D-3) — 과목과 성적을 두 테이블로 나누지 않았다.
       if (row.rank != null || row.raw_score != null || row.note) {
         courseGrades.push({
@@ -287,7 +301,7 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
     })),
     semesterCourses,
     courseGrades,
-    schoolRecordCourses: [],
+    schoolRecordCourses,
     reconciliations: ((reconciliations ?? []) as Json[]).map(
       (raw): ReconciliationLog => ({
         id: raw.id as string,
