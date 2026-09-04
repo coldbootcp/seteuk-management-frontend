@@ -751,6 +751,36 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       lastUploadId = created.upload_id;
       return { task_id: created.upload_id };
     }
+    // 새로고침하면 lastUploadId도 화면의 파싱 결과도 사라진다. 백엔드는 업로드와
+    // raw_result를 그대로 갖고 있으므로, 마지막 업로드를 되찾아 이어볼 수 있다.
+    case path === "/api/school-record/latest": {
+      const latest = await optional(
+        api<{
+          upload_id: string;
+          status: string;
+          file_name: string | null;
+          imported_at: string | null;
+          failure_reason: string | null;
+        } | null>("/seteuk/uploads/latest"),
+      );
+      if (!latest) return { latest: null };
+      lastUploadId = latest.upload_id;
+      // 이미 반영을 마친 업로드는 검토할 것이 없다 — 결과까지 가져오지 않는다.
+      const result =
+        latest.status === "done" && !latest.imported_at
+          ? await optional(api<Json>(`/seteuk/uploads/${latest.upload_id}/result`))
+          : null;
+      return {
+        latest: {
+          uploadId: latest.upload_id,
+          status: latest.status,
+          fileName: latest.file_name,
+          importedAt: latest.imported_at,
+          error: latest.failure_reason,
+          result,
+        },
+      };
+    }
     case path.startsWith("/api/school-record/status/"): {
       const uploadId = path.split("/").pop()!;
       const status = await api<{ status: string }>(`/seteuk/uploads/${uploadId}`);
@@ -759,7 +789,12 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       return { status: "completed", result: await api(`/seteuk/uploads/${uploadId}/result`) };
     }
     case path === "/api/school-record/import": {
-      const uploadId = body.uploadId ?? lastUploadId;
+      // 새로고침 뒤 반영을 누르면 lastUploadId가 비어 있다. 서버가 마지막 업로드를
+      // 알고 있으므로 거기서 되짚는다.
+      const uploadId =
+        body.uploadId ??
+        lastUploadId ??
+        (await optional(api<{ upload_id: string } | null>("/seteuk/uploads/latest")))?.upload_id;
       if (!uploadId) throw new Error("먼저 생기부를 분석해주세요.");
       await api(`/seteuk/uploads/${uploadId}/import`, {
         method: "POST",

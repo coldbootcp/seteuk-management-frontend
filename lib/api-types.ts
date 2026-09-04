@@ -109,6 +109,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/seteuk/uploads/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Latest Upload
+         * @description 가장 최근 업로드. 클라이언트가 업로드 id를 들고 있지 않아도 화면이 진행
+         *     상황을 되찾을 수 있어야 한다 — 이 경로가 없으면 파싱 중 새로고침 한 번에
+         *     검토 화면이 사라진다.
+         *
+         *     경로가 "/uploads/{upload_id}"보다 먼저 선언돼야 latest가 id로 해석되지 않는다.
+         */
+        get: operations["get_latest_upload_api_v1_seteuk_uploads_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/seteuk/uploads/{upload_id}": {
         parameters: {
             query?: never;
@@ -2165,6 +2189,35 @@ export interface components {
             /** Relation Label */
             relation_label: string;
         };
+        /**
+         * LatestUploadResponse
+         * @description 가장 최근 업로드 하나. 화면을 다시 그릴 때 "지금 어디까지 와 있는가"를
+         *     되찾기 위한 것이라, 상태 판단에 필요한 것만 담는다.
+         *
+         *     업로드 id를 클라이언트가 기억하지 못해도 되게 하려는 것이 요점이다 — 파싱은
+         *     몇 분 걸리는데 그 사이 새로고침하면 진행 중인 업로드를 통째로 잃었다.
+         */
+        LatestUploadResponse: {
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+            status: components["schemas"]["UploadStatus"];
+            /** File Name */
+            file_name?: string | null;
+            /** Parsing Confidence */
+            parsing_confidence?: number | null;
+            /** Imported At */
+            imported_at?: string | null;
+            /** Failure Reason */
+            failure_reason?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** ListResponse[AcademicPerformanceRead] */
         ListResponse_AcademicPerformanceRead_: {
             /** Items */
@@ -3290,6 +3343,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_latest_upload_api_v1_seteuk_uploads_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestUploadResponse"] | null;
                 };
             };
         };

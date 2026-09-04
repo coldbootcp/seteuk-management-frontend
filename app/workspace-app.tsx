@@ -1791,6 +1791,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
   const [recordParse, setRecordParse] = useState<SchoolRecordParseResult | null>(null);
   const [recordBusy, setRecordBusy] = useState(false);
   const [recordMessage, setRecordMessage] = useState("");
+  const [recordRestored, setRecordRestored] = useState(false);
   const [gradeImportConflicts, setGradeImportConflicts] = useState<Array<{ courseId: string; grade: number; semester: number; subject: string; currentRank: number; importedRank: number }>>([]);
   const [gradeImportChoices, setGradeImportChoices] = useState<Record<string, "keep" | "replace">>({});
   const [courseDraft, setCourseDraft] = useState("");
@@ -1821,6 +1822,45 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
     (n) => n.grade === workspace.profile.grade && n.semester === workspace.profile.semester,
   );
   const academicStartYear = new Date().getFullYear() - (workspace.profile.grade - 1);
+
+  // 파싱은 몇 분 걸린다. 그 사이 새로고침하면 예전에는 검토 화면을 통째로 잃었다 —
+  // 업로드 id도 파싱 결과도 이 컴포넌트의 state에만 있었기 때문이다. 백엔드는
+  // 마지막 업로드와 그 결과를 갖고 있으므로 화면을 그릴 때 되찾는다.
+  useEffect(() => {
+    if (recordRestored) return;
+    setRecordRestored(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const { latest } = await jsonRequest<{
+          latest: {
+            uploadId: string;
+            status: string;
+            fileName: string | null;
+            importedAt: string | null;
+            error: string | null;
+            result: unknown;
+          } | null;
+        }>("/api/school-record/latest");
+        if (cancelled || !latest) return;
+        if (latest.fileName) setRecordFile(latest.fileName);
+        if (latest.status === "failed") {
+          setError(latest.error || "생기부 분석에 실패했습니다.");
+          return;
+        }
+        // 이미 반영을 마친 업로드는 검토할 것이 없다 — 연결됨 상태만 보이면 된다.
+        if (latest.status !== "done" || latest.importedAt || !latest.result) return;
+        const parsed = parseSchoolRecordJson(latest.result, academicStartYear);
+        parsed.fileName = latest.fileName ?? parsed.fileName;
+        if (!cancelled) setRecordParse(parsed);
+      } catch {
+        // 되찾기는 부가 기능이다 — 실패해도 화면은 평소대로 동작해야 한다.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [recordRestored, academicStartYear]);
   const allSubjects = [...new Set([
     ...workspace.roadmap.nodes.flatMap((n) => n.candidateSubjects),
     ...workspace.activities.map((a) => a.subject),
@@ -2058,7 +2098,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
             onClick={() => uploadRef.current?.click()}
             type="button"
           >
-            {recordBusy ? "분석 중…" : recordFile ? "다른 PDF" : "생기부 PDF 분석"}
+            {recordBusy ? "분석 중…" : recordFile || recordConnected ? "다른 PDF" : "생기부 PDF 분석"}
           </button>
         </div>
       </div>
