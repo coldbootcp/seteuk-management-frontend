@@ -2127,6 +2127,24 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * ImportPeriodOverride
+         * @description 학생이 검토 화면에서 직접 고친 시점.
+         *
+         *     생기부의 세특은 과목당 한 덩어리로 쓰여 있어서 어느 활동이 몇 학기인지 문서가
+         *     말해 주지 않는다. 파서는 근거 없이 학기를 지어내지 않고 비워 두므로, 그 자리를
+         *     아는 사람은 학생뿐이다 — 검토 단계에서 고른 값을 그대로 받는다.
+         */
+        ImportPeriodOverride: {
+            /** Section */
+            section: string;
+            /** Index */
+            index: number;
+            /** Grade */
+            grade?: number | null;
+            /** Semester */
+            semester?: number | null;
+        };
+        /**
          * ImportResultResponse
          * @description 영역별로 실제 몇 건이 들어갔는지.
          */
@@ -2154,6 +2172,11 @@ export interface components {
             volunteer_records?: number[] | null;
             /** Activities */
             activities?: number[] | null;
+            /**
+             * Period Overrides
+             * @default []
+             */
+            period_overrides: components["schemas"]["ImportPeriodOverride"][];
         };
         /** KakaoLoginRequest */
         KakaoLoginRequest: {

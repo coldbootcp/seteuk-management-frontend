@@ -478,7 +478,9 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
  * 파싱 결과를 화면용 초안으로 빚을 때 id에 `json-{섹션}-{index}`가 박히므로, 그
  * index가 곧 백엔드 결과 배열의 위치다. 학생이 체크를 푼 것은 빠진다.
  */
-function toImportSelection(entries: { id: string; selected: boolean }[]): Json {
+function toImportSelection(
+  entries: { id: string; selected: boolean; grade?: number; semester?: number }[],
+): Json {
   const sections: Record<string, string> = {
     read: "reading_activities",
     grade: "academic_performance",
@@ -488,15 +490,24 @@ function toImportSelection(entries: { id: string; selected: boolean }[]): Json {
   };
   const picked: Record<string, number[]> = {};
   for (const section of Object.values(sections)) picked[section] = [];
+  // 생기부는 어느 활동이 몇 학기인지 말해 주지 않는 경우가 많다(세특은 과목당 한
+  // 덩어리로 쓰여 있다). 검토 화면에서 학생이 고른 학년-학기를 함께 보낸다 —
+  // 예전에는 index만 보내서 학생이 고친 값이 버려졌다.
+  const overrides: { section: string; index: number; grade?: number; semester?: number }[] = [];
 
   for (const entry of entries) {
     if (!entry.selected) continue;
     const match = /^json-(read|grade|award|volunteer|activity)-(\d+)-/.exec(entry.id);
     if (!match) continue;
-    picked[sections[match[1]]].push(Number(match[2]));
+    const section = sections[match[1]];
+    const index = Number(match[2]);
+    picked[section].push(index);
+    if (entry.grade || entry.semester) {
+      overrides.push({ section, index, grade: entry.grade, semester: entry.semester });
+    }
   }
   // 출결은 검토 화면에 나오지 않으므로 지정하지 않는다 — 생략하면 전체가 들어간다.
-  return picked;
+  return { ...picked, period_overrides: overrides };
 }
 
 // --- 화면이 부르던 경로 → 백엔드 -------------------------------------------
