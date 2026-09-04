@@ -17,6 +17,7 @@ import type {
   RoadmapNode,
   RoadmapPlanEvent,
 } from "../lib/product-harness";
+import { withParticle } from "../lib/product-harness";
 import {
   SCHOOL_RECORD_MAX_FILE_SIZE,
   SCHOOL_RECORD_MAX_FILE_SIZE_LABEL,
@@ -2234,7 +2235,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
           <div className="narrative-map-header">
             <div>
               <span className="kicker">SEMESTER FLOW MAP</span>
-              <h2>{workspace.roadmap.careerTrack}로 이어지는 6학기 경로</h2>
+              <h2>{withParticle(workspace.roadmap.careerTrack, "으로", "로")} 이어지는 6학기 경로</h2>
               <p>월별 세부 일정 대신, 각 학기에서 쌓은 기록과 앞으로의 계획을 하나의 서사 흐름으로 보여줍니다.</p>
             </div>
             <div className="map-summary">

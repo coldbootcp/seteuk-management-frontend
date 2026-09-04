@@ -225,12 +225,26 @@ async function resolveActivityPeriod(
 export async function loadWorkspace(): Promise<ProductWorkspace | null> {
   const profileRaw = await api<Json>("/profile/me");
   if (!profileRaw.name || profileRaw.grade == null) return null;
-  const [roadmapRaw, diagnosisRaw, activityList, reconciliations] = await Promise.all([
+  const [roadmapRawInitial, diagnosisRaw, activityList, reconciliations] = await Promise.all([
     optional(api<Json>("/roadmaps/active")),
     optional(api<Json>("/diagnosis/latest")),
     api<{ items: Json[] }>("/activities?limit=200"),
     optional(api<Json[]>("/roadmaps/reconciliations/history")),
   ]);
+  // 화면은 온보딩을 마친 학생에게 6학기 경로가 있다고 전제하고 그린다. 그런데
+  // 활성 로드맵이 없을 수 있다 — 온보딩 미리보기는 draft를 만들고, 예전에는 그
+  // draft를 확정하지 않은 채 온보딩이 끝났다. 그러면 기록이 멀쩡히 있는데도
+  // 6학기 경로가 통째로 비어 보이고, 화면에는 로드맵을 다시 만들 길이 없다.
+  // 여기서 메워 준다 — 프론트엔드가 전제하는 것을 연결 계층이 지킨다.
+  let roadmapRaw = roadmapRawInitial;
+  if (!roadmapRaw) {
+    const created = await optional(api<Json>("/roadmaps", { method: "POST", body: {} }));
+    if (created) {
+      await optional(api(`/roadmaps/${created.id}/confirm`, { method: "POST" }));
+      roadmapRaw = await optional(api<Json>("/roadmaps/active"));
+    }
+  }
+
   const reviews = await optional(api<Json[]>("/activities/reviews/history"));
 
   // 사용자 id를 따로 주는 엔드포인트가 없어 로드맵/활동에서 얻는다. 화면은 이 값을
@@ -506,6 +520,14 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
   switch (true) {
     case path === "/api/onboarding": {
       await api("/profile", { method: "POST", body: profileToBackend(body.profile ?? body) });
+      // 미리보기에서 만든 로드맵은 draft다. 확정하지 않으면 활성 로드맵이 없는 채로
+      // 온보딩이 끝나고, 3개년 화면의 6학기 경로가 영영 비어 보인다 — 기록은
+      // 멀쩡히 있는데도 그렇다.
+      //
+      // 프로필을 저장한 뒤에 확정한다: 미리보기는 저장 전 값으로 만들어졌으므로,
+      // 저장된 프로필로 한 번 더 만들어야 학년·진로가 제대로 반영된다.
+      const roadmap = await api<Json>("/roadmaps", { method: "POST", body: {} });
+      await api(`/roadmaps/${roadmap.id}/confirm`, { method: "POST" });
       return { workspace: await loadWorkspace() };
     }
     case path === "/api/onboarding/suggest": {

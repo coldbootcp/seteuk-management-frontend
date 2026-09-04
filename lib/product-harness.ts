@@ -235,3 +235,22 @@ function suggestedTopicsForSemester(
   ] as const;
   return topics.map(([priority, title, description], index) => ({ id: crypto.randomUUID(), monthDay: `${String(Number(startMonth) + Math.min(index, 2)).padStart(2, "0")}-15`, category: "활동" as const, subject, priority, title, description }));
 }
+
+
+/**
+ * 받침에 맞는 조사를 고른다 — "조선 사업으로", "해양 연구로". 진로 문구는 학생이
+ * 직접 쓴 자유 문장이라 무엇으로 끝날지 알 수 없어서, 문장에 조사를 박아 두면
+ * "조선 사업로"처럼 어색해진다.
+ *
+ * 한글 음절은 (초성×21 + 중성)×28 + 종성이라 28로 나눈 나머지가 0이 아니면
+ * 받침이 있다. 받침이 'ㄹ'인 경우는 "~로"를 쓰므로 따로 가른다.
+ */
+export function withParticle(word: string, withFinal: string, withoutFinal: string): string {
+  const last = word.trim().slice(-1);
+  const code = last.charCodeAt(0) - 0xac00;
+  if (code < 0 || code > 11171) return `${word}${withoutFinal}`;
+  const jongseong = code % 28;
+  // 종성 8은 'ㄹ' — 받침이 있어도 "~로", "~라"처럼 받침 없는 쪽을 따른다.
+  if (jongseong === 0 || jongseong === 8) return `${word}${withoutFinal}`;
+  return `${word}${withFinal}`;
+}
