@@ -2707,6 +2707,11 @@ export interface components {
             competency_goals: string[];
             /** Status */
             status: string;
+            /**
+             * Is Current
+             * @default false
+             */
+            is_current: boolean;
             /** Instantiated Activity Id */
             instantiated_activity_id: string | null;
             /**

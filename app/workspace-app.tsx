@@ -287,6 +287,7 @@ function buildRecordOnlyRoadmap(studentId: string, career: string): Roadmap {
         candidateSubjects: [],
         competencyGoals: [],
         status: "skipped" as const,
+        isCurrent: false,
         instantiatedActivityId: null,
         planEvents: [],
       };
@@ -601,6 +602,10 @@ function StatusBadge({ status }: { status: RoadmapNode["status"] }) {
   const config: Record<RoadmapNode["status"], { label: string; cls: string }> = {
     planned:      { label: "예정",     cls: "badge-planned" },
     active:       { label: "진행 중",  cls: "badge-active"  },
+    // 백엔드가 실제로 쓰는 값. 이 둘이 빠져 있어 완료·부분달성 마디의 배지가
+    // undefined를 읽고 있었다.
+    partial:      { label: "일부 달성", cls: "badge-active"  },
+    done:         { label: "완료",     cls: "badge-done"    },
     instantiated: { label: "실행 중",  cls: "badge-active"  },
     completed:    { label: "완료",     cls: "badge-done"    },
     skipped:      { label: "건너뜀",   cls: "badge-muted"   },
@@ -1592,11 +1597,58 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
 /* ──────────────────────────────────────────────
    Overview
    ────────────────────────────────────────────── */
-function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void; onConvertPlan: (draft: ActivityDraft) => void }) {
-  const active = workspace.roadmap.nodes.find((n) => n.status === "active");
-  const completed = workspace.roadmap.nodes.filter((n) => n.status === "completed").length;
+function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void; onConvertPlan: (draft: ActivityDraft) => void; onWorkspace: (next: ProductWorkspace) => void }) {
+  // 이번 학기는 진척이 아니라 학생이 선언한 학기로 정한다 — 목표를 일찍 달성해
+  // 마디가 done이 되어도 학생이 다음 학기로 넘어간 것은 아니다.
+  const active = workspace.roadmap.nodes.find((n) => n.isCurrent)
+    ?? workspace.roadmap.nodes.find((n) => n.status === "active");
+  // 백엔드가 쓰는 값은 done/partial이다. "completed"만 세면 실제로 달성한 학기가
+  // 있어도 진행이 0으로 표시된다.
+  const completed = workspace.roadmap.nodes.filter((n) => n.status === "done").length;
   const [selectedPlan, setSelectedPlan] = useState<RoadmapPlanEvent | null>(null);
   const completedPlanIds = new Set(workspace.activities.map((activity) => activity.planEventId).filter(Boolean));
+  const [adoptingId, setAdoptingId] = useState<string | null>(null);
+  const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
+  const [planError, setPlanError] = useState("");
+  // 담긴 제안은 다시 담을 수 없다(백엔드가 중복을 막는다). 어느 것을 이미 담았는지
+  // 버튼에 드러내지 않으면 학생이 눌러 보고서야 알게 된다.
+  const adoptedEventIds = new Set(workspace.plans.map((plan) => plan.sourcePlanEventId).filter(Boolean));
+  const openPlans = workspace.plans.filter((plan) => plan.status !== "done");
+  const donePlans = workspace.plans.filter((plan) => plan.status === "done");
+
+  async function onAdoptPlan(planEventId: string) {
+    setAdoptingId(planEventId); setPlanError("");
+    try {
+      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/plans/adopt", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planEventId }),
+      });
+      onWorkspace(result.workspace);
+    } catch (e) { setPlanError(e instanceof Error ? e.message : "계획으로 담지 못했습니다."); }
+    finally { setAdoptingId(null); }
+  }
+
+  async function completePlan(planId: string) {
+    setBusyPlanId(planId); setPlanError("");
+    try {
+      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/plans/complete", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      onWorkspace(result.workspace);
+    } catch (e) { setPlanError(e instanceof Error ? e.message : "완료 처리하지 못했습니다."); }
+    finally { setBusyPlanId(null); }
+  }
+
+  async function dropPlan(planId: string) {
+    if (!window.confirm("이 계획을 목록에서 뺄까요? 이미 남긴 기록은 지워지지 않습니다.")) return;
+    setBusyPlanId(planId); setPlanError("");
+    try {
+      const result = await jsonRequest<{ workspace: ProductWorkspace }>(`/api/plans/${planId}`, { method: "DELETE" });
+      onWorkspace(result.workspace);
+    } catch (e) { setPlanError(e instanceof Error ? e.message : "계획을 빼지 못했습니다."); }
+    finally { setBusyPlanId(null); }
+  }
 
   return (
     <div className="overview-page">
@@ -1631,12 +1683,57 @@ function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: Product
                     <p style={{ color: "var(--fg-muted)", margin: "6px 0 0", fontSize: "0.82rem", lineHeight: 1.5 }}>{ev.description || "이 학기의 목표와 연결되는 탐구 주제입니다."}</p>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                    {/* 담기와 바로 기록은 서로 다른 일이다 — 앞으로 할 것을 정하는 것과
+                        이미 한 것을 남기는 것. 제안은 담아도 목록에서 사라지지 않는다. */}
+                    <button className="btn btn-primary" disabled={adoptedEventIds.has(ev.id) || adoptingId === ev.id} onClick={(event) => { event.stopPropagation(); onAdoptPlan(ev.id); }} type="button">
+                      {adoptedEventIds.has(ev.id) ? "계획에 담김" : adoptingId === ev.id ? "담는 중…" : "계획으로 담기"}
+                    </button>
                     <button className="btn btn-secondary" onClick={(event) => { event.stopPropagation(); onConvertPlan({ title: ev.title, subject: ev.subject, planEventId: ev.id, roadmapNodeId: active.id }); }} type="button">이 주제를 실제 활동에 연결</button>
                   </div>
                 </div>
               ))
             ) : (
               <p style={{ color: "var(--fg-muted)" }}>이번 학기에 제안된 활동 주제가 없습니다.</p>
+            )}
+          </div>
+
+          {/* 하기로 한 것. 제안(고를 수 있는 후보)과도 기록(이미 한 일)과도 다른 층이라
+              따로 보여준다 — 완료를 누르면 이 계획이 실제 기록으로 승격되고 계보가 이어진다. */}
+          <div className="overview-plans" style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+              <h3 style={{ fontSize: "1rem", color: "var(--fg)" }}>하기로 한 계획</h3>
+              <small style={{ color: "var(--fg-muted)" }}>완료하면 실제 기록으로 남습니다</small>
+            </div>
+            {planError && <div className="banner banner-error">{planError}</div>}
+            {openPlans.length === 0 && donePlans.length === 0 ? (
+              <p style={{ color: "var(--fg-muted)" }}>아직 담은 계획이 없습니다. 위 제안에서 &lsquo;계획으로 담기&rsquo;를 눌러보세요.</p>
+            ) : (
+              <>
+                {openPlans.map((plan) => (
+                  <div key={plan.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 12, background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8 }}>
+                    <div>
+                      <strong style={{ display: "block" }}>{plan.title}</strong>
+                      <small style={{ color: "var(--fg-muted)" }}>
+                        {plan.targetGrade ? `${plan.targetGrade}학년 ${plan.targetSemester ?? ""}학기` : "시점 미정"} · {plan.itemType}
+                      </small>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="btn btn-primary" disabled={busyPlanId === plan.id} onClick={() => completePlan(plan.id)} type="button">
+                        {busyPlanId === plan.id ? "처리 중…" : "완료"}
+                      </button>
+                      <button className="btn btn-secondary" disabled={busyPlanId === plan.id} onClick={() => dropPlan(plan.id)} type="button">빼기</button>
+                    </div>
+                  </div>
+                ))}
+                {donePlans.map((plan) => (
+                  <div key={plan.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 12, background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, opacity: 0.7 }}>
+                    <div>
+                      <strong style={{ display: "block" }}>{plan.title}</strong>
+                      <small style={{ color: "var(--fg-muted)" }}>완료 · 기록으로 남았습니다</small>
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </div>
         </div>
@@ -3302,7 +3399,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
         </header>
 
         <div className="product-content">
-          {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} />}
+          {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} onWorkspace={onWorkspace} />}
           {tab === "roadmap"    && <RoadmapView workspace={workspace} onWorkspace={onWorkspace} onConvertPlan={startActivity} />}
           {tab === "activities" && (
             <ActivitiesView
