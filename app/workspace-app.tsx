@@ -1871,10 +1871,15 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
   const completedPlanIds = new Set(workspace.activities.map((activity) => activity.planEventId).filter(Boolean));
 
   function activitiesForNode(node: RoadmapNode) {
-    // 마디가 비어 있는 기록은 시점을 알 수 없는 것(날짜 없는 수상 등)이다. 예전에는
-    // 현재 마디로 몰아 넣었는데, 그러면 3년치 기록이 이번 학기에 일어난 것처럼
-    // 보인다. 시점을 모르면 어느 학기에도 놓지 않는다 — 목록에서는 여전히 보인다.
-    return workspace.activities.filter((a) => a.roadmapNodeId === node.id);
+    // 학기를 아는 기록은 그 학기 마디에만 놓는다. 자율활동·동아리활동처럼 생기부가
+    // 학기를 나누지 않는 기록은 그 학년의 두 학기에 함께 보여준다 — 어느 한 학기의
+    // 것이 아니므로 한쪽에만 놓으면 나머지 학기가 근거 없이 비어 보인다.
+    // 시점을 아예 알 수 없는 기록(날짜 없는 수상 등)은 어느 학기에도 놓지 않는다.
+    return workspace.activities.filter(
+      (a) =>
+        a.roadmapNodeId === node.id ||
+        (a.roadmapNodeId === null && a.semester === null && a.grade === node.grade),
+    );
   }
 
   function eventsForNode(node: RoadmapNode): RoadmapTimelineEvent[] {
@@ -2239,8 +2244,9 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
               <p>월별 세부 일정 대신, 각 학기에서 쌓은 기록과 앞으로의 계획을 하나의 서사 흐름으로 보여줍니다.</p>
             </div>
             <div className="map-summary">
-              <span><strong>{workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => !ev.isPlan).length}</strong>기록</span>
-              <span><strong>{workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => ev.isPlan).length}</strong>계획</span>
+              {/* 학년 단위 기록은 두 학기 카드에 함께 나오므로 id로 세야 합계가 부풀지 않는다. */}
+              <span><strong>{new Set(workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => !ev.isPlan).map((ev) => ev.id)).size}</strong>기록</span>
+              <span><strong>{new Set(workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => ev.isPlan).map((ev) => ev.id)).size}</strong>계획</span>
               <span><strong>{workspace.roadmap.nodes.reduce((sum, node) => sum + attentionCount(node), 0)}</strong>보정</span>
             </div>
           </div>
@@ -2308,7 +2314,14 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
                     <span className="flow-node-period">{node.grade}-{node.semester}</span>
                     <span className="flow-node-stage">{node.narrativeStage}</span>
                     <strong>{node.title}</strong>
-                    <span className="flow-node-objective">{node.objective}</span>
+                    {/* 회고 마디의 objective는 "생기부 연동을 통해 과거 활동을 확인하세요"라는
+                        안내다. 이미 기록이 쌓인 학기에 그 말을 띄우면 아직 아무것도 안
+                        했다는 뜻으로 읽힌다 — 그때는 무엇이 있는지 말해 준다. */}
+                    <span className="flow-node-objective">
+                      {phase === "past" && recordCount > 0
+                        ? `생활기록부에서 확인된 기록 ${recordCount}건`
+                        : node.objective}
+                    </span>
                     <span className="flow-node-stats">
                       <i>{recordCount} 기록</i>
                       <i>{planCount} 계획</i>

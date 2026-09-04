@@ -144,13 +144,17 @@ function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentA
     // 비어 무슨 기록인지 알 수 없어지므로, 그 자리를 메울 값으로 함께 넘긴다.
     // subject 자체에 섞지는 않는다 — 과목 칩과 수강 과목 목록이 오염된다.
     activityCategory: (raw.activity_category as string) ?? "",
+    grade,
+    semester,
     title: raw.activity_name as string,
     summary: (raw.description as string) ?? "",
     reflection: (raw.reflection as string) ?? "",
     concepts: (raw.keywords as string[]) ?? [],
     outputs: [],
     status: "completed",
-    roadmapNodeId: locate(grade, semester),
+    // 학기를 아는 기록만 마디에 맨다. 학년 단위 기록(자율활동 등)은 어느 한 학기의
+    // 것이 아니므로 여기서 고르지 않고, 화면이 그 학년의 학기들에 함께 보여준다.
+    roadmapNodeId: semester == null ? null : locate(grade, semester),
     planEventId: (raw.source_plan_event_id as string) ?? null,
     linkedPlanTitle: null,
     // 활동 시점의 정본은 grade/semester다. performed_on은 학생이 직접 입력했을
@@ -331,13 +335,15 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
       subject: (raw.subject as string) ?? "",
       // 상장·봉사·독서는 그 자체가 기록의 갈래다 — 과목이 없으면 갈래를 보여준다.
       activityCategory: kind,
+      grade: grade ?? 0,
+      semester,
       title,
       summary,
       reflection: "",
       concepts: [],
       outputs: [],
       status: "completed",
-      roadmapNodeId: grade == null ? null : locate(grade, semester),
+      roadmapNodeId: grade == null || semester == null ? null : locate(grade, semester),
       planEventId: null,
       linkedPlanTitle: null,
       completedAt,

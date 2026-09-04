@@ -80,6 +80,9 @@ export type StudentActivity = {
   /** 생기부의 활동 구분(자율활동·동아리활동·진로활동·과목세부특기사항 등).
    *  과목이 없는 기록이 무엇인지 말해 주는 유일한 단서다. */
   activityCategory: string;
+  /** 시점의 정본. semester가 없으면 학기를 나누지 않는 학년 단위 기록이다. */
+  grade: number;
+  semester: number | null;
   title: string;
   summary: string;
   reflection: string;
