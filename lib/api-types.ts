@@ -1696,6 +1696,10 @@ export interface components {
             date?: string | null;
             /** Raw Date */
             raw_date?: string | null;
+            /** Grade */
+            grade?: number | null;
+            /** Semester */
+            semester?: number | null;
         };
         /** AwardItem */
         AwardItem: {
@@ -1707,6 +1711,12 @@ export interface components {
             date?: string | null;
             /** Raw Date */
             raw_date?: string | null;
+            /** Participants */
+            participants?: string | null;
+            /** Grade */
+            grade?: number | null;
+            /** Semester */
+            semester?: number | null;
         };
         /** AwardRead */
         AwardRead: {
@@ -1730,9 +1740,19 @@ export interface components {
             date: string | null;
             /** Raw Date */
             raw_date: string | null;
+            /** Grade */
+            grade: number | null;
+            /** Semester */
+            semester: number | null;
+            /** Participants */
+            participants: string | null;
         };
         /** AwardUpdate */
         AwardUpdate: {
+            /** Grade */
+            grade?: number | null;
+            /** Semester */
+            semester?: number | null;
             /** Name */
             name?: string | null;
             /** Rank */

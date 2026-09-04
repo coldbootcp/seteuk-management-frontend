@@ -156,63 +156,11 @@ function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentA
   };
 }
 
-/** 학사연도(3월 시작). 1~2월 날짜는 앞 학년도에 속한다. */
-function academicYearOf(d: Date): number {
-  return d.getMonth() + 1 >= 3 ? d.getFullYear() : d.getFullYear() - 1;
-}
-
 /**
- * 수상은 학년-학기 없이 날짜만 있다(생기부가 그렇게 준다). 화면의 흐름 맵은 학기
- * 단위라 어느 학기인지 정해야 하는데, 오늘 날짜를 기준으로 삼으면 안 된다 —
- * 생기부는 몇 해 전 문서일 수 있고, 그러면 모든 수상이 학년 범위 밖으로 떨어진다.
- *
- * 기준점은 같은 문서 안에서 찾는다. 봉사 기록은 날짜와 학년을 **둘 다** 갖고 있어서,
- * "이 학사연도가 몇 학년이었는지"를 문서 스스로 알려 준다. 그런 쌍이 하나도 없을
- * 때만 프로필의 현재 학년으로 되짚는다.
+ * 수상은 학년-학기를 백엔드가 파싱 시점에 채운다(참가대상 + 수상연월일). 예전에는
+ * 여기서 날짜로 추정했는데, 오늘 날짜를 기준점으로 삼는 바람에 몇 해 전 생기부의
+ * 수상이 전부 학년 범위 밖으로 떨어졌다. 판정은 문서를 읽은 쪽이 해야 한다.
  */
-function gradeAnchorFrom(
-  volunteerRows: Json[],
-  currentGrade: number,
-): { academicYear: number; grade: number } {
-  const votes = new Map<string, number>();
-  for (const row of volunteerRows) {
-    const grade = row.grade as number | null;
-    const iso = row.date as string | null;
-    if (grade == null || !iso) continue;
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) continue;
-    const key = `${academicYearOf(d) - (grade - 1)}`;
-    votes.set(key, (votes.get(key) ?? 0) + 1);
-  }
-  const best = [...votes.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (best) return { academicYear: Number(best[0]), grade: 1 };
-  const now = new Date();
-  return { academicYear: academicYearOf(now) - (currentGrade - 1), grade: 1 };
-}
-
-/**
- * 날짜 하나를 학년-학기로 옮긴다. 3년 밖이거나 학생이 선언한 현재 학기보다 뒤면
- * 놓지 않는다 — 생기부 파싱이 "선언한 현재 학년-학기 이후 기록은 저장하지 않는다"는
- * 규칙을 따르는데, 화면에서만 미래 학기에 수상이 찍히면 같은 문서가 두 말을 한다.
- * 추정이라 확신이 없을 때 아무 데도 놓지 않는 편이 현재 학기로 몰아넣는 것보다 낫다.
- */
-function periodFromDate(
-  iso: string | null,
-  anchor: { academicYear: number; grade: number },
-  current: { grade: number; semester: number },
-): { grade: number; semester: number } | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const grade = anchor.grade + (academicYearOf(d) - anchor.academicYear);
-  if (grade < 1 || grade > 3) return null;
-  const month = d.getMonth() + 1;
-  const semester = month >= 3 && month <= 8 ? 1 : 2;
-  if (grade > current.grade || (grade === current.grade && semester > current.semester)) {
-    return null;
-  }
-  return { grade, semester };
-}
 
 /** 백엔드 진단의 SWOT을 화면의 Student DNA 모양으로 옮긴다. */
 function toDna(raw: Json | null): DnaDiagnosis {
@@ -340,8 +288,6 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
   // 셋을 각자의 테이블에 두므로 여기서 하나로 합친다 — 합치지 않으면 화면의
   // 상장/봉사/독서 필터가 언제나 0건이 된다.
   const locate = nodeLocator(roadmap.nodes);
-  const currentGrade = (profileRaw.grade as number) ?? 1;
-  const current = { grade: currentGrade, semester: (profileRaw.semester as number) ?? 1 };
 
   const [awardRows, volunteerRows, readingRows] = await Promise.all([
     optional(api<{ items: Json[] }>("/awards?limit=200")),
@@ -378,26 +324,21 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
     };
   }
 
-  const anchor = gradeAnchorFrom(volunteerRows?.items ?? [], currentGrade);
-
   const awards = (awardRows?.items ?? []).map((raw) => {
-    // 수상은 학년-학기가 없고 날짜만 있다 — 날짜로 학기를 되짚는다.
-    const period = periodFromDate(raw.date as string | null, anchor, current);
     const rank = raw.rank ? ` (${raw.rank as string})` : "";
     return domainActivity(
       raw,
       "상장",
       `${raw.name as string}${rank}`,
       (raw.raw_date as string) ?? "",
-      period?.grade ?? null,
-      period?.semester ?? null,
+      (raw.grade as number) ?? null,
+      (raw.semester as number) ?? null,
       (raw.date as string) ?? "",
     );
   });
 
   const volunteers = (volunteerRows?.items ?? []).map((raw) => {
     const grade = (raw.grade as number) ?? null;
-    const period = periodFromDate(raw.date as string | null, anchor, current);
     const hours = raw.hours ? ` · ${raw.hours as number}시간` : "";
     return domainActivity(
       raw,
@@ -405,7 +346,8 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
       `${(raw.place as string) ?? "봉사활동"}${hours}`,
       (raw.content as string) ?? "",
       grade,
-      grade != null && period?.grade === grade ? period.semester : null,
+      // 봉사는 생기부가 학년까지만 준다 — 학기를 날짜로 지어내지 않는다.
+      null,
       (raw.date as string) ?? "",
     );
   });
@@ -675,7 +617,12 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       if (kindLabel === "상장" || kindLabel === "봉사" || kindLabel === "독서") {
         const ENDPOINTS = { 상장: "/awards", 봉사: "/volunteer-records", 독서: "/reading-activities" };
         const bodies: Record<string, Json> = {
-          상장: { name: activity.title, date: activity.completedAt || null },
+          상장: {
+            name: activity.title,
+            date: activity.completedAt || null,
+            grade: period.grade,
+            semester: period.semester,
+          },
           봉사: {
             grade: period.grade,
             date: activity.completedAt || null,
