@@ -434,7 +434,9 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
       evidence: (raw.evidence as string[]) ?? [],
       gaps: (raw.gaps as string[]) ?? [],
       nextSteps: (raw.next_steps as string[]) ?? [],
-      provider: "deepseek" as const,
+      // 백엔드가 어느 모델로 썼는지 행에 기록한다 — 여기서 박아 넣으면 화면이
+      // 사실과 다른 것을 말하게 된다.
+      provider: ((raw.provider as string) ?? "deepseek") as "deepseek" | "rule",
     })),
     semesterCourses,
     courseGrades,
