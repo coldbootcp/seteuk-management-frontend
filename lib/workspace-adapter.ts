@@ -121,12 +121,12 @@ function toActivity(raw: Json, studentId: string): StudentActivity {
     subject: (raw.subject as string) ?? "",
     title: raw.activity_name as string,
     summary: (raw.description as string) ?? "",
-    reflection: "",
+    reflection: (raw.reflection as string) ?? "",
     concepts: (raw.keywords as string[]) ?? [],
     outputs: [],
     status: "completed",
     roadmapNodeId: null,
-    planEventId: null,
+    planEventId: (raw.source_plan_event_id as string) ?? null,
     linkedPlanTitle: null,
     // 활동 시점의 정본은 grade/semester다. performed_on은 학생이 직접 입력했을
     // 때만 있고, 생기부에서 온 행은 비어 있다 — 그 자리에 DB 저장 시각을 넣으면
@@ -169,6 +169,21 @@ async function optional<T>(request: Promise<T>): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * 활동의 학년-학기를 정한다. 학생이 고른 제안이 걸린 마디가 1순위 — 지난 학기 제안을
+ * 이제 실행하는 일이 흔해서, 저장 시점(현재 학기)으로 못박으면 시점이 틀어진다.
+ */
+async function resolveActivityPeriod(
+  nodeId: string | undefined,
+): Promise<{ grade: number; semester: number | null }> {
+  const roadmap = await optional(api<Json>("/roadmaps/active"));
+  const nodes = (roadmap?.nodes as Json[]) ?? [];
+  const node = nodeId ? nodes.find((n) => n.id === nodeId) : nodes.find((n) => n.status === "active");
+  if (node) return { grade: node.grade as number, semester: (node.semester as number) ?? null };
+  const profile = await api<Json>("/profile/me");
+  return { grade: (profile.grade as number) ?? 1, semester: (profile.semester as number) ?? null };
 }
 
 /**
@@ -407,11 +422,23 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
     case path === "/api/onboarding/preview": {
       // 미리보기는 draft 로드맵이다 — 확정 전이라 화면에서 고칠 수 있고, 다시 눌러도
       // 버전이 오르지 않는다.
-      const roadmap = await api<Json>("/roadmaps", { method: "POST", body: {} });
+      // 프로필은 아직 저장 전이라 백엔드가 학년을 모른다. 그대로 두면 기본값(1학년
+      // 1학기)으로 현재 마디가 잡혀 2학년 학생이 1학년 로드맵을 미리보게 되므로,
+      // 방금 입력받은 값을 함께 실어 보낸다.
+      const input = body as ProfileInput;
+      const roadmap = await api<Json>("/roadmaps", {
+        method: "POST",
+        body: {
+          grade: input.grade,
+          semester: input.semester,
+          career_track: input.targetCareer || null,
+          focus: input.interests?.join(", ") || null,
+        },
+      });
       // 화면이 preview.profile.name을 그대로 읽으므로 프로필도 함께 돌려줘야 한다.
       // 아직 저장 전이라 백엔드에는 없고, 요청에 실려 온 값이 곧 그 프로필이다.
       return {
-        profile: { ...(body as ProfileInput), id: roadmap.id as string },
+        profile: { ...input, id: roadmap.id as string },
         roadmap: toRoadmap(roadmap, roadmap.id as string),
         dna: EMPTY_DNA,
       };
@@ -450,16 +477,36 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       const form = init?.body as FormData;
       const activity = JSON.parse(String(form.get("activity") ?? "{}"));
 
+      // 화면의 "유형"은 백엔드의 activity_type(보고서/발표/실험…)이 아니라 기록의
+      // 갈래다. 그대로 보내면 enum에 걸려 422가 나므로 여기서 옮겨 준다.
+      const KIND_TO_BACKEND: Record<string, { category: string; type: string }> = {
+        활동: { category: "과목세부특기사항", type: "report" },
+        독서: { category: "과목세부특기사항", type: "reading_linked" },
+        상장: { category: "기타", type: "project" },
+        봉사: { category: "교외활동", type: "other" },
+      };
+      const kind = KIND_TO_BACKEND[String(activity.activityType ?? "")] ?? {
+        category: "과목세부특기사항",
+        type: "other",
+      };
+
+      // 학년·학기는 폼에 없다. 학생이 고른 제안이 걸린 마디에서 가져오고, 고르지
+      // 않았으면 현재 학기로 둔다 — 여기서 1을 기본값으로 쓰면 2학년 학생이 저장한
+      // 활동이 전부 1학년으로 남아 진단의 학기 리뷰가 통째로 어긋난다.
+      const period = await resolveActivityPeriod(activity.roadmapNodeId as string | undefined);
+
       const created = await api<Json>("/activities", {
         method: "POST",
         body: {
-          grade: Number(activity.grade) || 1,
-          semester: activity.semester ? Number(activity.semester) : null,
-          activity_category: activity.activityCategory ?? "과목세부특기사항",
+          grade: period.grade,
+          semester: period.semester,
+          activity_category: activity.activityCategory ?? kind.category,
           subject: activity.subject || null,
           activity_name: activity.title,
-          activity_type: activity.activityType || "other",
+          activity_type: kind.type,
           description: activity.summary || activity.title,
+          reflection: activity.reflection || null,
+          source_plan_event_id: activity.planEventId ?? null,
           keywords: activity.concepts ?? [],
           performed_on: activity.completedAt || null,
         },

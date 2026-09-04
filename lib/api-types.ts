@@ -1371,6 +1371,10 @@ export interface components {
             parent_activity_id?: string | null;
             /** Performed On */
             performed_on?: string | null;
+            /** Reflection */
+            reflection?: string | null;
+            /** Source Plan Event Id */
+            source_plan_event_id?: string | null;
         };
         /** ActivityInventoryEntry */
         ActivityInventoryEntry: {
@@ -1489,6 +1493,12 @@ export interface components {
             parsing_confidence: number | null;
             /** Performed On */
             performed_on: string | null;
+            /** Reflection */
+            reflection: string | null;
+            /** Source Plan Event Id */
+            source_plan_event_id: string | null;
+            /** Thread Id */
+            thread_id: string | null;
         };
         /** ActivityReviewRead */
         ActivityReviewRead: {
@@ -1549,6 +1559,10 @@ export interface components {
             parent_activity_id?: string | null;
             /** Performed On */
             performed_on?: string | null;
+            /** Reflection */
+            reflection?: string | null;
+            /** Source Plan Event Id */
+            source_plan_event_id?: string | null;
         };
         /**
          * AdoptOptionRequest
@@ -3035,12 +3049,20 @@ export interface components {
         /**
          * RoadmapGenerateRequest
          * @description 비우면 프로필(진로 희망·관심 키워드·현재 학년-학기)에서 그대로 가져온다.
+         *
+         *     온보딩 미리보기는 프로필을 저장하기 **전에** 로드맵을 만들어 보여준다. 그래서
+         *     학년·학기까지 받을 수 있어야 한다 — 안 그러면 저장 전 기본값(1학년 1학기)으로
+         *     활성 마디가 잡혀, 2학년 학생이 1학년 1학기를 현재로 보는 로드맵을 받는다.
          */
         app__schemas__roadmap__RoadmapGenerateRequest: {
             /** Focus */
             focus?: string | null;
             /** Career Track */
             career_track?: string | null;
+            /** Grade */
+            grade?: number | null;
+            /** Semester */
+            semester?: number | null;
         };
     };
     responses: never;
