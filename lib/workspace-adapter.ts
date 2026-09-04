@@ -139,6 +139,11 @@ function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentA
     studentId,
     activityType: (raw.activity_type as string) === "reading_linked" ? "독서" : "활동",
     subject: (raw.subject as string) ?? "",
+    // 생기부 활동의 절반 가까이는 과목이 없다 — 자율활동·동아리활동·진로활동·
+    // 행동특성은 교과에 매이지 않기 때문이다. 화면이 "과목 · 기록"으로 쓰는 자리가
+    // 비어 무슨 기록인지 알 수 없어지므로, 그 자리를 메울 값으로 함께 넘긴다.
+    // subject 자체에 섞지는 않는다 — 과목 칩과 수강 과목 목록이 오염된다.
+    activityCategory: (raw.activity_category as string) ?? "",
     title: raw.activity_name as string,
     summary: (raw.description as string) ?? "",
     reflection: (raw.reflection as string) ?? "",
@@ -324,6 +329,8 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
       studentId,
       activityType: kind,
       subject: (raw.subject as string) ?? "",
+      // 상장·봉사·독서는 그 자체가 기록의 갈래다 — 과목이 없으면 갈래를 보여준다.
+      activityCategory: kind,
       title,
       summary,
       reflection: "",

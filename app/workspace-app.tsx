@@ -1881,7 +1881,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
     const actualEvents = activitiesForNode(node).map((a) => ({
       id: a.id, date: a.completedAt,
       category: activityCategory(a.activityType),
-      subject: a.subject, title: a.title, isPlan: false,
+      subject: a.subject || a.activityCategory, title: a.title, isPlan: false,
     }));
     const planYear = academicStartYear + node.grade - 1;
     const plannedEvents = roadmapPhase(workspace, node) === "past" ? [] :
@@ -2270,7 +2270,8 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
                 const isMuted = false;
                 const subjects = [...new Set([
                   ...node.candidateSubjects,
-                  ...activitiesForNode(node).map((a) => a.subject),
+                  // 과목 없는 기록(자율활동 등)은 빈 칩이 되므로 뺀다.
+                  ...activitiesForNode(node).map((a) => a.subject).filter(Boolean),
                 ])].slice(0, 3);
 
                 return (

@@ -77,6 +77,9 @@ export type StudentActivity = {
   studentId: string;
   activityType: string;
   subject: string;
+  /** 생기부의 활동 구분(자율활동·동아리활동·진로활동·과목세부특기사항 등).
+   *  과목이 없는 기록이 무엇인지 말해 주는 유일한 단서다. */
+  activityCategory: string;
   title: string;
   summary: string;
   reflection: string;
