@@ -1821,9 +1821,10 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
   const completedPlanIds = new Set(workspace.activities.map((activity) => activity.planEventId).filter(Boolean));
 
   function activitiesForNode(node: RoadmapNode) {
-    return workspace.activities.filter(
-      (a) => a.roadmapNodeId === node.id || (!a.roadmapNodeId && node.id === currentNode?.id),
-    );
+    // 마디가 비어 있는 기록은 시점을 알 수 없는 것(날짜 없는 수상 등)이다. 예전에는
+    // 현재 마디로 몰아 넣었는데, 그러면 3년치 기록이 이번 학기에 일어난 것처럼
+    // 보인다. 시점을 모르면 어느 학기에도 놓지 않는다 — 목록에서는 여전히 보인다.
+    return workspace.activities.filter((a) => a.roadmapNodeId === node.id);
   }
 
   function eventsForNode(node: RoadmapNode): RoadmapTimelineEvent[] {
@@ -2738,7 +2739,9 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
         "/api/activities",
         { method: "POST", body: payload },
       );
-      if (!result.workspace || !result.reconciliation) throw new Error(result.error || "활동을 저장하지 못했습니다.");
+      // 상장·봉사·독서는 로드맵 마디와 대조하지 않으므로 정합 결과가 없다.
+      // 정합을 저장 성공의 조건으로 두면 실제로 저장된 기록이 실패로 보인다.
+      if (!result.workspace) throw new Error(result.error || "활동을 저장하지 못했습니다.");
       onWorkspace(result.workspace);
       setLastReview(result.workspace.activityReviews.find((review) => review.activityId === result.reconciliation?.activityId) ?? null);
       clearDraft();

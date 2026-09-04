@@ -114,11 +114,29 @@ function toRoadmap(raw: Json | null, studentId: string): Roadmap {
   };
 }
 
-function toActivity(raw: Json, studentId: string): StudentActivity {
+/** 학년-학기로 로드맵 마디를 찾는 함수. 기록이 일어난 학기의 마디에 놓기 위한 것. */
+type NodeLocator = (grade: number, semester: number | null) => string | null;
+
+function nodeLocator(nodes: RoadmapNode[]): NodeLocator {
+  return (grade, semester) => {
+    const exact = nodes.find((n) => n.grade === grade && n.semester === semester);
+    if (exact) return exact.id;
+    // 학기를 모르는 기록(생기부 수상·봉사 등)은 그 학년의 첫 학기 마디에 둔다.
+    return nodes.find((n) => n.grade === grade)?.id ?? null;
+  };
+}
+
+/**
+ * 화면의 흐름 맵은 기록을 학기 마디에 나눠 붙인다. 여기서 마디를 정해 주지 않으면
+ * 전부 "현재 마디"로 떨어져, 3년치 기록이 한 학기에 쌓인 것처럼 보인다.
+ */
+function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentActivity {
+  const grade = raw.grade as number;
+  const semester = (raw.semester as number) ?? null;
   return {
     id: raw.id as string,
     studentId,
-    activityType: (raw.activity_type as string) ?? "other",
+    activityType: (raw.activity_type as string) === "reading_linked" ? "독서" : "활동",
     subject: (raw.subject as string) ?? "",
     title: raw.activity_name as string,
     summary: (raw.description as string) ?? "",
@@ -126,16 +144,74 @@ function toActivity(raw: Json, studentId: string): StudentActivity {
     concepts: (raw.keywords as string[]) ?? [],
     outputs: [],
     status: "completed",
-    roadmapNodeId: null,
+    roadmapNodeId: locate(grade, semester),
     planEventId: (raw.source_plan_event_id as string) ?? null,
     linkedPlanTitle: null,
     // 활동 시점의 정본은 grade/semester다. performed_on은 학생이 직접 입력했을
     // 때만 있고, 생기부에서 온 행은 비어 있다 — 그 자리에 DB 저장 시각을 넣으면
     // 1학년 활동이 올해 일어난 것처럼 보인다.
     completedAt: (raw.performed_on as string) ?? "",
-    periodLabel: `${raw.grade}학년${raw.semester ? ` ${raw.semester}학기` : ""}`,
+    periodLabel: `${grade}학년${semester ? ` ${semester}학기` : ""}`,
     createdAt: raw.created_at as string,
   };
+}
+
+/** 학사연도(3월 시작). 1~2월 날짜는 앞 학년도에 속한다. */
+function academicYearOf(d: Date): number {
+  return d.getMonth() + 1 >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+}
+
+/**
+ * 수상은 학년-학기 없이 날짜만 있다(생기부가 그렇게 준다). 화면의 흐름 맵은 학기
+ * 단위라 어느 학기인지 정해야 하는데, 오늘 날짜를 기준으로 삼으면 안 된다 —
+ * 생기부는 몇 해 전 문서일 수 있고, 그러면 모든 수상이 학년 범위 밖으로 떨어진다.
+ *
+ * 기준점은 같은 문서 안에서 찾는다. 봉사 기록은 날짜와 학년을 **둘 다** 갖고 있어서,
+ * "이 학사연도가 몇 학년이었는지"를 문서 스스로 알려 준다. 그런 쌍이 하나도 없을
+ * 때만 프로필의 현재 학년으로 되짚는다.
+ */
+function gradeAnchorFrom(
+  volunteerRows: Json[],
+  currentGrade: number,
+): { academicYear: number; grade: number } {
+  const votes = new Map<string, number>();
+  for (const row of volunteerRows) {
+    const grade = row.grade as number | null;
+    const iso = row.date as string | null;
+    if (grade == null || !iso) continue;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) continue;
+    const key = `${academicYearOf(d) - (grade - 1)}`;
+    votes.set(key, (votes.get(key) ?? 0) + 1);
+  }
+  const best = [...votes.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (best) return { academicYear: Number(best[0]), grade: 1 };
+  const now = new Date();
+  return { academicYear: academicYearOf(now) - (currentGrade - 1), grade: 1 };
+}
+
+/**
+ * 날짜 하나를 학년-학기로 옮긴다. 3년 밖이거나 학생이 선언한 현재 학기보다 뒤면
+ * 놓지 않는다 — 생기부 파싱이 "선언한 현재 학년-학기 이후 기록은 저장하지 않는다"는
+ * 규칙을 따르는데, 화면에서만 미래 학기에 수상이 찍히면 같은 문서가 두 말을 한다.
+ * 추정이라 확신이 없을 때 아무 데도 놓지 않는 편이 현재 학기로 몰아넣는 것보다 낫다.
+ */
+function periodFromDate(
+  iso: string | null,
+  anchor: { academicYear: number; grade: number },
+  current: { grade: number; semester: number },
+): { grade: number; semester: number } | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const grade = anchor.grade + (academicYearOf(d) - anchor.academicYear);
+  if (grade < 1 || grade > 3) return null;
+  const month = d.getMonth() + 1;
+  const semester = month >= 3 && month <= 8 ? 1 : 2;
+  if (grade > current.grade || (grade === current.grade && semester > current.semester)) {
+    return null;
+  }
+  return { grade, semester };
 }
 
 /** 백엔드 진단의 SWOT을 화면의 Student DNA 모양으로 옮긴다. */
@@ -174,15 +250,20 @@ async function optional<T>(request: Promise<T>): Promise<T | null> {
 
 /**
  * 활동의 학년-학기를 정한다. 학생이 고른 제안이 걸린 마디가 1순위 — 지난 학기 제안을
- * 이제 실행하는 일이 흔해서, 저장 시점(현재 학기)으로 못박으면 시점이 틀어진다.
+ * 이제 실행하는 일이 흔해서, 저장 시점으로 못박으면 시점이 틀어진다.
+ *
+ * 제안을 고르지 않았으면 프로필의 현재 학기를 쓴다. 로드맵의 활성 마디를 쓰면 안 된다:
+ * 활성 마디는 이번 학기 목표를 달성하는 순간 다음 학기로 넘어가기 때문에, 그 뒤로
+ * 저장하는 기록이 아직 오지도 않은 학기에 찍힌다.
  */
 async function resolveActivityPeriod(
   nodeId: string | undefined,
 ): Promise<{ grade: number; semester: number | null }> {
-  const roadmap = await optional(api<Json>("/roadmaps/active"));
-  const nodes = (roadmap?.nodes as Json[]) ?? [];
-  const node = nodeId ? nodes.find((n) => n.id === nodeId) : nodes.find((n) => n.status === "active");
-  if (node) return { grade: node.grade as number, semester: (node.semester as number) ?? null };
+  if (nodeId) {
+    const roadmap = await optional(api<Json>("/roadmaps/active"));
+    const node = ((roadmap?.nodes as Json[]) ?? []).find((n) => n.id === nodeId);
+    if (node) return { grade: node.grade as number, semester: (node.semester as number) ?? null };
+  }
   const profile = await api<Json>("/profile/me");
   return { grade: (profile.grade as number) ?? 1, semester: (profile.semester as number) ?? null };
 }
@@ -255,17 +336,108 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
     }
   }
 
+  // 화면은 상장·봉사·독서를 활동과 같은 목록에서 갈래로만 구분한다. 백엔드는 이
+  // 셋을 각자의 테이블에 두므로 여기서 하나로 합친다 — 합치지 않으면 화면의
+  // 상장/봉사/독서 필터가 언제나 0건이 된다.
+  const locate = nodeLocator(roadmap.nodes);
+  const currentGrade = (profileRaw.grade as number) ?? 1;
+  const current = { grade: currentGrade, semester: (profileRaw.semester as number) ?? 1 };
+
+  const [awardRows, volunteerRows, readingRows] = await Promise.all([
+    optional(api<{ items: Json[] }>("/awards?limit=200")),
+    optional(api<{ items: Json[] }>("/volunteer-records?limit=200")),
+    optional(api<{ items: Json[] }>("/reading-activities?limit=200")),
+  ]);
+
+  function domainActivity(
+    raw: Json,
+    kind: string,
+    title: string,
+    summary: string,
+    grade: number | null,
+    semester: number | null,
+    completedAt: string,
+  ): StudentActivity {
+    return {
+      id: raw.id as string,
+      studentId,
+      activityType: kind,
+      subject: (raw.subject as string) ?? "",
+      title,
+      summary,
+      reflection: "",
+      concepts: [],
+      outputs: [],
+      status: "completed",
+      roadmapNodeId: grade == null ? null : locate(grade, semester),
+      planEventId: null,
+      linkedPlanTitle: null,
+      completedAt,
+      periodLabel: grade == null ? "" : `${grade}학년${semester ? ` ${semester}학기` : ""}`,
+      createdAt: raw.created_at as string,
+    };
+  }
+
+  const anchor = gradeAnchorFrom(volunteerRows?.items ?? [], currentGrade);
+
+  const awards = (awardRows?.items ?? []).map((raw) => {
+    // 수상은 학년-학기가 없고 날짜만 있다 — 날짜로 학기를 되짚는다.
+    const period = periodFromDate(raw.date as string | null, anchor, current);
+    const rank = raw.rank ? ` (${raw.rank as string})` : "";
+    return domainActivity(
+      raw,
+      "상장",
+      `${raw.name as string}${rank}`,
+      (raw.raw_date as string) ?? "",
+      period?.grade ?? null,
+      period?.semester ?? null,
+      (raw.date as string) ?? "",
+    );
+  });
+
+  const volunteers = (volunteerRows?.items ?? []).map((raw) => {
+    const grade = (raw.grade as number) ?? null;
+    const period = periodFromDate(raw.date as string | null, anchor, current);
+    const hours = raw.hours ? ` · ${raw.hours as number}시간` : "";
+    return domainActivity(
+      raw,
+      "봉사",
+      `${(raw.place as string) ?? "봉사활동"}${hours}`,
+      (raw.content as string) ?? "",
+      grade,
+      grade != null && period?.grade === grade ? period.semester : null,
+      (raw.date as string) ?? "",
+    );
+  });
+
+  const readings = (readingRows?.items ?? []).map((raw) =>
+    domainActivity(
+      raw,
+      "독서",
+      `${raw.title as string}${raw.author ? ` — ${raw.author as string}` : ""}`,
+      "",
+      (raw.grade as number) ?? null,
+      (raw.semester as number) ?? null,
+      "",
+    ),
+  );
+
   // 생기부에서 온 활동은 날짜가 없어 completedAt 정렬만으로는 순서가 무너진다.
   // 시점의 정본인 학년-학기로 먼저 정렬해서 넘긴다.
-  const activities = (activityList.items ?? [])
-    .slice()
-    .sort(
-      (a, b) =>
-        ((a.grade as number) - (b.grade as number)) ||
-        (((a.semester as number) ?? 0) - ((b.semester as number) ?? 0)) ||
-        String(a.created_at).localeCompare(String(b.created_at)),
-    )
-    .map((raw) => toActivity(raw, studentId));
+  const activities = [
+    ...(activityList.items ?? [])
+      .slice()
+      .sort(
+        (a, b) =>
+          ((a.grade as number) - (b.grade as number)) ||
+          (((a.semester as number) ?? 0) - ((b.semester as number) ?? 0)) ||
+          String(a.created_at).localeCompare(String(b.created_at)),
+      )
+      .map((raw) => toActivity(raw, studentId, locate)),
+    ...awards,
+    ...volunteers,
+    ...readings,
+  ];
   const attachmentLists = await Promise.all(
     activities.map((activity) =>
       optional(api<Json[]>(`/activities/${activity.id}/attachments`)).then((rows) =>
@@ -491,33 +663,46 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       const form = init?.body as FormData;
       const activity = JSON.parse(String(form.get("activity") ?? "{}"));
 
-      // 화면의 "유형"은 백엔드의 activity_type(보고서/발표/실험…)이 아니라 기록의
-      // 갈래다. 그대로 보내면 enum에 걸려 422가 나므로 여기서 옮겨 준다.
-      const KIND_TO_BACKEND: Record<string, { category: string; type: string }> = {
-        활동: { category: "과목세부특기사항", type: "report" },
-        독서: { category: "과목세부특기사항", type: "reading_linked" },
-        상장: { category: "기타", type: "project" },
-        봉사: { category: "교외활동", type: "other" },
-      };
-      const kind = KIND_TO_BACKEND[String(activity.activityType ?? "")] ?? {
-        category: "과목세부특기사항",
-        type: "other",
-      };
-
       // 학년·학기는 폼에 없다. 학생이 고른 제안이 걸린 마디에서 가져오고, 고르지
       // 않았으면 현재 학기로 둔다 — 여기서 1을 기본값으로 쓰면 2학년 학생이 저장한
       // 활동이 전부 1학년으로 남아 진단의 학기 리뷰가 통째로 어긋난다.
       const period = await resolveActivityPeriod(activity.roadmapNodeId as string | undefined);
+      const kindLabel = String(activity.activityType ?? "");
+
+      // 화면의 "유형"은 백엔드의 activity_type(보고서/발표/실험…)이 아니라 기록의
+      // 갈래다. 상장·봉사·독서는 각자의 테이블이 정본이라 그쪽으로 보낸다 —
+      // activities에만 넣으면 진단의 수상·봉사·독서 섹션이 이 기록을 영영 못 본다.
+      if (kindLabel === "상장" || kindLabel === "봉사" || kindLabel === "독서") {
+        const ENDPOINTS = { 상장: "/awards", 봉사: "/volunteer-records", 독서: "/reading-activities" };
+        const bodies: Record<string, Json> = {
+          상장: { name: activity.title, date: activity.completedAt || null },
+          봉사: {
+            grade: period.grade,
+            date: activity.completedAt || null,
+            place: activity.title,
+            content: activity.summary || null,
+          },
+          독서: {
+            grade: period.grade,
+            semester: period.semester,
+            subject: activity.subject || null,
+            title: activity.title,
+          },
+        };
+        await api(ENDPOINTS[kindLabel], { method: "POST", body: bodies[kindLabel] });
+        // 이 갈래들은 로드맵 마디와 대조하지 않는다 — 정합은 탐구 활동의 축이다.
+        return { workspace: await loadWorkspace() };
+      }
 
       const created = await api<Json>("/activities", {
         method: "POST",
         body: {
           grade: period.grade,
           semester: period.semester,
-          activity_category: activity.activityCategory ?? kind.category,
+          activity_category: activity.activityCategory ?? "과목세부특기사항",
           subject: activity.subject || null,
           activity_name: activity.title,
-          activity_type: kind.type,
+          activity_type: "report",
           description: activity.summary || activity.title,
           reflection: activity.reflection || null,
           source_plan_event_id: activity.planEventId ?? null,
