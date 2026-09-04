@@ -188,26 +188,7 @@ export type StudentCourseGrade = {
   note: string;
 };
 
-/**
- * 학생이 "하기로 한 것". 로드맵 제안(고를 수 있는 후보)과도, 활동 기록(이미 한 일)과도
- * 다른 층이다 — 제안은 마디당 10개로 고정이고 계획은 개수가 자유로우며, 완료되면
- * 기록으로 승격되면서 계보가 이어진다.
- */
-export type PlanItem = {
-  id: string;
-  title: string;
-  itemType: string;
-  targetGrade: number | null;
-  targetSemester: number | null;
-  status: "planned" | "in_progress" | "done" | "dropped";
-  origin: string;
-  description: string;
-  roadmapNodeId: string | null;
-  sourcePlanEventId: string | null;
-};
-
 export type ProductWorkspace = {
-  plans: PlanItem[];
   profile: StudentWorkspaceProfile;
   roadmap: Roadmap;
   activities: StudentActivity[];

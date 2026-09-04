@@ -20,7 +20,6 @@ import type {
   ReconciliationLog,
   Roadmap,
   RoadmapNode,
-  PlanItem,
   SchoolRecordCourseRecord,
   StudentActivity,
   StudentCourseGrade,
@@ -113,21 +112,6 @@ function toRoadmap(raw: Json | null, studentId: string): Roadmap {
         })),
       }),
     ),
-  };
-}
-
-function toPlan(raw: Json): PlanItem {
-  return {
-    id: raw.id as string,
-    title: raw.title as string,
-    itemType: (raw.item_type as string) ?? "활동",
-    targetGrade: (raw.target_grade as number) ?? null,
-    targetSemester: (raw.target_semester as number) ?? null,
-    status: (raw.status as PlanItem["status"]) ?? "planned",
-    origin: (raw.origin as string) ?? "",
-    description: (raw.description as string) ?? "",
-    roadmapNodeId: (raw.roadmap_node_id as string) ?? null,
-    sourcePlanEventId: (raw.source_plan_event_id as string) ?? null,
   };
 }
 
@@ -241,18 +225,12 @@ async function resolveActivityPeriod(
 export async function loadWorkspace(): Promise<ProductWorkspace | null> {
   const profileRaw = await api<Json>("/profile/me");
   if (!profileRaw.name || profileRaw.grade == null) return null;
-  const [roadmapRaw, diagnosisRaw, activityList, reconciliations, planList] = await Promise.all([
+  const [roadmapRaw, diagnosisRaw, activityList, reconciliations] = await Promise.all([
     optional(api<Json>("/roadmaps/active")),
     optional(api<Json>("/diagnosis/latest")),
     api<{ items: Json[] }>("/activities?limit=200"),
     optional(api<Json[]>("/roadmaps/reconciliations/history")),
-    optional(api<{ items: Json[] }>("/plans?limit=200")),
   ]);
-  // 계획은 제안(고를 수 있는 후보)도 기록(이미 한 일)도 아닌 "하기로 한 것"이다.
-  // 버린 계획은 화면에서 뺀다 — 되살리는 경로가 없어 목록만 어지럽힌다.
-  const plans = (planList?.items ?? [])
-    .map(toPlan)
-    .filter((plan) => plan.status !== "dropped");
   const reviews = await optional(api<Json[]>("/activities/reviews/history"));
 
   // 사용자 id를 따로 주는 엔드포인트가 없어 로드맵/활동에서 얻는다. 화면은 이 값을
@@ -440,7 +418,6 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
     })),
     semesterCourses,
     courseGrades,
-    plans,
     schoolRecordCourses,
     reconciliations: ((reconciliations ?? []) as Json[]).map(
       (raw): ReconciliationLog => ({
@@ -621,24 +598,6 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       await api(`/roadmaps/nodes/${body.nodeId}/summarize`, { method: "POST" });
       return { workspace: await loadWorkspace() };
     }
-    // 계획 층 — 제안(고를 수 있는 후보)과 기록(이미 한 일) 사이. 담기가 제안을
-    // 계획으로 바꾸고, 완료가 계획을 기록으로 바꾸면서 계보를 잇는다.
-    case path === "/api/plans/adopt": {
-      await api(`/roadmaps/plan-events/${body.planEventId}/adopt`, { method: "POST", body: {} });
-      return { workspace: await loadWorkspace() };
-    }
-    case path === "/api/plans/complete": {
-      const result = await api<Json>(`/plans/${body.planId}/complete`, {
-        method: "POST",
-        body: { description: body.description || null },
-      });
-      return { workspace: await loadWorkspace(), createdActivityId: result.created_activity_id };
-    }
-    case path.startsWith("/api/plans/") && (init?.method ?? "GET") === "DELETE": {
-      await api(`/plans/${path.slice("/api/plans/".length)}`, { method: "DELETE" });
-      return { workspace: await loadWorkspace() };
-    }
-
     case path === "/api/roadmaps/checkpoint": {
       await api("/roadmaps/checkpoint", { method: "POST" });
       return { workspace: await loadWorkspace() };
