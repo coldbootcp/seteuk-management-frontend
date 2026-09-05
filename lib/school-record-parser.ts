@@ -221,17 +221,19 @@ function periodIsKnown(value: unknown) {
   return semester === 1 || semester === 2;
 }
 
-function apiActivityCategory(item: SeteukActivity): SchoolRecordCategory {
-  const source = [
-    textValue(item.activity_category),
-    textValue(item.activity_name),
-    textValue(item.description),
-    Array.isArray(item.keywords) ? item.keywords.filter((value): value is string => typeof value === "string").join(" ") : "",
-  ].join(" ");
-  if (/수상|상장|우수상|표창/.test(source)) return "상장";
-  if (/봉사/.test(source)) return "봉사";
-  if (/독서|도서|책을|읽고/.test(source)) return "독서";
-  if (/시험|중간고사|기말고사/.test(source)) return "시험";
+/**
+ * 활동 영역에서 온 기록의 갈래.
+ *
+ * 예전에는 이름·설명·키워드를 이어 붙여 "수상|상장|봉사|독서"를 찾아 분류했다.
+ * 부분 문자열 매칭이라 엉뚱한 곳에 걸린다 — 실제로 산업체 견학 활동의 설명에 있던
+ * "영**상장**치"가 상장으로 읽혀, 수상경력에 견학 활동이 올라갔다.
+ *
+ * 추측할 이유가 없다. 백엔드가 수상·봉사·독서·성적을 각자의 영역으로 이미 나눠서
+ * 주므로, activities에 담겨 온 것은 정의상 활동이다. 그 안의 activity_category
+ * (자율활동·동아리활동·진로활동·과목세부특기사항·행동특성및종합의견) 중 어느 것도
+ * 다른 갈래에 속하지 않는다.
+ */
+function apiActivityCategory(_item: SeteukActivity): SchoolRecordCategory {
   return "활동";
 }
 

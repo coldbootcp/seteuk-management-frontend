@@ -371,12 +371,23 @@ function subjectColor(subject: string) {
   return SUBJECT_COLORS[hash % SUBJECT_COLORS.length];
 }
 
+const ROADMAP_EVENT_CATEGORIES: readonly RoadmapEventCategory[] = [
+  "계획",
+  "상장",
+  "활동",
+  "봉사",
+  "독서",
+  "시험",
+];
+
+/**
+ * 갈래 이름을 그대로 받는다. 예전에는 부분 문자열로 찾았는데, 그러면 엉뚱한 곳에
+ * 걸린다 — "영**상장**치"가 상장으로 읽히는 사고가 실제로 있었다. 어댑터가 이미
+ * 정확한 갈래를 넣어 주므로 추측할 이유가 없다.
+ */
 function activityCategory(activityType: string): RoadmapEventCategory {
-  if (/상장|수상|우수상/.test(activityType)) return "상장";
-  if (/봉사/.test(activityType)) return "봉사";
-  if (/독서|도서/.test(activityType)) return "독서";
-  if (/시험|중간|기말/.test(activityType)) return "시험";
-  return "활동";
+  const exact = ROADMAP_EVENT_CATEGORIES.find((category) => category === activityType);
+  return exact ?? "활동";
 }
 
 function planTitleWithPriority(title: string, priority?: "core" | "optional") {
