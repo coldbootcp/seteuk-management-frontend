@@ -35,6 +35,12 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  // send()의 재진입을 막는 동기 플래그. streaming(state)만으로는 부족하다 — React
+  // 상태 갱신은 다음 렌더까지 반영되지 않는데, 한글 입력 중 마지막 글자를 조합
+  // 확정하며 누른 Enter가 브라우저에 따라 keydown을 두 번(조합 확정용 + 실제
+  // Enter) 연달아 낼 수 있어, 두 번째 호출이 streaming을 아직 false로 읽고
+  // 통과해 메시지가 두 번 전송된다.
+  const sendingRef = useRef(false);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -75,67 +81,74 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
 
   async function send() {
     const content = input.trim();
-    if (!content || streaming) return;
+    if (!content || streaming || sendingRef.current) return;
+    sendingRef.current = true;
 
-    let conversationId = activeId;
-    if (!conversationId) {
-      try {
-        conversationId = (await api<Conversation>("/conversations", { method: "POST" })).id;
-        setActiveId(conversationId);
-        await loadConversations();
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "대화를 만들지 못했습니다.");
-        return;
+    try {
+      let conversationId = activeId;
+      if (!conversationId) {
+        try {
+          conversationId = (await api<Conversation>("/conversations", { method: "POST" })).id;
+          setActiveId(conversationId);
+          await loadConversations();
+        } catch (caught) {
+          setError(caught instanceof Error ? caught.message : "대화를 만들지 못했습니다.");
+          return;
+        }
       }
-    }
 
-    setInput("");
-    setError("");
-    setStreaming(true);
-    const pendingId = `pending-${Date.now()}`;
-    setBubbles((prev) => [
-      ...prev,
-      { id: `u-${Date.now()}`, role: "user", content, actions: [] },
-      { id: pendingId, role: "assistant", content: "", actions: [], streaming: true },
-    ]);
+      setInput("");
+      setError("");
+      setStreaming(true);
+      const pendingId = `pending-${Date.now()}`;
+      setBubbles((prev) => [
+        ...prev,
+        { id: `u-${Date.now()}`, role: "user", content, actions: [] },
+        { id: pendingId, role: "assistant", content: "", actions: [], streaming: true },
+      ]);
 
-    let changedRecords = false;
-    await streamMessage(conversationId, content, mode, {
-      onToken: (delta) =>
-        setBubbles((prev) =>
-          prev.map((b) => (b.id === pendingId ? { ...b, content: b.content + delta } : b)),
-        ),
-      onAction: (action) => {
-        changedRecords = true;
-        setBubbles((prev) =>
-          prev.map((b) => (b.id === pendingId ? { ...b, actions: [...b.actions, action] } : b)),
-        );
-      },
-      onDone: (payload) =>
-        setBubbles((prev) =>
-          prev.map((b) =>
-            b.id === pendingId
-              ? {
-                  ...b,
-                  id: payload.message_id,
-                  streaming: false,
-                  actions: payload.applied_actions ?? b.actions,
-                }
-              : b,
+      let changedRecords = false;
+      await streamMessage(conversationId, content, mode, {
+        onToken: (delta) =>
+          setBubbles((prev) =>
+            prev.map((b) => (b.id === pendingId ? { ...b, content: b.content + delta } : b)),
           ),
-        ),
-      onError: (payload) => {
-        setError(`${payload.message} (${payload.error_code})`);
-        setBubbles((prev) =>
-          prev.map((b) => (b.id === pendingId ? { ...b, streaming: false } : b)),
-        );
-      },
-    });
+        onAction: (action) => {
+          changedRecords = true;
+          setBubbles((prev) =>
+            prev.map((b) => (b.id === pendingId ? { ...b, actions: [...b.actions, action] } : b)),
+          );
+        },
+        onDone: (payload) =>
+          setBubbles((prev) =>
+            prev.map((b) =>
+              b.id === pendingId
+                ? {
+                    ...b,
+                    id: payload.message_id,
+                    streaming: false,
+                    actions: payload.applied_actions ?? b.actions,
+                  }
+                : b,
+            ),
+          ),
+        onError: (payload) => {
+          setError(`${payload.message} (${payload.error_code})`);
+          setBubbles((prev) =>
+            prev.map((b) => (b.id === pendingId ? { ...b, streaming: false } : b)),
+          );
+        },
+      });
 
-    setStreaming(false);
-    void loadConversations();
-    // 수정 모드에서 기록이 바뀌었으면 다른 화면도 최신으로 맞춘다.
-    if (changedRecords) onRecordsChanged();
+      setStreaming(false);
+      void loadConversations();
+      // 수정 모드에서 기록이 바뀌었으면 다른 화면도 최신으로 맞춘다.
+      if (changedRecords) onRecordsChanged();
+    } finally {
+      // 대화 생성이 실패해 위에서 일찍 return하는 경로도 있으므로, 잠금 해제는
+      // finally에 둬야 다음 시도가 "이미 보내는 중"에 영원히 막히지 않는다.
+      sendingRef.current = false;
+    }
   }
 
   return (
@@ -242,6 +255,10 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
+              // 한글(IME) 입력 중 마지막 글자를 조합 확정하는 Enter는 보내기가
+              // 아니다 — isComposing을 안 보면 조합 확정용 Enter와 그 직후의
+              // 실제 Enter가 keydown 두 번으로 잡혀 메시지가 두 번 나간다.
+              if (event.nativeEvent.isComposing) return;
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void send();

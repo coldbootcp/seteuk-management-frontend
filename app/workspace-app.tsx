@@ -1938,7 +1938,10 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
 
   async function addFocusedCourse(subject = courseDraft) {
     const normalizedSubject = subject.trim();
-    if (!focusedNode || !normalizedSubject) return;
+    // courseBusy(state)만으로는 부족하다 — 한글 입력 중 마지막 글자를 조합
+    // 확정하며 누른 Enter가 keydown을 두 번(조합 확정용 + 실제 Enter) 낼 수
+    // 있는데, 두 번째 호출이 state 갱신 전에 통과하면 같은 과목이 두 번 추가된다.
+    if (!focusedNode || !normalizedSubject || courseBusy) return;
     setCourseBusy(true); setError("");
     try {
       const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/semester-courses", {
@@ -2536,7 +2539,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
                 </div>
               )}
               <div className="focus-course-add">
-                <input aria-label="수강 과목 직접 추가" disabled={courseBusy} onChange={(event) => setCourseDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addFocusedCourse(); } }} placeholder="직접 입력 · 예: 수학Ⅰ" value={courseDraft} />
+                <input aria-label="수강 과목 직접 추가" disabled={courseBusy} onChange={(event) => setCourseDraft(event.target.value)} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === "Enter") { event.preventDefault(); void addFocusedCourse(); } }} placeholder="직접 입력 · 예: 수학Ⅰ" value={courseDraft} />
                 <button className="btn btn-secondary btn-sm" disabled={courseBusy || !courseDraft.trim()} onClick={() => void addFocusedCourse()} type="button">추가</button>
               </div>
             </div>
