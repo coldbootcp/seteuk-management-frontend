@@ -2637,7 +2637,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
                       </div>
                       <div className="entry-card-foot">
                         <span className={entry.dateBasis === "document" ? "" : "date-inferred"}>
-                          {entry.dateBasis === "document" ? "문서 날짜" : "임시 날짜 · 수정 권장"}
+                          {entry.dateBasis === "document" ? "문서 날짜" : "날짜 확인 안 됨 · 직접 입력"}
                         </span>
                         <span>신뢰도 {entry.confidence}%</span>
                       </div>

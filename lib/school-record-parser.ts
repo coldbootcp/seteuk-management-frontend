@@ -23,7 +23,10 @@ export type SchoolRecordDraft = {
   summary: string;
   completedAt: string;
   confidence: number;
-  dateBasis: "document" | "inferred";
+  // 날짜를 문서에서 읽었는지, 아니면 문서에 없어 비워 둔 것인지. "inferred"라는
+  // 이름은 실제로 날짜를 추정해 채우던 시절의 것이라 지금은 맞지 않는다 —
+  // 지금은 모르면 지어내지 않고 빈 문자열로 둔다.
+  dateBasis: "document" | "unknown";
   /** 학기를 문서에서 읽었는지, 아니면 학생이 정해 줘야 하는지. */
   periodBasis: "document" | "unknown";
 };
@@ -165,18 +168,6 @@ function periodFromDate(date: string, academicStartYear: number): SchoolRecordPe
   return { grade, semester };
 }
 
-function inferredDate(baseYear: number, grade: number, semester: number, category: SchoolRecordCategory) {
-  const year = baseYear + grade - 1;
-  const monthDays: Record<SchoolRecordCategory, [string, string]> = {
-    상장: ["07-12", "12-12"],
-    활동: ["06-18", "11-25"],
-    봉사: ["05-10", "10-15"],
-    독서: ["04-18", "09-24"],
-    시험: ["07-05", "12-06"],
-  };
-  return `${year}-${monthDays[category][semester === 1 ? 0 : 1]}`;
-}
-
 function entryTitle(line: string, category: SchoolRecordCategory, subject: string) {
   const withoutDate = line.replace(/(?:(?:20\d{2})\s*[.\-/년]\s*)?\d{1,2}\s*[.\-/월]\s*\d{1,2}(?:\s*일)?/g, "");
   const withoutSubject = withoutDate.replace(subject, "").replace(/^\s*[:：·\-]\s*/, "").trim();
@@ -292,9 +283,9 @@ export function parseSchoolRecordJson(
           subject,
           title: `${title} (${author})`,
           summary: `${author} 저. ${subject} 관련 독서 활동.`,
-          completedAt: inferredDate(academicStartYear, grade, semester, "독서"),
+          completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
           confidence: 100,
-          dateBasis: "inferred",
+          dateBasis: "unknown",
           periodBasis: "document",
         });
       }
@@ -331,9 +322,9 @@ export function parseSchoolRecordJson(
           subject,
           title,
           summary,
-          completedAt: inferredDate(academicStartYear, grade, semester, "시험"),
+          completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
           confidence: 100,
-          dateBasis: "inferred",
+          dateBasis: "unknown",
           periodBasis: "document",
         });
       }
@@ -363,9 +354,9 @@ export function parseSchoolRecordJson(
       subject,
       title,
       summary: rank ? `${name}에서 ${rank}을 수상했습니다.` : `${name} 수상 기록입니다.`,
-      completedAt: parsedDate ?? inferredDate(academicStartYear, grade, semester, "상장"),
+      completedAt: parsedDate ?? "",  // 문서에 날짜가 없으면 지어내지 않는다.
       confidence: parsedDate ? 100 : 86,
-      dateBasis: parsedDate ? "document" : "inferred",
+      dateBasis: parsedDate ? "document" : "unknown",
       periodBasis: "document",
     });
   });
@@ -399,9 +390,9 @@ export function parseSchoolRecordJson(
       subject,
       title,
       summary: summary || "봉사활동 기록입니다.",
-      completedAt: parsedDate ?? inferredDate(academicStartYear, grade, semester, "봉사"),
+      completedAt: parsedDate ?? "",  // 문서에 날짜가 없으면 지어내지 않는다.
       confidence: parsedDate ? 100 : 86,
-      dateBasis: parsedDate ? "document" : "inferred",
+      dateBasis: parsedDate ? "document" : "unknown",
       periodBasis: "document",
     });
   });
@@ -429,9 +420,9 @@ export function parseSchoolRecordJson(
       subject,
       title,
       summary,
-      completedAt: inferredDate(academicStartYear, grade, semester, category),
+      completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
       confidence: periodKnown ? 96 : 60,
-      dateBasis: "inferred",
+      dateBasis: "unknown",
       periodBasis: periodKnown ? "document" : "unknown",
     });
   });
@@ -451,9 +442,9 @@ export function parseSchoolRecordJson(
       subject: course.subject,
       title,
       summary: "성취도 세부값은 확인되지 않았지만, 학생부에서 교과 기록이 인식되었습니다. 반영 전 실제 성적 정보로 보완할 수 있습니다.",
-      completedAt: inferredDate(academicStartYear, course.grade, course.semester, "시험"),
+      completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
       confidence: 62,
-      dateBasis: "inferred",
+      dateBasis: "unknown",
       periodBasis: "document",
     });
   });
