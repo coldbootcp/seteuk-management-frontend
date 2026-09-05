@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ApiError, logout, tokens } from "../lib/api-client";
+import { handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
+import { SignIn } from "./sign-in";
+import { ChatView } from "./chat-view";
 import type { CSSProperties } from "react";
 import type {
   AssignmentAnalysis,
@@ -13,6 +17,7 @@ import type {
   RoadmapNode,
   RoadmapPlanEvent,
 } from "../lib/product-harness";
+import { withParticle } from "../lib/product-harness";
 import {
   SCHOOL_RECORD_MAX_FILE_SIZE,
   SCHOOL_RECORD_MAX_FILE_SIZE_LABEL,
@@ -26,7 +31,7 @@ import {
 /* ──────────────────────────────────────────────
    Types
    ────────────────────────────────────────────── */
-type TabId = "overview" | "roadmap" | "activities" | "grades" | "portfolio" | "profile";
+type TabId = "overview" | "roadmap" | "activities" | "grades" | "portfolio" | "chat" | "profile";
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
@@ -51,6 +56,7 @@ type RoadmapTimelineEvent = {
 type ActivityDraft = {
   title: string;
   subject: string;
+  summary?: string;
   planEventId?: string;
   roadmapNodeId?: string;
 };
@@ -282,6 +288,7 @@ function buildRecordOnlyRoadmap(studentId: string, career: string): Roadmap {
         candidateSubjects: [],
         competencyGoals: [],
         status: "skipped" as const,
+        isCurrent: false,
         instantiatedActivityId: null,
         planEvents: [],
       };
@@ -289,16 +296,20 @@ function buildRecordOnlyRoadmap(studentId: string, career: string): Roadmap {
   };
 }
 
+/**
+ * 예전에는 이 앱 안의 /api/* 라우트를 부르는 함수였다. 서버 로직이 전부 백엔드로
+ * 옮겨간 뒤로는 어댑터가 그 경로를 백엔드 호출로 바꿔 준다 — 화면 코드를 그대로
+ * 두기 위한 얇은 층이다.
+ */
 async function jsonRequest<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  const raw = await response.text();
-  let payload: (T & { error?: string }) | null = null;
-  try { payload = JSON.parse(raw) as T & { error?: string }; } catch {
-    if (response.status === 413) throw new Error(`파일이 너무 큽니다. ${SCHOOL_RECORD_MAX_FILE_SIZE_LABEL} 이하의 PDF를 선택해주세요.`);
-    throw new Error("서버가 분석 결과를 정상적으로 반환하지 못했습니다.");
+  try {
+    return (await handleLegacyRoute(url, options)) as T;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 413) {
+      throw new Error(`파일이 너무 큽니다. ${SCHOOL_RECORD_MAX_FILE_SIZE_LABEL} 이하의 PDF를 선택해주세요.`);
+    }
+    throw error instanceof Error ? error : new Error("요청을 처리하지 못했습니다.");
   }
-  if (!response.ok) throw new Error(payload!.error ?? "요청을 처리하지 못했습니다.");
-  return payload!;
 }
 
 type SchoolRecordProgress = {
@@ -360,12 +371,23 @@ function subjectColor(subject: string) {
   return SUBJECT_COLORS[hash % SUBJECT_COLORS.length];
 }
 
+const ROADMAP_EVENT_CATEGORIES: readonly RoadmapEventCategory[] = [
+  "계획",
+  "상장",
+  "활동",
+  "봉사",
+  "독서",
+  "시험",
+];
+
+/**
+ * 갈래 이름을 그대로 받는다. 예전에는 부분 문자열로 찾았는데, 그러면 엉뚱한 곳에
+ * 걸린다 — "영**상장**치"가 상장으로 읽히는 사고가 실제로 있었다. 어댑터가 이미
+ * 정확한 갈래를 넣어 주므로 추측할 이유가 없다.
+ */
 function activityCategory(activityType: string): RoadmapEventCategory {
-  if (/상장|수상|우수상/.test(activityType)) return "상장";
-  if (/봉사/.test(activityType)) return "봉사";
-  if (/독서|도서/.test(activityType)) return "독서";
-  if (/시험|중간|기말/.test(activityType)) return "시험";
-  return "활동";
+  const exact = ROADMAP_EVENT_CATEGORIES.find((category) => category === activityType);
+  return exact ?? "활동";
 }
 
 function planTitleWithPriority(title: string, priority?: "core" | "optional") {
@@ -592,6 +614,10 @@ function StatusBadge({ status }: { status: RoadmapNode["status"] }) {
   const config: Record<RoadmapNode["status"], { label: string; cls: string }> = {
     planned:      { label: "예정",     cls: "badge-planned" },
     active:       { label: "진행 중",  cls: "badge-active"  },
+    // 백엔드가 실제로 쓰는 값. 이 둘이 빠져 있어 완료·부분달성 마디의 배지가
+    // undefined를 읽고 있었다.
+    partial:      { label: "일부 달성", cls: "badge-active"  },
+    done:         { label: "완료",     cls: "badge-done"    },
     instantiated: { label: "실행 중",  cls: "badge-active"  },
     completed:    { label: "완료",     cls: "badge-done"    },
     skipped:      { label: "건너뜀",   cls: "badge-muted"   },
@@ -722,12 +748,14 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
     setSuggestBusy(true);
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch("/api/onboarding/suggest", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ targetCareer: topic }),
-        });
-        const result = await response.json();
+        const result = await jsonRequest<{ majors?: string[]; keywords?: string[]; provider?: "deepseek" | "fallback" }>(
+          "/api/onboarding/suggest",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ targetCareer: topic }),
+          },
+        );
         if (!cancelled) setSuggestions({
           majors: Array.isArray(result.majors) ? result.majors : [],
           keywords: Array.isArray(result.keywords) ? result.keywords : [],
@@ -1217,7 +1245,7 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
                     <small>
                       {onboardingRecordBusy
                         ? `${onboardingRecordStage} · 약 1~2분 소요됩니다. 기다리는 동안 아래 기본 정보와 관심분야를 먼저 입력해 주세요.`
-                        : onboardingRecordFile || "올리면 이름과 마지막 확정 학년을 읽어 기본 정보를 자동 입력합니다. 원본 PDF는 저장하지 않습니다."}
+                        : onboardingRecordFile || "올리면 이름과 마지막 확정 학년을 읽어 기본 정보를 자동 입력합니다. 업로드한 원본은 계정에 보관됩니다."}
                     </small>
                   </div>
                   <input
@@ -1582,8 +1610,11 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
    Overview
    ────────────────────────────────────────────── */
 function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void; onConvertPlan: (draft: ActivityDraft) => void }) {
-  const active = workspace.roadmap.nodes.find((n) => n.status === "active");
-  const completed = workspace.roadmap.nodes.filter((n) => n.status === "completed").length;
+  const active = workspace.roadmap.nodes.find((n) => n.isCurrent)
+    ?? workspace.roadmap.nodes.find((n) => n.status === "active");
+  // 백엔드가 쓰는 값은 done/partial이다. "completed"만 세면 실제로 달성한 학기가
+  // 있어도 진행이 0으로 표시된다.
+  const completed = workspace.roadmap.nodes.filter((n) => n.status === "done").length;
   const [selectedPlan, setSelectedPlan] = useState<RoadmapPlanEvent | null>(null);
   const completedPlanIds = new Set(workspace.activities.map((activity) => activity.planEventId).filter(Boolean));
 
@@ -1628,6 +1659,7 @@ function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: Product
               <p style={{ color: "var(--fg-muted)" }}>이번 학기에 제안된 활동 주제가 없습니다.</p>
             )}
           </div>
+
         </div>
       </section>
 
@@ -1737,7 +1769,7 @@ function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: Product
               <span className="activity-subj-pill">{activity.subject}</span>
               <div className="activity-compact-info">
                 <strong>{activity.title}</strong>
-                <small>{activity.completedAt}</small>
+                <small>{activity.completedAt || activity.periodLabel}</small>
               </div>
             </div>
           ))
@@ -1771,6 +1803,14 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
   const [recordParse, setRecordParse] = useState<SchoolRecordParseResult | null>(null);
   const [recordBusy, setRecordBusy] = useState(false);
   const [recordMessage, setRecordMessage] = useState("");
+  // state가 아니라 ref다. state로 두면 이 값을 바꾸는 순간 리렌더가 일어나고,
+  // 복구 effect의 cleanup이 돌면서 자기가 띄운 요청을 스스로 취소해 버린다.
+  const recordRestored = useRef(false);
+  // 이미 반영한 항목. 화면의 카테고리(상장·활동·봉사·독서·시험)와 백엔드의 영역은
+  // 1:1이 아니다 — 이름에 "봉사"가 든 활동은 봉사 탭에 보이지만 실제로는 activities
+  // 영역에 있다. 그래서 한 카테고리만 보내면 백엔드가 그 영역을 "이게 전부"로 알고
+  // 앞서 반영한 것을 지운다. 반영한 것을 모아 두었다가 매번 함께 보낸다.
+  const importedEntries = useRef<Map<string, SchoolRecordDraft>>(new Map());
   const [gradeImportConflicts, setGradeImportConflicts] = useState<Array<{ courseId: string; grade: number; semester: number; subject: string; currentRank: number; importedRank: number }>>([]);
   const [gradeImportChoices, setGradeImportChoices] = useState<Record<string, "keep" | "replace">>({});
   const [courseDraft, setCourseDraft] = useState("");
@@ -1801,6 +1841,44 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
     (n) => n.grade === workspace.profile.grade && n.semester === workspace.profile.semester,
   );
   const academicStartYear = new Date().getFullYear() - (workspace.profile.grade - 1);
+
+  // 파싱은 몇 분 걸린다. 그 사이 새로고침하면 예전에는 검토 화면을 통째로 잃었다 —
+  // 업로드 id도 파싱 결과도 이 컴포넌트의 state에만 있었기 때문이다. 백엔드는
+  // 마지막 업로드와 그 결과를 갖고 있으므로 화면을 그릴 때 되찾는다.
+  useEffect(() => {
+    if (recordRestored.current) return;
+    recordRestored.current = true;
+    (async () => {
+      try {
+        const { latest } = await jsonRequest<{
+          latest: {
+            uploadId: string;
+            status: string;
+            fileName: string | null;
+            importedAt: string | null;
+            error: string | null;
+            result: unknown;
+          } | null;
+        }>("/api/school-record/latest");
+        if (!latest) return;
+        if (latest.fileName) setRecordFile(latest.fileName);
+        if (latest.status === "failed") {
+          setError(latest.error || "생기부 분석에 실패했습니다.");
+          return;
+        }
+        // 이미 반영을 마친 업로드는 검토할 것이 없다 — 연결됨 상태만 보이면 된다.
+        if (latest.status !== "done" || latest.importedAt || !latest.result) return;
+        const parsed = parseSchoolRecordJson(latest.result, academicStartYear);
+        parsed.fileName = latest.fileName ?? parsed.fileName;
+        importedEntries.current = new Map();
+        setRecordParse(parsed);
+      } catch (e) {
+        // 되찾기는 부가 기능이라 화면을 막지는 않지만, 조용히 삼키면 왜 검토 화면이
+        // 안 뜨는지 알 길이 없다.
+        console.warn("마지막 생기부 업로드를 되찾지 못했습니다", e);
+      }
+    })();
+  }, [academicStartYear]);
   const allSubjects = [...new Set([
     ...workspace.roadmap.nodes.flatMap((n) => n.candidateSubjects),
     ...workspace.activities.map((a) => a.subject),
@@ -1810,8 +1888,14 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
   const completedPlanIds = new Set(workspace.activities.map((activity) => activity.planEventId).filter(Boolean));
 
   function activitiesForNode(node: RoadmapNode) {
+    // 학기를 아는 기록은 그 학기 마디에만 놓는다. 자율활동·동아리활동처럼 생기부가
+    // 학기를 나누지 않는 기록은 그 학년의 두 학기에 함께 보여준다 — 어느 한 학기의
+    // 것이 아니므로 한쪽에만 놓으면 나머지 학기가 근거 없이 비어 보인다.
+    // 시점을 아예 알 수 없는 기록(날짜 없는 수상 등)은 어느 학기에도 놓지 않는다.
     return workspace.activities.filter(
-      (a) => a.roadmapNodeId === node.id || (!a.roadmapNodeId && node.id === currentNode?.id),
+      (a) =>
+        a.roadmapNodeId === node.id ||
+        (a.roadmapNodeId === null && a.semester === null && a.grade === node.grade),
     );
   }
 
@@ -1819,7 +1903,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
     const actualEvents = activitiesForNode(node).map((a) => ({
       id: a.id, date: a.completedAt,
       category: activityCategory(a.activityType),
-      subject: a.subject, title: a.title, isPlan: false,
+      subject: a.subject || a.activityCategory, title: a.title, isPlan: false,
     }));
     const planYear = academicStartYear + node.grade - 1;
     const plannedEvents = roadmapPhase(workspace, node) === "past" ? [] :
@@ -1908,6 +1992,8 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
       const parsedResult = parseSchoolRecordJson(resultJson, academicStartYear);
       parsedResult.fileName = file.name;
 
+      // index는 이 파싱 결과 안에서만 유효하므로 지난 누적을 버린다.
+      importedEntries.current = new Map();
       setRecordParse(parsedResult);
       // 첫 번째 카테고리로 탭 초기화
       setImportCategory("상장");
@@ -1950,10 +2036,14 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
           fileName: recordParse.fileName,
           totalPages: recordParse.totalPages,
           courses: targetCourses,
-          entries: targetEntries,
+          // 이번 카테고리 + 앞서 반영한 것을 함께 보낸다. 백엔드는 영역 단위로
+          // 교체하므로, 이번 것만 보내면 같은 영역에 있던 지난 반영분이 사라진다.
+          entries: [...importedEntries.current.values(), ...targetEntries],
+          newEntryIds: targetEntries.map((entry) => entry.id),
           courseGradeChoices,
         }),
       });
+      for (const entry of targetEntries) importedEntries.current.set(entry.id, entry);
       onWorkspace(result.workspace);
       setGradeImportConflicts([]); setGradeImportChoices({});
 
@@ -2037,12 +2127,12 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
             onClick={() => uploadRef.current?.click()}
             type="button"
           >
-            {recordBusy ? "분석 중…" : recordFile ? "다른 PDF" : "생기부 PDF 분석"}
+            {recordBusy ? "분석 중…" : recordFile || recordConnected ? "다른 PDF" : "생기부 PDF 분석"}
           </button>
         </div>
       </div>
 
-      {recordMessage && <div className="banner banner-success">✓ {recordMessage} 원본 PDF는 저장하지 않았습니다.</div>}
+      {recordMessage && <div className="banner banner-success">✓ {recordMessage}</div>}
       {error && !editing && !checkpointOpen && <div className="banner banner-error">{error}</div>}
 
       {/* Toolbar */}
@@ -2173,12 +2263,13 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
           <div className="narrative-map-header">
             <div>
               <span className="kicker">SEMESTER FLOW MAP</span>
-              <h2>{workspace.roadmap.careerTrack}로 이어지는 6학기 경로</h2>
+              <h2>{withParticle(workspace.roadmap.careerTrack, "으로", "로")} 이어지는 6학기 경로</h2>
               <p>월별 세부 일정 대신, 각 학기에서 쌓은 기록과 앞으로의 계획을 하나의 서사 흐름으로 보여줍니다.</p>
             </div>
             <div className="map-summary">
-              <span><strong>{workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => !ev.isPlan).length}</strong>기록</span>
-              <span><strong>{workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => ev.isPlan).length}</strong>계획</span>
+              {/* 학년 단위 기록은 두 학기 카드에 함께 나오므로 id로 세야 합계가 부풀지 않는다. */}
+              <span><strong>{new Set(workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => !ev.isPlan).map((ev) => ev.id)).size}</strong>기록</span>
+              <span><strong>{new Set(workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => ev.isPlan).map((ev) => ev.id)).size}</strong>계획</span>
               <span><strong>{workspace.roadmap.nodes.reduce((sum, node) => sum + attentionCount(node), 0)}</strong>보정</span>
             </div>
           </div>
@@ -2208,7 +2299,8 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
                 const isMuted = false;
                 const subjects = [...new Set([
                   ...node.candidateSubjects,
-                  ...activitiesForNode(node).map((a) => a.subject),
+                  // 과목 없는 기록(자율활동 등)은 빈 칩이 되므로 뺀다.
+                  ...activitiesForNode(node).map((a) => a.subject).filter(Boolean),
                 ])].slice(0, 3);
 
                 return (
@@ -2245,7 +2337,14 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
                     <span className="flow-node-period">{node.grade}-{node.semester}</span>
                     <span className="flow-node-stage">{node.narrativeStage}</span>
                     <strong>{node.title}</strong>
-                    <span className="flow-node-objective">{node.objective}</span>
+                    {/* 회고 마디의 objective는 "생기부 연동을 통해 과거 활동을 확인하세요"라는
+                        안내다. 이미 기록이 쌓인 학기에 그 말을 띄우면 아직 아무것도 안
+                        했다는 뜻으로 읽힌다 — 그때는 무엇이 있는지 말해 준다. */}
+                    <span className="flow-node-objective">
+                      {phase === "past" && recordCount > 0
+                        ? `생활기록부에서 확인된 기록 ${recordCount}건`
+                        : node.objective}
+                    </span>
                     <span className="flow-node-stats">
                       <i>{recordCount} 기록</i>
                       <i>{planCount} 계획</i>
@@ -2438,7 +2537,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
               )}
               <div className="focus-course-add">
                 <input aria-label="수강 과목 직접 추가" disabled={courseBusy} onChange={(event) => setCourseDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addFocusedCourse(); } }} placeholder="직접 입력 · 예: 수학Ⅰ" value={courseDraft} />
-                <button className="btn btn-secondary btn-sm" disabled={courseBusy || !courseDraft.trim()} onClick={addFocusedCourse} type="button">추가</button>
+                <button className="btn btn-secondary btn-sm" disabled={courseBusy || !courseDraft.trim()} onClick={() => void addFocusedCourse()} type="button">추가</button>
               </div>
             </div>
           </section>
@@ -2459,7 +2558,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
             </div>
             <div className="record-review-body">
               <div className="rr-privacy-note">
-                <strong>원본 파일은 저장하지 않습니다.</strong>
+                <strong>업로드한 생기부 원본은 계정에 보관됩니다.</strong>
                 <span>아래에서 선택한 과목과 활동만 학생 기록에 반영됩니다.</span>
               </div>
               {recordParse.warnings.map((w) => <div className="rr-warning" key={w}>! {w}</div>)}
@@ -2538,7 +2637,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
                       </div>
                       <div className="entry-card-foot">
                         <span className={entry.dateBasis === "document" ? "" : "date-inferred"}>
-                          {entry.dateBasis === "document" ? "문서 날짜" : "임시 날짜 · 수정 권장"}
+                          {entry.dateBasis === "document" ? "문서 날짜" : "날짜 확인 안 됨 · 직접 입력"}
                         </span>
                         <span>신뢰도 {entry.confidence}%</span>
                       </div>
@@ -2558,7 +2657,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
               <button
                 className="btn btn-primary"
                 disabled={recordBusy || (importCategory === "시험" ? (!recordParse.courses.length && !recordParse.entries.some((e) => e.category === importCategory && e.selected)) : !recordParse.entries.some((e) => e.category === importCategory && e.selected))}
-                onClick={confirmRecordImport}
+                onClick={() => void confirmRecordImport()}
                 type="button"
               >
                 {recordBusy ? "반영 중…" : `선택한 [${importCategory}] 항목 로드맵에 반영`}
@@ -2723,13 +2822,13 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       payload.append("studentId", workspace.profile.id);
       payload.append("activity", JSON.stringify({ ...form, roadmapNodeId: selectedPlan?.nodeId, planEventId: planEventId || undefined, concepts: splitList(form.concepts), outputs: splitList(form.outputs) }));
       files.forEach((file) => payload.append("files", file));
-      const response = await fetch("/api/activities", { method: "POST", body: payload });
-      const result = await response.json() as { workspace?: ProductWorkspace; reconciliation?: ReconciliationLog; review?: ActivityReview; error?: string };
-      if (!response.ok) {
-        if (result.review) setLastReview(result.review);
-        throw new Error(result.error || "활동을 저장하지 못했습니다.");
-      }
-      if (!result.workspace || !result.reconciliation) throw new Error(result.error || "활동을 저장하지 못했습니다.");
+      const result = await jsonRequest<{ workspace?: ProductWorkspace; reconciliation?: ReconciliationLog; review?: ActivityReview; error?: string }>(
+        "/api/activities",
+        { method: "POST", body: payload },
+      );
+      // 상장·봉사·독서는 로드맵 마디와 대조하지 않으므로 정합 결과가 없다.
+      // 정합을 저장 성공의 조건으로 두면 실제로 저장된 기록이 실패로 보인다.
+      if (!result.workspace) throw new Error(result.error || "활동을 저장하지 못했습니다.");
       onWorkspace(result.workspace);
       setLastReview(result.workspace.activityReviews.find((review) => review.activityId === result.reconciliation?.activityId) ?? null);
       clearDraft();
@@ -2741,9 +2840,15 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
 
   async function deleteAttachment(id: string) {
     if (!window.confirm("이 첨부 파일을 영구 삭제할까요?")) return;
-    const response = await fetch(`/api/activity-files/${encodeURIComponent(id)}?studentId=${encodeURIComponent(workspace.profile.id)}`, { method: "DELETE" });
-    if (!response.ok) { setError("파일을 삭제하지 못했습니다."); return; }
-    onWorkspace({ ...workspace, attachments: workspace.attachments.filter((attachment) => attachment.id !== id) });
+    try {
+      const result = await jsonRequest<{ workspace: ProductWorkspace }>(
+        `/api/activity-files/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      onWorkspace(result.workspace);
+    } catch {
+      setError("파일을 삭제하지 못했습니다.");
+    }
   }
 
   return (
@@ -2862,7 +2967,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             <div className="history-list">
               {workspace.activities.map((activity) => (
                 <div className="history-item" key={activity.id}>
-                  <time className="history-time">{activity.completedAt}</time>
+                  <time className="history-time">{activity.completedAt || activity.periodLabel}</time>
                   <div className="history-info">
                     <span className="type-pill">{activity.activityType} · {activity.subject}</span>
                     <h3>{activity.title}</h3>
@@ -2926,7 +3031,7 @@ function PortfolioView({ workspace }: { workspace: ProductWorkspace }) {
   const themes = [...new Set(records.flatMap((record) => record.concepts))].slice(0, 6);
   return <div className="activities-page">
     <div className="activities-header"><span className="kicker">ADMISSIONS PORTFOLIO</span><h1>수시 준비 자료</h1><p>3년 활동의 사실과 증거를 자소서 서사와 면접 대비 질문으로 정리합니다.</p></div>
-    <div className="activity-form-card"><h2>자소서 서사 초안</h2><p>{workspace.profile.targetCareer} 관심을 바탕으로 {records.length}개의 실제 활동을 축적했습니다. {themes.length ? `핵심 키워드는 ${themes.join(", ")}입니다.` : "활동을 더 기록하면 핵심 키워드가 자동으로 정리됩니다."}</p><ol>{records.map((record) => <li key={record.id}><strong>{record.completedAt} · {record.title}</strong><br />{record.summary}{record.reflection && <><br /><small>배운 점·느낀 점: {record.reflection}</small></>}</li>)}</ol></div>
+    <div className="activity-form-card"><h2>자소서 서사 초안</h2><p>{workspace.profile.targetCareer} 관심을 바탕으로 {records.length}개의 실제 활동을 축적했습니다. {themes.length ? `핵심 키워드는 ${themes.join(", ")}입니다.` : "활동을 더 기록하면 핵심 키워드가 자동으로 정리됩니다."}</p><ol>{records.map((record) => <li key={record.id}><strong>{record.completedAt || record.periodLabel} · {record.title}</strong><br />{record.summary}{record.reflection && <><br /><small>배운 점·느낀 점: {record.reflection}</small></>}</li>)}</ol></div>
     <div className="activity-form-card"><h2>면접 대비 질문</h2>{records.length ? <ol>{records.slice(-5).reverse().map((record) => <li key={record.id}>“{record.title}에서 무엇을 직접 탐구했고, 결과가 {workspace.profile.targetCareer} 관심과 어떻게 이어졌나요?”</li>)}</ol> : <p>실제 활동을 저장하면 활동별 면접 질문이 만들어집니다.</p>}</div>
   </div>;
 }
@@ -3203,10 +3308,12 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
 /* ──────────────────────────────────────────────
    ProductShell
    ────────────────────────────────────────────── */
-function ProductShell({ workspace, onWorkspace, onNewStudent }: {
+function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
   workspace: ProductWorkspace;
   onWorkspace: (workspace: ProductWorkspace) => void;
   onNewStudent: () => void;
+  /** 챗봇 수정 모드가 기록을 바꾸면 다른 화면도 최신으로 맞춘다. */
+  onRefresh: () => void;
 }) {
   const [tab, setTab] = useState<TabId>("roadmap");
   const [activityDraft, setActivityDraft] = useState<ActivityDraft | null>(null);
@@ -3218,6 +3325,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent }: {
     { id: "activities", label: "활동 기록",      icon: "◎"  },
     { id: "grades",     label: "성적",          icon: "A"  },
     { id: "portfolio",  label: "수시 준비",      icon: "↗"  },
+    { id: "chat",       label: "챗봇",          icon: "◍"  },
     { id: "profile",    label: "프로필",         icon: "◉"  },
   ];
 
@@ -3264,8 +3372,11 @@ function ProductShell({ workspace, onWorkspace, onNewStudent }: {
         </nav>
 
         <div className="sidebar-footer">
+          {/* 이 버튼은 실제로 로그아웃한다(토큰을 지우고 로그인 화면으로 보낸다).
+              "신규 학생 시작"이라는 이름은 계정마다 학생이 하나인 지금 구조에서
+              무슨 일이 일어나는지 감추기만 한다. */}
           <button className="new-student-btn" id="btn-new-student" onClick={onNewStudent} type="button">
-            ＋ 신규 학생 시작
+            로그아웃
           </button>
         </div>
       </aside>
@@ -3294,6 +3405,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent }: {
           )}
           {tab === "grades"     && <GradesView workspace={workspace} onNavigate={setTab} onWorkspace={onWorkspace} />}
           {tab === "portfolio" && <PortfolioView workspace={workspace} />}
+          {tab === "chat"       && <ChatView onRecordsChanged={onRefresh} />}
           {tab === "profile"    && <ProfileView workspace={workspace} onWorkspace={onWorkspace} />}
         </div>
       </section>
@@ -3308,20 +3420,59 @@ export function WorkspaceApp() {
   const [workspace, setWorkspace] = useState<ProductWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // 학생 식별은 이제 백엔드 JWT가 한다 — localStorage의 studentId로 작업공간을 찾던
+  // 방식은 서버 로직이 이 앱을 떠나면서 함께 사라졌다.
+  const [signedIn, setSignedIn] = useState(false);
 
-  useEffect(() => {
-    const studentId = window.localStorage.getItem("seteuk-current-student");
-    if (!studentId) { queueMicrotask(() => setLoading(false)); return; }
-    jsonRequest<{ workspace: ProductWorkspace }>(`/api/workspace?studentId=${encodeURIComponent(studentId)}`)
-      .then((result) => setWorkspace(result.workspace))
-      .catch(() => {
-        window.localStorage.removeItem("seteuk-current-student");
-        setError("이전 작업공간을 찾지 못해 신규 가입 화면으로 돌아왔습니다.");
+  /**
+   * `quiet`는 로딩 화면을 띄우지 않고 데이터만 갈아 끼운다. 챗봇 수정 모드가 기록을
+   * 바꿨을 때 쓰는데, 전체 로딩을 띄우면 셸이 다시 마운트되면서 보고 있던 탭에서
+   * 튕겨 나간다.
+   */
+  const refresh = useCallback((options?: { quiet?: boolean }) => {
+    if (!options?.quiet) setLoading(true);
+    loadWorkspace()
+      .then((next) => {
+        // null이면 아직 온보딩 전이다 — 화면이 온보딩 폼을 띄운다.
+        setWorkspace(next);
+        setError("");
       })
-      .finally(() => setLoading(false));
+      .catch((caught) => {
+        // 온보딩 전에는 프로필이 비어 있어 실패하는 것이 정상이다 — 신규 가입
+        // 화면으로 보내면 된다.
+        setWorkspace(null);
+        if (caught instanceof ApiError && caught.status !== 404) setError(caught.message);
+      })
+      .finally(() => {
+        if (!options?.quiet) setLoading(false);
+      });
   }, []);
 
+  useEffect(() => {
+    if (!tokens.access) {
+      setSignedIn(false);
+      setLoading(false);
+      return;
+    }
+    setSignedIn(true);
+    refresh();
+  }, [refresh]);
+
+
   const loadingCopy = useMemo(() => (loading ? "학생 작업공간을 불러오는 중…" : ""), [loading]);
+
+  // 조기 반환은 훅을 전부 부른 뒤에 온다. 훅보다 앞에 두면 로그인 전후로 호출
+  // 순서가 달라져 Rules of Hooks를 어긴다.
+  if (!signedIn) {
+    return (
+      <SignIn
+        onSignedIn={() => {
+          setSignedIn(true);
+          refresh();
+        }}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -3350,9 +3501,13 @@ export function WorkspaceApp() {
     <ProductShell
       workspace={workspace}
       onWorkspace={setWorkspace}
+      onRefresh={() => refresh({ quiet: true })}
       onNewStudent={() => {
-        window.localStorage.removeItem("seteuk-current-student");
-        setWorkspace(null);
+        // 학생 전환은 이제 계정 전환이다 — 토큰을 지우고 로그인 화면으로 돌아간다.
+        void logout().then(() => {
+          setWorkspace(null);
+          setSignedIn(false);
+        });
       }}
     />
   );

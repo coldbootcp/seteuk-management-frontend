@@ -23,7 +23,12 @@ export type SchoolRecordDraft = {
   summary: string;
   completedAt: string;
   confidence: number;
-  dateBasis: "document" | "inferred";
+  // 날짜를 문서에서 읽었는지, 아니면 문서에 없어 비워 둔 것인지. "inferred"라는
+  // 이름은 실제로 날짜를 추정해 채우던 시절의 것이라 지금은 맞지 않는다 —
+  // 지금은 모르면 지어내지 않고 빈 문자열로 둔다.
+  dateBasis: "document" | "unknown";
+  /** 학기를 문서에서 읽었는지, 아니면 학생이 정해 줘야 하는지. */
+  periodBasis: "document" | "unknown";
 };
 
 export type SchoolRecordParseResult = {
@@ -43,13 +48,18 @@ export type SchoolRecordPeriod = {
 type SeteukReadingActivity = {
   author?: unknown;
   grade?: unknown;
+  rank?: unknown;
   semester?: unknown;
   subject?: unknown;
   title?: unknown;
 };
 
 type SeteukAcademicPerformance = {
+  // 백엔드가 주는 이름은 achievement_grade다. 예전에는 achievement로 읽어서 성적이
+  // 한 건도 검토 화면에 오르지 못했고, "교과 성적을 찾지 못했습니다" 경고만 떴다.
+  achievement_grade?: unknown;
   achievement?: unknown;
+  raw_score?: unknown;
   category?: unknown;
   grade?: unknown;
   rank?: unknown;
@@ -158,18 +168,6 @@ function periodFromDate(date: string, academicStartYear: number): SchoolRecordPe
   return { grade, semester };
 }
 
-function inferredDate(baseYear: number, grade: number, semester: number, category: SchoolRecordCategory) {
-  const year = baseYear + grade - 1;
-  const monthDays: Record<SchoolRecordCategory, [string, string]> = {
-    상장: ["07-12", "12-12"],
-    활동: ["06-18", "11-25"],
-    봉사: ["05-10", "10-15"],
-    독서: ["04-18", "09-24"],
-    시험: ["07-05", "12-06"],
-  };
-  return `${year}-${monthDays[category][semester === 1 ? 0 : 1]}`;
-}
-
 function entryTitle(line: string, category: SchoolRecordCategory, subject: string) {
   const withoutDate = line.replace(/(?:(?:20\d{2})\s*[.\-/년]\s*)?\d{1,2}\s*[.\-/월]\s*\d{1,2}(?:\s*일)?/g, "");
   const withoutSubject = withoutDate.replace(subject, "").replace(/^\s*[:：·\-]\s*/, "").trim();
@@ -202,20 +200,31 @@ function gradeValue(value: unknown) {
 
 function semesterValue(value: unknown) {
   const semester = Number(value);
-  return semester === 1 || semester === 2 ? semester : 2;
+  // 모를 때 2학기로 단정하던 것을 1학기로 바꿨다. 어느 쪽이든 추측이지만, 학생이
+  // 고칠 대상이라는 사실은 periodBasis로 따로 알린다 — 예전에는 확신 있는 오답이
+  // 조용히 들어갔다.
+  return semester === 1 || semester === 2 ? semester : 1;
 }
 
-function apiActivityCategory(item: SeteukActivity): SchoolRecordCategory {
-  const source = [
-    textValue(item.activity_category),
-    textValue(item.activity_name),
-    textValue(item.description),
-    Array.isArray(item.keywords) ? item.keywords.filter((value): value is string => typeof value === "string").join(" ") : "",
-  ].join(" ");
-  if (/수상|상장|우수상|표창/.test(source)) return "상장";
-  if (/봉사/.test(source)) return "봉사";
-  if (/독서|도서|책을|읽고/.test(source)) return "독서";
-  if (/시험|중간고사|기말고사/.test(source)) return "시험";
+/** 문서가 학기를 말해 주지 않았는지. 검토 화면이 학생에게 물어야 할 항목을 가른다. */
+function periodIsKnown(value: unknown) {
+  const semester = Number(value);
+  return semester === 1 || semester === 2;
+}
+
+/**
+ * 활동 영역에서 온 기록의 갈래.
+ *
+ * 예전에는 이름·설명·키워드를 이어 붙여 "수상|상장|봉사|독서"를 찾아 분류했다.
+ * 부분 문자열 매칭이라 엉뚱한 곳에 걸린다 — 실제로 산업체 견학 활동의 설명에 있던
+ * "영**상장**치"가 상장으로 읽혀, 수상경력에 견학 활동이 올라갔다.
+ *
+ * 추측할 이유가 없다. 백엔드가 수상·봉사·독서·성적을 각자의 영역으로 이미 나눠서
+ * 주므로, activities에 담겨 온 것은 정의상 활동이다. 그 안의 activity_category
+ * (자율활동·동아리활동·진로활동·과목세부특기사항·행동특성및종합의견) 중 어느 것도
+ * 다른 갈래에 속하지 않는다.
+ */
+function apiActivityCategory(_item: SeteukActivity): SchoolRecordCategory {
   return "활동";
 }
 
@@ -227,92 +236,9 @@ function isSeteukAnalysisResult(value: unknown): value is SeteukAnalysisResult {
   );
 }
 
-export function parseSchoolRecordText(
-  rawText: string,
-  options: { fileName: string; totalPages: number; academicStartYear: number },
-): SchoolRecordParseResult {
-  const structuredText = rawText
-    .replace(/(20\d{2})\s*[.]\s*(\d{1,2})\s*[.]\s*(\d{1,2})\s*[.]?/g, "\n$1-$2-$3 ")
-    .replace(/([1-3]\s*학년\s*[1-2]\s*학기)/g, "\n$1\n")
-    .replace(/(교과학습발달상황|세부능력 및 특기사항|독서활동상황|수상경력|창의적 체험활동상황|행동특성 및 종합의견)/g, "\n$1\n")
-    .replace(/([함됨임음다])\.\s+/g, "$1.\n");
-  const lines = structuredText
-    .split(/\r?\n/)
-    .map(cleanLine)
-    .filter((line) => line.length >= 2);
-  const courses = new Map<string, SchoolRecordCourse>();
-  const entries = new Map<string, SchoolRecordDraft>();
-  let grade = 1;
-  let semester = 1;
-  let section = "";
-
-  lines.forEach((line, lineIndex) => {
-    const gradeMatch = line.match(/([1-3])\s*학년/);
-    const semesterMatch = line.match(/([1-2])\s*학기/);
-    if (gradeMatch) grade = Number(gradeMatch[1]);
-    if (semesterMatch) semester = Number(semesterMatch[1]);
-    if (/^[1-3]\s*학년\s*[1-2]\s*학기$/.test(line)) {
-      section = "";
-      return;
-    }
-    if (/수상경력/.test(line)) section = "수상";
-    else if (/독서활동상황/.test(line)) section = "독서";
-    else if (/세부능력 및 특기사항/.test(line)) section = "세특";
-    else if (/창의적 체험활동/.test(line)) section = "창체";
-    else if (/교과학습발달상황/.test(line)) section = "교과";
-    else if (SECTION_TITLES.test(line)) section = "";
-
-    if (SECTION_TITLES.test(line) && line.length < 35) return;
-    const foundSubjects = ["교과", "세특", "독서"].includes(section)
-      ? SUBJECTS.filter((subject) => line.includes(subject))
-      : [];
-    foundSubjects.forEach((subject) => {
-      const id = `${grade}-${semester}-${subject}`;
-      courses.set(id, { id, grade, semester, subject });
-    });
-
-    const category = detectCategory(line, section);
-    if (!category) return;
-    const subject = detectSubject(line);
-    const title = entryTitle(line, category, subject);
-    const fallbackYear = options.academicStartYear + grade - 1;
-    const documentDate = extractDocumentDate(line, fallbackYear);
-    const id = keyFor(grade, semester, subject, title);
-    if (entries.has(id)) return;
-    entries.set(id, {
-      id: `record-${lineIndex}-${id}`,
-      selected: true,
-      grade,
-      semester,
-      category,
-      subject,
-      title,
-      summary: line.slice(0, 280),
-      completedAt: documentDate ?? inferredDate(options.academicStartYear, grade, semester, category),
-      confidence: documentDate ? 92 : subject === "교과 외 활동" ? 58 : 76,
-      dateBasis: documentDate ? "document" : "inferred",
-    });
-  });
-
-  const warnings: string[] = [];
-  if (!courses.size) warnings.push("과목명을 충분히 찾지 못했습니다. PDF가 스캔 이미지라면 OCR이 필요할 수 있습니다.");
-  if (!entries.size) warnings.push("자동 배치할 활동을 찾지 못했습니다. 텍스트형 PDF인지 확인해주세요.");
-  if ([...entries.values()].some((entry) => entry.dateBasis === "inferred")) {
-    warnings.push("생기부에 정확한 날짜가 없는 항목은 학기 안의 임시 날짜에 배치했습니다. 반영 전에 수정할 수 있습니다.");
-  }
-
-  return {
-    fileName: options.fileName,
-    totalPages: options.totalPages,
-    extractedCharacters: rawText.length,
-    // Keep every deduplicated course and activity. The review screen lets the
-    // user deselect records before import, so truncating here would silently
-    // hide valid school-record evidence.
-    courses: [...courses.values()],
-    entries: [...entries.values()],
-    warnings,
-  };
-}
+// 생기부 파싱은 백엔드 Python 하이브리드 파서 하나로 통일했다(T-1). 여기 있던
+// TypeScript 파서 parseSchoolRecordText는 그래서 제거했다 — 원본은
+// docs/reference/school-record-parser.ts와 main 히스토리에 있다.
 
 export function parseSchoolRecordJson(
   jsonData: unknown,
@@ -357,17 +283,20 @@ export function parseSchoolRecordJson(
           subject,
           title: `${title} (${author})`,
           summary: `${author} 저. ${subject} 관련 독서 활동.`,
-          completedAt: inferredDate(academicStartYear, grade, semester, "독서"),
+          completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
           confidence: 100,
-          dateBasis: "inferred",
+          dateBasis: "unknown",
+          periodBasis: "document",
         });
       }
     }
   });
 
   (result.academic_performance ?? []).forEach((item, index) => {
-    const achievement = textValue(item.achievement);
-    if (achievement) {
+    const achievement = textValue(item.achievement_grade) || textValue(item.achievement);
+    // 성취도가 비어 있어도 석차나 원점수가 있으면 성적으로서 의미가 있다 — P 과목처럼
+    // 성취도만 없는 경우가 실제로 있다.
+    if (achievement || item.rank || item.raw_score != null) {
       const grade = gradeValue(item.grade);
       const semester = semesterValue(item.semester);
       const subject = textValue(item.subject, "공통");
@@ -381,7 +310,7 @@ export function parseSchoolRecordJson(
       const entryId = keyFor(grade, semester, subject, title);
       const rank = textValue(item.rank);
       const units = textValue(item.units, "-");
-      const summary = `성취도: ${achievement}, 석차등급: ${rank ? `${rank}등급` : "석차없음"}, 단위: ${units}`;
+      const summary = `성취도: ${achievement || "-"}, 석차등급: ${rank ? `${rank}등급` : "석차없음"}, 단위: ${units}`;
 
       if (!entries.has(entryId)) {
         entries.set(entryId, {
@@ -393,9 +322,10 @@ export function parseSchoolRecordJson(
           subject,
           title,
           summary,
-          completedAt: inferredDate(academicStartYear, grade, semester, "시험"),
+          completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
           confidence: 100,
-          dateBasis: "inferred",
+          dateBasis: "unknown",
+          periodBasis: "document",
         });
       }
     }
@@ -424,9 +354,10 @@ export function parseSchoolRecordJson(
       subject,
       title,
       summary: rank ? `${name}에서 ${rank}을 수상했습니다.` : `${name} 수상 기록입니다.`,
-      completedAt: parsedDate ?? inferredDate(academicStartYear, grade, semester, "상장"),
+      completedAt: parsedDate ?? "",  // 문서에 날짜가 없으면 지어내지 않는다.
       confidence: parsedDate ? 100 : 86,
-      dateBasis: parsedDate ? "document" : "inferred",
+      dateBasis: parsedDate ? "document" : "unknown",
+      periodBasis: "document",
     });
   });
 
@@ -459,18 +390,22 @@ export function parseSchoolRecordJson(
       subject,
       title,
       summary: summary || "봉사활동 기록입니다.",
-      completedAt: parsedDate ?? inferredDate(academicStartYear, grade, semester, "봉사"),
+      completedAt: parsedDate ?? "",  // 문서에 날짜가 없으면 지어내지 않는다.
       confidence: parsedDate ? 100 : 86,
-      dateBasis: parsedDate ? "document" : "inferred",
+      dateBasis: parsedDate ? "document" : "unknown",
+      periodBasis: "document",
     });
   });
 
   (result.activities ?? []).forEach((item, index) => {
     const title = textValue(item.activity_name);
     const summary = textValue(item.description);
-    if (!title || !summary) return;
+    // 설명이 없다고 버리지 않는다 — 모델이 description을 빠뜨린 항목도 이름은
+    // 멀쩡하고, 여기서 버리면 학생이 존재조차 모른 채 사라진다.
+    if (!title) return;
     const grade = gradeValue(item.grade);
     const semester = semesterValue(item.semester);
+    const periodKnown = periodIsKnown(item.semester);
     const category = apiActivityCategory(item);
     const sourceCategory = textValue(item.activity_category, "교과 외 활동");
     const subject = textValue(item.subject, sourceCategory);
@@ -485,9 +420,10 @@ export function parseSchoolRecordJson(
       subject,
       title,
       summary,
-      completedAt: inferredDate(academicStartYear, grade, semester, category),
-      confidence: 96,
-      dateBasis: "inferred",
+      completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
+      confidence: periodKnown ? 96 : 60,
+      dateBasis: "unknown",
+      periodBasis: periodKnown ? "document" : "unknown",
     });
   });
 
@@ -506,9 +442,10 @@ export function parseSchoolRecordJson(
       subject: course.subject,
       title,
       summary: "성취도 세부값은 확인되지 않았지만, 학생부에서 교과 기록이 인식되었습니다. 반영 전 실제 성적 정보로 보완할 수 있습니다.",
-      completedAt: inferredDate(academicStartYear, course.grade, course.semester, "시험"),
+      completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
       confidence: 62,
-      dateBasis: "inferred",
+      dateBasis: "unknown",
+      periodBasis: "document",
     });
   });
 
@@ -519,6 +456,15 @@ export function parseSchoolRecordJson(
   if (!courses.size) warnings.push("교과 성적 또는 독서 과목을 찾지 못했습니다.");
   if (!entries.size) warnings.push("분석 결과에서 반영 가능한 학생부 활동을 찾지 못했습니다.");
   if (entries.size) warnings.push("학생부 API는 활동의 정확한 날짜를 제공하지 않아 학기 안의 임시 날짜에 배치했습니다. 반영 전에 수정할 수 있습니다.");
+  // 생기부의 세특은 과목당 한 덩어리로 쓰여 있어 어느 활동이 몇 학기인지 문서가
+  // 말해 주지 않는다. 예전에는 조용히 2학기로 정해 버렸는데, 그러면 학생이 고칠
+  // 대상이 있다는 것조차 모른다.
+  const unknownPeriod = [...entries.values()].filter((e) => e.periodBasis === "unknown").length;
+  if (unknownPeriod) {
+    warnings.push(
+      `생활기록부가 학기를 밝히지 않은 활동이 ${unknownPeriod}개 있습니다. 1학기로 두었으니 반영 전에 확인해주세요.`,
+    );
+  }
 
   return {
     fileName: "structured_data.json",
