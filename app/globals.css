@@ -125,38 +125,43 @@
 /* ======================================================
    2. RESET & BASE
    ====================================================== */
-*, *::before, *::after { box-sizing: border-box; }
+/* 요소 리셋은 base 레이어에 둔다 — 레이어 밖에 두면 Tailwind 유틸리티(utilities
+   레이어)를 이겨서 `bg-brand-600` 같은 클래스가 button에 먹지 않는다.
+   컴포넌트 클래스(.btn 등)는 레이어 밖에 그대로 둬서 유틸리티보다 우선한다. */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
 
-html { background: var(--bg); }
+  html { background: var(--bg); }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 14px;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,h2,h3,h4,h5,h6 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  p { margin: 0; }
+
+  button, input, textarea, select { font: inherit; color: inherit; }
+
+  button { cursor: pointer; border: none; background: none; }
+
+  img, svg { display: block; max-width: 100%; }
+
+  a { color: inherit; text-decoration: none; }
 }
-
-h1,h2,h3,h4,h5,h6 {
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1.2;
-  margin: 0;
-}
-
-p { margin: 0; }
-
-button, input, textarea, select { font: inherit; color: inherit; }
-
-button { cursor: pointer; border: none; background: none; }
-
-img, svg { display: block; max-width: 100%; }
-
-a { color: inherit; text-decoration: none; }
 
 /* ======================================================
    3. SHARED COMPONENTS

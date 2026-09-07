@@ -126,12 +126,16 @@ export async function downloadFile(path: string, retry = true): Promise<Blob> {
   return await response.blob();
 }
 
-export async function login(email: string, password: string): Promise<void> {
+/**
+ * `remember`가 false면 refresh 토큰을 저장하지 않는다 — access 토큰이 만료되면
+ * 다시 로그인해야 한다는 뜻이고, 그게 "로그인 상태 유지"를 끈다는 말의 실제 의미다.
+ */
+export async function login(email: string, password: string, remember = true): Promise<void> {
   const body = await api<{ access_token: string; refresh_token: string }>("/auth/login", {
     method: "POST",
     body: { email, password },
   });
-  tokens.set(body.access_token, body.refresh_token);
+  tokens.set(body.access_token, remember ? body.refresh_token : null);
 }
 
 export async function signup(email: string, password: string): Promise<void> {
