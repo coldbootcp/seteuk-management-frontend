@@ -8,6 +8,7 @@ import { ConsultationGate } from "./consultation-view";
 import { ChatView } from "./chat-view";
 import { TimetableView } from "./timetable-view";
 import { GradesView } from "./grades-view";
+import { DashboardView } from "./dashboard-view";
 import { DEFAULT_TIMETABLES, createEmptyTimetable, type TimetableConfig } from "./types/academic";
 import type { CSSProperties } from "react";
 import type {
@@ -39,7 +40,7 @@ import {
 /* ──────────────────────────────────────────────
    Types
    ────────────────────────────────────────────── */
-type TabId = "overview" | "roadmap" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
+type TabId = "overview" | "dashboard" | "roadmap" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
@@ -4172,6 +4173,18 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       ),
     },
     {
+      id: "dashboard",
+      label: "대시보드",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="9" rx="1.5" />
+          <rect x="14" y="3" width="7" height="5" rx="1.5" />
+          <rect x="14" y="12" width="7" height="9" rx="1.5" />
+          <rect x="3" y="16" width="7" height="5" rx="1.5" />
+        </svg>
+      ),
+    },
+    {
       id: "roadmap",
       label: "3개년 로드맵",
       icon: (
@@ -4407,6 +4420,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
         </header>
 
         <div className="product-content">
+          {tab === "dashboard" && <DashboardView workspace={workspace} onNavigate={setTab} />}
           {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} onWorkspace={onWorkspace} />}
           {tab === "roadmap"    && <RoadmapView workspace={workspace} onWorkspace={onWorkspace} onConvertPlan={startActivity} />}
           {tab === "timetable"  && (
