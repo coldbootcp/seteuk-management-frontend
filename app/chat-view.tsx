@@ -10,6 +10,7 @@ import {
   type Conversation,
   type StoredMessage,
 } from "../lib/chat";
+import { MarkdownText } from "./markdown-text";
 
 type Bubble = {
   id: string;
@@ -224,7 +225,7 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
             bubbles.map((bubble) => (
               <div key={bubble.id} className={`chat-row ${bubble.role}`}>
                 <div className="chat-bubble">
-                  {bubble.content}
+                  {bubble.role === "assistant" ? <MarkdownText text={bubble.content} /> : bubble.content}
                   {bubble.streaming && !bubble.content && <em>생각하는 중…</em>}
                 </div>
                 {bubble.actions.length > 0 && (

@@ -13,6 +13,7 @@ import {
   type ChatAction,
 } from "../lib/chat";
 import type { ConsultationSession, ConsultationStatus } from "../lib/product-harness";
+import { MarkdownText } from "./markdown-text";
 
 type DiagnosisPreQuestion = { key: string; prompt: string; options: string[]; allow_custom: boolean };
 
@@ -208,14 +209,29 @@ export function ConsultationGate({
 
   return (
     <div className="consultation-gate">
-      <header className="consultation-gate-head">
-        <span className="kicker">{kindLabel}</span>
-        <h1>
-          {status.requiredKind === "semester_review"
-            ? "이번 학기를 점검하고 다음 학기 목표를 정해요"
-            : "3개년 큰 계획을 함께 세워요"}
+      <header className="text-center max-w-3xl mx-auto space-y-3 pb-2">
+        <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-50 border border-brand-200/80 text-brand-600 text-xs font-bold">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+          세특연구소 AI 정밀 학업 진단 · {kindLabel}
+        </span>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-950 tracking-tight leading-snug">
+          {status.requiredKind === "semester_review" ? (
+            <>
+              이번 학기를 점검하고
+              <br />
+              <span className="text-brand-600">다음 학기 목표를 함께 정해요</span>
+            </>
+          ) : (
+            <>
+              맞춤 계획 설계를 위해
+              <br />
+              <span className="text-brand-600">AI 정밀 학업 진단</span>을 먼저 진행합니다
+            </>
+          )}
         </h1>
-        <p>이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요.</p>
+        <p className="text-sm text-gray-600">
+          이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요.
+        </p>
       </header>
 
       {diagnosisError && <div className="banner banner-error">{diagnosisError}</div>}
@@ -260,25 +276,43 @@ export function ConsultationGate({
       )}
 
       {diagnosis && (
-        <section className="consultation-report">
-          {diagnosis.headline_comment && <p className="consultation-headline">{diagnosis.headline_comment}</p>}
-          <div className="consultation-report-grid">
-            <div>
-              <strong>강점</strong>
-              <ul>{diagnosis.strengths.map((s) => <li key={s}>{s}</li>)}</ul>
+        <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-5">
+          <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+            <span className="text-base">🔬</span>
+            <h2 className="text-base font-extrabold text-gray-950">AI 정밀 진단 리포트</h2>
+          </div>
+
+          {diagnosis.headline_comment && (
+            <div className="p-4 rounded-xl bg-gradient-to-r from-brand-50/70 to-blue-50/40 border border-brand-100/80">
+              <p className="text-xs md:text-sm font-semibold text-gray-800 leading-relaxed">
+                {diagnosis.headline_comment}
+              </p>
             </div>
-            <div>
-              <strong>약점</strong>
-              <ul>{diagnosis.weaknesses.map((s) => <li key={s}>{s}</li>)}</ul>
-            </div>
-            <div>
-              <strong>기회</strong>
-              <ul>{diagnosis.opportunities.map((s) => <li key={s}>{s}</li>)}</ul>
-            </div>
-            <div>
-              <strong>반복되는 패턴</strong>
-              <ul>{diagnosis.threats.map((s) => <li key={s}>{s}</li>)}</ul>
-            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { label: "강점 (Strengths)", items: diagnosis.strengths, dot: "bg-emerald-500", box: "bg-emerald-50/50 border-emerald-200/70" },
+              { label: "약점 (Weaknesses)", items: diagnosis.weaknesses, dot: "bg-red-500", box: "bg-red-50/40 border-red-200/70" },
+              { label: "기회 (Opportunities)", items: diagnosis.opportunities, dot: "bg-brand-500", box: "bg-blue-50/50 border-blue-200/70" },
+              { label: "반복되는 패턴 (Threats)", items: diagnosis.threats, dot: "bg-amber-500", box: "bg-amber-50/50 border-amber-200/70" },
+            ].map((group) => (
+              <div className={`p-4 rounded-xl border space-y-2 ${group.box}`} key={group.label}>
+                <div className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${group.dot}`} />
+                  <strong className="text-xs font-extrabold text-gray-900">{group.label}</strong>
+                </div>
+                {group.items.length ? (
+                  <ul className="space-y-1.5">
+                    {group.items.map((item) => (
+                      <li className="text-xs text-gray-600 leading-relaxed" key={item}>· {item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-gray-400">해당 항목이 없습니다.</p>
+                )}
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -296,7 +330,7 @@ export function ConsultationGate({
               bubbles.map((bubble) => (
                 <div key={bubble.id} className={`chat-row ${bubble.role}`}>
                   <div className="chat-bubble">
-                    {bubble.content}
+                    {bubble.role === "assistant" ? <MarkdownText text={bubble.content} /> : bubble.content}
                     {bubble.streaming && !bubble.content && <em>생각하는 중…</em>}
                   </div>
                   {bubble.actions.length > 0 && (
