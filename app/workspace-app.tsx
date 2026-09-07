@@ -232,7 +232,7 @@ function buildClarificationQuestions(
       id: "grade_conflict",
       label: "학년 확인",
       question: `학생부 기준 현재 상태 후보는 ${gradeLabel(expectedGrade)}인데, 입력값은 ${gradeLabel(form.grade)}입니다. 어느 쪽이 맞나요?`,
-      options: [`${gradeLabel(expectedGrade)} 기준으로 로드맵 생성`, `${gradeLabel(form.grade)} 기준 유지`, "학년은 유지하되 학생부는 확정 기록으로만 반영"],
+      options: [`${gradeLabel(expectedGrade)} 기준으로 계획 세우기`, `${gradeLabel(form.grade)} 기준 유지`, "학년은 유지하되 학생부는 확정 기록으로만 반영"],
     });
   }
 
@@ -247,7 +247,7 @@ function buildClarificationQuestions(
     questions.push({
       id: "narrative",
       label: "서사 방향",
-      question: `${career} 로드맵의 전체 서사를 어떤 방향으로 잡을까요?`,
+      question: `${career} 탐구의 전체 서사를 어떤 방향으로 잡을까요?`,
       options: ["넓게 탐색하며 진로를 좁히기", "초반부터 희망 진로 중심으로 강하게 밀기", "교과 성취와 독서 기반을 먼저 쌓기"],
     });
   }
@@ -269,7 +269,7 @@ function toProfileInput(form: ProfileForm): ProfileInput {
     form.interests,
     useSpecificGoal && form.knowledgeLevel && `관련 배경지식 수준: ${form.knowledgeLevel}`,
     useSpecificGoal && form.concreteResearchQuestion && `핵심 탐구 질문: ${form.concreteResearchQuestion}`,
-    form.roadmapDesignNotes && `로드맵 설계 전 확인 답변:\n${form.roadmapDesignNotes}`,
+    form.roadmapDesignNotes && `계획 설계 전 확인 답변:\n${form.roadmapDesignNotes}`,
   ].filter(Boolean).join("\n");
   return {
     name: form.name.trim(), grade: profileGradeValue(form), semester: profileSemesterValue(form),
@@ -462,7 +462,7 @@ function PlanDetailModal({ plan, node, courseSubjects, onClose, onConvertPlan }:
         <div className="modal-body plan-detail-body">
           <p className="plan-detail-note">아래 내용은 학교에서 생긴 수행평가·발표·대회 등의 기회에 맞춰 골라 쓰는 추천입니다. 특정 형식을 반드시 해야 한다는 뜻은 아닙니다.</p>
           <section>
-            <h3>로드맵에서의 역할</h3>
+            <h3>이번 학기 목표에서의 역할</h3>
             <p>{guide.role}</p>
           </section>
           <section>
@@ -702,7 +702,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     setClarificationBlocked(false);
     if (recordOnlyMode) {
       setClarificationQuestions([]);
-      setClarificationSummary("졸업자 학생부로 확인되어 로드맵은 만들지 않고, 분석·정리한 학생부 기록만 보여드립니다.");
+      setClarificationSummary("졸업자 학생부로 확인되어 계획은 만들지 않고, 분석·정리한 학생부 기록만 보여드립니다.");
       setClarificationBlocked(true);
       setClarificationComplete(false);
       setStep(3);
@@ -774,7 +774,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
       setClarificationComplete(false);
       setClarificationSummary(onboardingRecordParse
         ? "학생부의 기존 기록과 Step1·2 입력을 기준으로 확인 질문을 만들었습니다."
-        : "Step1·2 입력을 기준으로 로드맵 구조 확인 질문을 만들었습니다.");
+        : "Step1·2 입력을 기준으로 확인 질문을 만들었습니다.");
       setStep(3);
     } finally {
       setClarificationBusy(false);
@@ -859,8 +859,8 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
       setOnboardingRecordAutoFields(true);
       setOnboardingRecordContext({ expectedGrade: expectedCurrentGrade, studentName });
       setOnboardingRecordMessage(completedGrade && completedGrade >= 3
-        ? "3학년까지 확정된 졸업자 학생부로 확인했습니다. 로드맵은 만들지 않고, 분석·정리한 학생부 기록을 보여드립니다."
-        : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 3개년 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}`);
+        ? "3학년까지 확정된 졸업자 학생부로 확인했습니다. 계획은 만들지 않고, 분석·정리한 학생부 기록을 보여드립니다."
+        : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}`);
     } catch (e) {
       if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : "학생부를 분석하지 못했습니다. 건너뛰고 시작해도 됩니다.");
@@ -951,7 +951,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
               <span className="ob-feature-icon">1</span>
               <div className="ob-feature-text">
                 <strong>학생부가 있으면 먼저 봅니다</strong>
-                <small>이미 쌓인 기록이 로드맵의 출발점입니다</small>
+                <small>이미 쌓인 기록이 계획의 출발점입니다</small>
               </div>
             </div>
             <div className="ob-feature">
@@ -982,13 +982,13 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
         <main className="ob-form-panel">
           <div className="ob-form-header">
             <span className="kicker">NEW STUDENT ONBOARDING · Step {step} / 3</span>
-            <h2>{step === 1 ? "학생부와 관심분야" : step === 2 ? "탐구 설계와 실행 전략" : "로드맵 설계 전 확인"}</h2>
+            <h2>{step === 1 ? "학생부와 관심분야" : step === 2 ? "탐구 설계와 실행 전략" : "진단 상담 전 확인"}</h2>
             <p>
               {step === 1
                 ? "학생부 PDF가 있으면 먼저 올려주세요. 없거나 지금 올리기 싫다면 건너뛰어도 됩니다."
                 : step === 2
                   ? "성격 검사가 아니라, 관심분야를 어떤 탐구와 활동으로 증명할지 정합니다."
-                  : "학생부와 입력값을 바탕으로 로드맵 방향을 한 번 더 맞춥니다."}
+                  : "학생부와 입력값을 바탕으로 탐구 방향을 한 번 더 맞춥니다."}
             </p>
           </div>
 
@@ -1107,7 +1107,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
                         </div>
                       </div>
                       <div className="ai-suggestion-group">
-                        <small>로드맵 큰 축 후보</small>
+                        <small>탐구 큰 축 후보</small>
                         <div className="suggestion-chip-row">
                           {suggestBusy && !suggestions
                             ? Array.from({ length: 6 }).map((_, index) => <i className="suggestion-skeleton is-wide" key={index} />)
@@ -1123,7 +1123,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
                     <input id="ob-majors" value={form.targetMajors} onChange={(e) => update("targetMajors", e.target.value)} placeholder="예: 컴퓨터공학, 의공학, 심리학, 교육학" />
                   </div>
                   <div className="form-field">
-                    <label htmlFor="ob-interests">로드맵에서 다룰 큰 관심 축</label>
+                    <label htmlFor="ob-interests">앞으로 다룰 큰 관심 축</label>
                     <textarea id="ob-interests" value={form.interests} onChange={(e) => update("interests", e.target.value)} placeholder="AI 추천 후보를 눌러 추가하거나, 6학기 동안 다뤄보고 싶은 큰 방향을 적어주세요." />
                   </div>
                 </div>
@@ -1139,7 +1139,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
                     <label>현재 진로가 어느 정도 정해졌나요?</label>
                     <div className="clarity-choice-row is-two">
                       {[
-                        { value: "넓은 분야만 정한 단계", label: "넓은 분야만 있음", desc: "예: 의료, AI, 교육. 추가 질문 없이 로드맵에서 좁혀갑니다." },
+                        { value: "넓은 분야만 정한 단계", label: "넓은 분야만 있음", desc: "예: 의료, AI, 교육. 추가 질문 없이 상담에서 좁혀갑니다." },
                         { value: "구체적인 학과나 직무까지 정한 단계", label: "구체 목표가 있음", desc: "학과·직무·주제가 꽤 명확" },
                       ].map((item) => (
                         <button
@@ -1158,7 +1158,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
                   {form.careerResolution === "구체적인 학과나 직무까지 정한 단계" && (
                     <div className="branch-question-card">
                       <div className="branch-question-head">
-                        <strong>관련 배경지식에 맞춰 로드맵 난이도를 조절합니다</strong>
+                        <strong>관련 배경지식에 맞춰 탐구 난이도를 조절합니다</strong>
                         <small>배경지식이 있더라도 기초부터 차근차근 쌓고 싶다면 ‘하’를 선택하세요.</small>
                       </div>
                       <div className="form-grid-1">
@@ -1166,7 +1166,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
                           <label>관련 지식이 어느 정도 있나요?</label>
                           <div className="knowledge-choice-row">
                             {[
-                              { value: "하", label: "하", desc: "기초 개념부터 로드맵을 쌓고 싶음" },
+                              { value: "하", label: "하", desc: "기초 개념부터 차근히 쌓고 싶음" },
                               { value: "중", label: "중", desc: "기본 개념은 알고, 적용 활동을 해보고 싶음" },
                               { value: "상", label: "상", desc: "심화 탐구·차별화 활동부터 설계 가능" },
                             ].map((item) => (
@@ -1211,7 +1211,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
               <div className="ob-section">
                 <div className="ob-section-title">
                   <small>현실 조건</small>
-                  <strong>로드맵을 짤 때 반드시 피해야 할 제약</strong>
+                  <strong>계획을 짤 때 반드시 피해야 할 제약</strong>
                 </div>
                 <div className="form-grid-1">
                   <div className="form-field form-span-2">
@@ -1231,11 +1231,11 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
               <div className="ob-section">
                 <div className="ob-section-title">
                   <small>AI 확인 질문</small>
-                  <strong>로드맵을 만들기 전에 방향 맞추기</strong>
+                  <strong>상담을 시작하기 전에 방향 맞추기</strong>
                 </div>
                 <div className="form-grid-1">
                   <p className="onboarding-record-note">
-                    AI가 현재 입력을 바탕으로 1차 로드맵 가설을 내부에서 만들었습니다. 그 가설의 학기 전략·대표 활동·증거 방식이 달라질 수 있는 질문만 확인하고, 답변 뒤에도 필요한 질문이 있으면 계속 이어갑니다.
+                    AI가 현재 입력에서 방향이 달라질 수 있는 질문만 골라 확인합니다. 답변 뒤에도 필요한 질문이 있으면 계속 이어갑니다.
                   </p>
                   {clarificationSummary && (
                     <div className={`banner ${clarificationBlocked ? "banner-warning" : "banner-info"}`}>
@@ -1339,7 +1339,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
                   onClick={startClarification}
                   type="button"
                 >
-                  {onboardingRecordBusy ? "학생부 분석이 끝나면 확인 가능" : clarificationBusy ? "1차 로드맵 가설 만드는 중…" : "다음: 설계 방향 확인 →"}
+                  {onboardingRecordBusy ? "학생부 분석이 끝나면 확인 가능" : clarificationBusy ? "확인 질문 만드는 중…" : "다음: 설계 방향 확인 →"}
                 </button>
               </>
             ) : (
@@ -1579,7 +1579,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
         {/* 배지는 실제로 센 값만 보여준다 — 셀 수 없는 자리는 배지를 아예 그리지 않는다. */}
         {[
           {
-            label: "로드맵 진행",
+            label: "학기 진행",
             value: `${completed} / 6`,
             desc: "완료 노드",
             badge: `${Math.round((completed / 6) * 100)}%`,
@@ -1795,7 +1795,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
           <div className="flex items-start justify-between gap-2 pb-3 border-b border-gray-100">
             <div className="min-w-0">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">ACTIVE ROADMAP NODE</span>
-              <h3 className="text-base font-extrabold text-gray-950 mt-0.5 leading-snug">{active?.title ?? "로드맵 회고"}</h3>
+              <h3 className="text-base font-extrabold text-gray-950 mt-0.5 leading-snug">{active?.title ?? "이번 학기 회고"}</h3>
             </div>
             {active && <StatusBadge status={active.status} />}
           </div>
@@ -1846,7 +1846,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
         ) : (
           <div className="text-center py-8">
             <strong className="block text-xs font-bold text-gray-700">아직 활동이 없습니다</strong>
-            <p className="text-[11px] text-gray-400 mt-1">첫 활동을 추가하면 DNA와 로드맵 정합이 갱신됩니다.</p>
+            <p className="text-[11px] text-gray-400 mt-1">첫 활동을 추가하면 진단과 정합 판정이 갱신됩니다.</p>
           </div>
         )}
       </section>
@@ -2124,9 +2124,9 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       <div className="activity-form-card md:col-span-1">
         <h2>활동 간편 등록</h2>
         <div className="form-field" style={{ marginBottom: "14px" }}>
-          <label htmlFor="act-plan">연결할 로드맵 활동 주제 (선택 · 변경 가능)</label>
+          <label htmlFor="act-plan">연결할 이번 학기 주제 (선택 · 변경 가능)</label>
           <select id="act-plan" value={planEventId} onChange={(e) => setPlanEventId(e.target.value)}>
-            <option value="">로드맵과 별개의 실제 활동</option>
+            <option value="">제안 주제와 별개의 활동</option>
             {selectablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.subject} · {planTitleWithPriority(plan.title, plan.priority)}{plan.isCompleted ? " (완료)" : ""}{showAllPlanOptions ? ` (${plan.grade}학년 ${plan.semester}학기)` : ""}</option>)}
           </select>
           <label className="plan-options-toggle">
@@ -2166,7 +2166,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             <input id="act-date" type="date" value={form.completedAt} onChange={(e) => setForm({ ...form, completedAt: e.target.value })} />
           </div>
         </div>
-        {!currentSemesterCourseSubjects.length && <div className="banner banner-error" style={{ marginBottom: "14px" }}><strong>현재 학기 수강 과목을 먼저 등록해주세요.</strong><br />3개년 기록에서 현재 학기 노드를 누른 뒤, 우측 상단의 수강 과목에 실제 과목을 추가할 수 있습니다.</div>}
+        {!currentSemesterCourseSubjects.length && <div className="banner banner-error" style={{ marginBottom: "14px" }}><strong>현재 학기 수강 과목을 먼저 등록해주세요.</strong><br />[성적 관리] 또는 [시간표] 화면에서 이번 학기 과목을 추가하면 여기에서 고를 수 있습니다.</div>}
         <div className="form-field" style={{ marginBottom: "14px" }}>
           <label htmlFor="act-title">활동 제목</label>
           <input id="act-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="활동의 핵심을 한 문장으로" />
@@ -2249,7 +2249,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
                     <h3 className="text-sm font-semibold text-gray-900">{activity.title}</h3>
                     <p>{activity.summary}</p>
                     {activity.reflection && <div className="activity-reflection"><strong>배운 점과 느낀 점</strong><p>{activity.reflection}</p></div>}
-                    {activity.linkedPlanTitle && <small style={{ color: "var(--fg-muted)", display: "block", marginBottom: 8 }}>연결한 로드맵 주제: {activity.linkedPlanTitle}</small>}
+                    {activity.linkedPlanTitle && <small style={{ color: "var(--fg-muted)", display: "block", marginBottom: 8 }}>연결한 주제: {activity.linkedPlanTitle}</small>}
                     <div className="concept-tags">
                       {activity.concepts.map((c) => <span className="concept-tag" key={c}>{c}</span>)}
                     </div>
@@ -2384,7 +2384,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
               })}
               {adoptedIndexes.size > 0 && (
                 <p className="onboarding-record-note">
-                  계획으로 담은 주제는 완료하면 이 활동의 후속 기록으로 이어집니다. 계획 목록 화면은 아직 준비 중이라, 지금은 챗봇에게 "내 계획 보여줘"라고 물어보면 확인할 수 있습니다.
+                  계획으로 담은 주제는 완료하면 이 활동의 후속 기록으로 이어집니다. 계획 목록 화면은 아직 준비 중이라, 지금은 챗봇에게 &ldquo;내 계획 보여줘&rdquo;라고 물어보면 확인할 수 있습니다.
                 </p>
               )}
             </div>
@@ -2674,8 +2674,8 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
           <div className="form-field form-span-2">
             <label>현재 진로가 어느 정도 정해졌나요?</label>
             <div className="clarity-choice-row is-two">
-              <button className={`clarity-choice${form.careerResolution === "넓은 분야만 정한 단계" ? " is-active" : ""}`} onClick={() => updateCareerResolution("넓은 분야만 정한 단계")} type="button"><strong>넓은 분야만 있음</strong><small>세부 키워드는 로드맵에서 천천히 좁혀갑니다.</small></button>
-              <button className={`clarity-choice${hasSpecificCareerGoal(form) ? " is-active" : ""}`} onClick={() => updateCareerResolution("구체적인 학과나 직무까지 정한 단계")} type="button"><strong>구체 목표가 있음</strong><small>세부 키워드와 현재 지식을 로드맵에 반영합니다.</small></button>
+              <button className={`clarity-choice${form.careerResolution === "넓은 분야만 정한 단계" ? " is-active" : ""}`} onClick={() => updateCareerResolution("넓은 분야만 정한 단계")} type="button"><strong>넓은 분야만 있음</strong><small>세부 키워드는 상담에서 천천히 좁혀갑니다.</small></button>
+              <button className={`clarity-choice${hasSpecificCareerGoal(form) ? " is-active" : ""}`} onClick={() => updateCareerResolution("구체적인 학과나 직무까지 정한 단계")} type="button"><strong>구체 목표가 있음</strong><small>세부 키워드와 현재 지식을 계획에 반영합니다.</small></button>
             </div>
           </div>
           {hasSpecificCareerGoal(form) && <div className="form-field form-span-2">
@@ -3081,7 +3081,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               <span>로그아웃</span>
             </button>
             <div className="flex items-center justify-between text-[11px] text-gray-400 px-1 pt-0.5">
-              <span>로드맵 v{workspace.roadmap.version}</span>
+              <span>계획 v{workspace.roadmap.version}</span>
               <span>·</span>
               <span className="text-gray-400 font-mono text-[10px]">v{APP_VERSION}</span>
             </div>
