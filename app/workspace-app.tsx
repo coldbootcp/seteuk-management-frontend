@@ -1763,131 +1763,248 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
   return (
     <div className="overview-page">
       {/* Current Semester Plans */}
-      <section className="mission-hero">
-        <div className="mission-content">
-          <span className="kicker">THIS SEMESTER</span>
-          <h2>이번 학기 목표: {active?.objective ?? "목표 없음"}</h2>
-          <div className="mission-meta" style={{ marginTop: 12 }}>
-            {active?.competencyGoals.map(g => <span className="mission-meta-chip" key={g}>{g}</span>)}
-          </div>
-          
-          <div className="overview-plans" style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-              <h3 style={{ fontSize: "1rem", color: "var(--fg)" }}>이번 학기 활동 주제 제안</h3>
-              <small style={{ color: "var(--fg-muted)" }}>★ 먼저 검토하면 좋은 주제</small>
-            </div>
-            {active?.planEvents && active.planEvents.length > 0 ? (
-              active.planEvents.map((ev) => (
-                <div
-                  className="overview-plan-card"
-                  key={ev.id}
-                  onClick={() => setSelectedPlan(ev)}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedPlan(ev); } }}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div>
-                    <strong style={{ display: "block" }}>{planTitleWithPriority(ev.title, ev.priority)}{completedPlanIds.has(ev.id) && <small className="plan-completed-label">완료</small>}</strong>
-                    <small style={{ color: "var(--fg-muted)" }}>연결 과목 {ev.subject}</small>
-                    <p style={{ color: "var(--fg-muted)", margin: "6px 0 0", fontSize: "0.82rem", lineHeight: 1.5 }}>{ev.description || "이 학기의 목표와 연결되는 탐구 주제입니다."}</p>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-                    <button className="btn btn-secondary" onClick={(event) => { event.stopPropagation(); onConvertPlan({ title: ev.title, subject: ev.subject, planEventId: ev.id, roadmapNodeId: active.id }); }} type="button">이 주제를 실제 활동에 연결</button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p style={{ color: "var(--fg-muted)" }}>이번 학기에 제안된 활동 주제가 없습니다.</p>
+      <section className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200/80 shadow-xs space-y-6">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-brand-600 bg-brand-50 px-3 py-1 rounded-full border border-brand-200/60 inline-flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+              THIS SEMESTER · {workspace.profile.grade}학년 {workspace.profile.semester}학기
+            </span>
+            {workspace.profile.targetCareer && (
+              <span className="text-xs text-gray-500 font-semibold">
+                진로 집중: <strong className="text-gray-900 font-bold">{workspace.profile.targetCareer}</strong>
+              </span>
             )}
           </div>
 
+          <h2 className="text-xl md:text-2xl font-extrabold text-gray-950 tracking-tight leading-snug">
+            이번 학기 목표: <span className="text-brand-600">{active?.objective ?? "아직 목표가 없습니다"}</span>
+          </h2>
+
+          {active && active.competencyGoals.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {active.competencyGoals.map((goal) => (
+                <span className="px-3 py-1 rounded-lg bg-gray-50 border border-gray-200/90 text-xs font-semibold text-gray-700" key={goal}>
+                  {goal}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="pt-5 border-t border-gray-100 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-base">💡</span>
+              <h3 className="text-sm font-bold text-gray-950">이번 학기 활동 주제 제안</h3>
+              {active && (
+                <span className="text-xs text-gray-400">
+                  · {active.grade}-{active.semester}학기 목표에서 이어지는 주제
+                </span>
+              )}
+            </div>
+            <span className="text-xs font-bold text-amber-700 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200/80">
+              ★ 먼저 검토하면 좋은 주제
+            </span>
+          </div>
+
+          {active?.planEvents && active.planEvents.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {active.planEvents.map((ev) => {
+                const isCore = ev.priority === "core";
+                const isCompleted = completedPlanIds.has(ev.id);
+                return (
+                  <div
+                    className="p-4 rounded-xl border border-gray-200/90 bg-white hover:border-brand-400 hover:shadow-sm transition cursor-pointer flex flex-col justify-between gap-3 group"
+                    key={ev.id}
+                    onClick={() => setSelectedPlan(ev)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedPlan(ev); } }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded whitespace-nowrap ${isCore ? "bg-amber-100 text-amber-900 border border-amber-200" : "bg-gray-100 text-gray-700"}`}>
+                            {isCore ? "★ 최우선" : "선택 심화"}
+                          </span>
+                          {ev.subject && (
+                            <span className="text-[11px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded truncate">
+                              {ev.subject}
+                            </span>
+                          )}
+                        </div>
+                        {isCompleted && (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 whitespace-nowrap">
+                            <span>✓</span> 작성 완료
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="text-xs md:text-sm font-bold text-gray-950 group-hover:text-brand-600 transition leading-snug">
+                        {ev.title}
+                      </h4>
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        {ev.description || "이 학기의 목표와 연결되는 탐구 주제입니다."}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2 text-xs">
+                      <span className="text-gray-400 text-[11px]">클릭하여 상세 가이드 확인</span>
+                      <button
+                        className="px-2.5 py-1 rounded-lg bg-gray-50 hover:bg-brand-50 text-brand-600 hover:text-brand-700 font-bold text-xs border border-gray-200 hover:border-brand-200 transition whitespace-nowrap"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onConvertPlan({ title: ev.title, subject: ev.subject, planEventId: ev.id, roadmapNodeId: active.id });
+                        }}
+                        type="button"
+                      >
+                        이 주제를 실제 활동에 연결 →
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">이번 학기에 제안된 활동 주제가 없습니다.</p>
+          )}
         </div>
       </section>
 
       {/* Metrics */}
-      <div className="metrics-row">
-        <div className="metric-card">
-          <small>로드맵 진행</small>
-          <strong>{completed} / 6</strong>
-          <span>완료 노드</span>
-        </div>
-        <div className="metric-card">
-          <small>활동 메모리</small>
-          <strong>{workspace.activities.length}</strong>
-          <span>구조화 기록</span>
-        </div>
-        <div className="metric-card">
-          <small>현재 단계</small>
-          <strong>{active?.narrativeStage ?? "회고"}</strong>
-          <span>{active ? `${active.grade}학년 ${active.semester}학기` : "전체 완료"}</span>
-        </div>
-        <div className="metric-card">
-          <small>정합 기록</small>
-          <strong>{workspace.reconciliations.length}</strong>
-          <span>계획-실행 비교</span>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* 배지는 실제로 센 값만 보여준다 — 셀 수 없는 자리는 배지를 아예 그리지 않는다. */}
+        {[
+          {
+            label: "로드맵 진행",
+            value: `${completed} / 6`,
+            desc: "완료 노드",
+            badge: `${Math.round((completed / 6) * 100)}%`,
+            badgeColor: "bg-blue-50 text-brand-600",
+          },
+          {
+            label: "활동 메모리",
+            value: `${workspace.activities.length}건`,
+            desc: "구조화 기록",
+            badge: `탐구 활동 ${workspace.activities.filter((a) => a.recordKind === "activity").length}건`,
+            badgeColor: "bg-emerald-50 text-emerald-600",
+          },
+          {
+            label: "현재 단계",
+            value: active?.narrativeStage ?? "회고",
+            desc: active ? `${active.grade}학년 ${active.semester}학기` : "전체 완료",
+            badge: active ? `${active.grade}-${active.semester}` : null,
+            badgeColor: "bg-purple-50 text-purple-600",
+          },
+          {
+            label: "정합 기록",
+            value: `${workspace.reconciliations.length}건`,
+            desc: "계획-실행 비교",
+            badge: workspace.reconciliations.length
+              ? `일치 ${workspace.reconciliations.filter((r) => r.matchType === "MATCH").length}건`
+              : null,
+            badgeColor: "bg-amber-50 text-amber-700",
+          },
+        ].map((metric) => (
+          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-2" key={metric.label}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-gray-400">{metric.label}</span>
+              {metric.badge && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap ${metric.badgeColor}`}>
+                  {metric.badge}
+                </span>
+              )}
+            </div>
+            <strong className="text-2xl font-extrabold text-gray-950 block tracking-tight">{metric.value}</strong>
+            <span className="text-xs text-gray-500 font-medium block">{metric.desc}</span>
+          </div>
+        ))}
       </div>
 
       {/* Grid: DNA + Active Node */}
-      <div className="overview-grid">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* DNA Card */}
-        <section className="dna-card">
-          <div className="dna-card-header">
+        <section className="lg:col-span-2 bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-5">
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
             <div>
-              <span className="kicker">MAJOR NARRATIVE DNA</span>
-              <h2>관심분야와 증거를 분리해 보여줘요</h2>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">MAJOR NARRATIVE DNA</span>
+              <h3 className="text-base font-extrabold text-gray-950 mt-0.5">관심분야와 증거를 분리해 보여줘요</h3>
             </div>
-            {hasDiagnosis ? (
-              <button className="btn btn-ghost btn-sm" disabled={diagnosisBusy} onClick={() => void beginDiagnosis()} type="button">
-                {diagnosisBusy ? "진단 중…" : "다시 진단하기"}
-              </button>
-            ) : (
-              <button className="btn btn-primary btn-sm" disabled={diagnosisBusy} onClick={() => void beginDiagnosis()} type="button">
-                {diagnosisBusy ? "진단 중…" : "AI 진단 실행"}
-              </button>
-            )}
+            <button
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap disabled:opacity-60 ${
+                hasDiagnosis
+                  ? "border border-gray-200 hover:bg-gray-50 text-gray-700"
+                  : "bg-brand-500 hover:bg-brand-600 text-white shadow-brand-glow"
+              }`}
+              disabled={diagnosisBusy}
+              onClick={() => void beginDiagnosis()}
+              type="button"
+            >
+              <span>{hasDiagnosis ? "🔄" : "✨"}</span>
+              <span>{diagnosisBusy ? "진단 중…" : hasDiagnosis ? "다시 진단하기" : "AI 진단 실행"}</span>
+            </button>
           </div>
-          <div className="dna-card-body">
+          <div>
             {diagnosisBusy && (
-              <p className="onboarding-record-note">
+              <p className="text-xs text-gray-500 mb-3">
                 기록을 분석해 진단을 만드는 중입니다. 활동이 많으면 1~2분 정도 걸릴 수 있어요.
               </p>
             )}
             {diagnosisError && <div className="banner banner-error" style={{ marginBottom: 12 }}>{diagnosisError}</div>}
             {hasDiagnosis ? (
               <>
-                <p className="dna-narrative">{workspace.dna.narrative}</p>
-                <div className="dna-cols">
-                  <div className="dna-col">
-                    <strong>확인된 사실</strong>
-                    {workspace.dna.facts.map((fact) => (
-                      <div className="dna-fact" key={fact}>{fact}</div>
-                    ))}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-brand-50/70 to-blue-50/40 border border-brand-100/80">
+                  <p className="text-xs md:text-sm font-semibold text-gray-800 leading-relaxed">{workspace.dna.narrative}</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-200/80 space-y-2.5">
+                    <div className="flex items-center gap-1.5 pb-1 border-b border-gray-200/60">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <strong className="text-xs font-extrabold text-gray-900">확인된 사실 (Fact)</strong>
+                    </div>
+                    <div className="space-y-2">
+                      {workspace.dna.facts.length ? (
+                        workspace.dna.facts.map((fact) => (
+                          <p className="text-xs text-gray-600 leading-relaxed" key={fact}>{fact}</p>
+                        ))
+                      ) : (
+                        <p className="text-xs text-gray-400">기록에서 확인된 사실이 아직 없습니다.</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="dna-col">
-                    <strong>AI 해석</strong>
-                    {workspace.dna.interpretations.map((item) => (
-                      <div className="dna-interp" key={item.statement}>
-                        {item.statement}
-                        <small>{item.confidence}% · 미확인</small>
-                      </div>
-                    ))}
+                  <div className="p-4 rounded-xl bg-brand-50/40 border border-brand-100/70 space-y-2.5">
+                    <div className="flex items-center gap-1.5 pb-1 border-b border-brand-100">
+                      <span className="w-2 h-2 rounded-full bg-brand-500" />
+                      <strong className="text-xs font-extrabold text-gray-900">AI 해석 (Interpretation)</strong>
+                    </div>
+                    <div className="space-y-2">
+                      {workspace.dna.interpretations.map((item) => (
+                        <p className="text-xs text-gray-600 leading-relaxed" key={item.statement}>{item.statement}</p>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 {workspace.dna.riskFlags.length > 0 && (
-                  <div className="dna-risks">
-                    {workspace.dna.riskFlags.map((flag) => <span key={flag}>주의 {flag}</span>)}
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {workspace.dna.riskFlags.map((flag) => (
+                      <span className="text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2.5 py-1 rounded-lg" key={flag}>
+                        주의 · {flag}
+                      </span>
+                    ))}
                   </div>
                 )}
                 {workspace.dna.opportunities.length > 0 && (
-                  <div className="dna-risks" style={{ background: "var(--surface-2)", color: "var(--fg-muted)" }}>
-                    {workspace.dna.opportunities.map((item) => <span key={item}>기회 {item}</span>)}
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {workspace.dna.opportunities.map((item) => (
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg" key={item}>
+                        기회 · {item}
+                      </span>
+                    ))}
                   </div>
                 )}
                 <button
-                  className="btn btn-ghost btn-sm"
+                  className="text-xs font-bold text-brand-600 hover:text-brand-700 transition mt-4"
                   onClick={() => setDiagnosisDetailOpen((cur) => !cur)}
-                  style={{ marginTop: 12 }}
                   type="button"
                 >
                   {diagnosisDetailOpen ? "진단 상세 접기 ▲" : "진단 상세 보기 ▼"}
@@ -1971,57 +2088,69 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
         </section>
 
         {/* Active Node Card */}
-        <section className="active-node-card">
-          <div className="active-node-header">
-            <div>
-              <span className="kicker">ACTIVE ROADMAP NODE</span>
-              <h2>{active?.title ?? "로드맵 회고"}</h2>
+        <section className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-2 pb-3 border-b border-gray-100">
+            <div className="min-w-0">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">ACTIVE ROADMAP NODE</span>
+              <h3 className="text-base font-extrabold text-gray-950 mt-0.5 leading-snug">{active?.title ?? "로드맵 회고"}</h3>
             </div>
             {active && <StatusBadge status={active.status} />}
           </div>
-          <div className="active-node-body">
-            <p className="active-node-objective">
-              {active?.objective ?? "모든 노드를 검토했습니다. 새로운 진로 방향이 있다면 로드맵을 다시 설계해보세요."}
-            </p>
-            {active && (
-              <div className="subject-chips">
-                {active.candidateSubjects.map((s) => (
-                  <span className="subject-chip-pill" key={s}>{s}</span>
-                ))}
-              </div>
-            )}
-            <button className="btn btn-ghost" onClick={() => onNavigate("roadmap")} type="button">
-              전체 로드맵 보기 →
-            </button>
-          </div>
+          <p className="text-xs text-gray-600 leading-relaxed flex-1">
+            {active?.objective ?? "모든 노드를 검토했습니다. 새로운 진로 방향이 있다면 로드맵을 다시 설계해보세요."}
+          </p>
+          {active && active.candidateSubjects.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {active.candidateSubjects.map((subject) => (
+                <span className="text-[11px] font-semibold text-gray-700 bg-gray-50 border border-gray-200/90 px-2 py-0.5 rounded-lg" key={subject}>
+                  {subject}
+                </span>
+              ))}
+            </div>
+          )}
+          <button
+            className="w-full py-2 rounded-lg border border-gray-200 hover:border-brand-300 hover:bg-brand-50/40 text-xs font-bold text-gray-700 hover:text-brand-600 transition"
+            onClick={() => onNavigate("roadmap")}
+            type="button"
+          >
+            전체 3개년 로드맵 보기 →
+          </button>
         </section>
       </div>
 
       {/* Recent Activities */}
-      <section className="recent-card">
-        <div className="recent-card-header">
+      <section className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs space-y-4">
+        <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
           <div>
-            <span className="kicker">RECENT ACTIVITY</span>
-            <h2>최근 활동과 정합 결과</h2>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">RECENT ACTIVITY</span>
+            <h3 className="text-base font-extrabold text-gray-950 mt-0.5">최근 활동과 정합 결과</h3>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("activities")} type="button">
-            활동 추가
+          <button
+            className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition whitespace-nowrap"
+            onClick={() => onNavigate("activities")}
+            type="button"
+          >
+            + 활동 추가
           </button>
         </div>
         {workspace.activities.length ? (
-          workspace.activities.slice(0, 3).map((activity) => (
-            <div className="activity-compact" key={activity.id}>
-              <span className="activity-subj-pill">{activity.subject}</span>
-              <div className="activity-compact-info">
-                <strong>{activity.title}</strong>
-                <small>{activity.completedAt || activity.periodLabel}</small>
+          <div className="space-y-2">
+            {workspace.activities.slice(0, 3).map((activity) => (
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-200/90 hover:border-brand-300 transition" key={activity.id}>
+                <span className="text-[11px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded whitespace-nowrap">
+                  {activity.subject || activity.activityCategory || "활동"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <strong className="block text-xs font-bold text-gray-900 truncate">{activity.title}</strong>
+                  <small className="block text-[11px] text-gray-400 mt-0.5">{activity.completedAt || activity.periodLabel}</small>
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         ) : (
-          <div className="empty-state">
-            <strong>아직 활동이 없습니다</strong>
-            <p>첫 활동을 추가하면 DNA와 로드맵 정합이 갱신됩니다.</p>
+          <div className="text-center py-8">
+            <strong className="block text-xs font-bold text-gray-700">아직 활동이 없습니다</strong>
+            <p className="text-[11px] text-gray-400 mt-1">첫 활동을 추가하면 DNA와 로드맵 정합이 갱신됩니다.</p>
           </div>
         )}
       </section>
@@ -3260,17 +3389,24 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   }
 
   return (
-    <div className="activities-page">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="activities-header">
-        <span className="kicker">ACTIVITY MEMORY</span>
-        <h1>모든 활동 기록과 정합</h1>
-        <p>수행평가를 포함한 모든 활동을 기록하고 생기부와의 일치 여부를 점검합니다.</p>
+      <div className="flex items-end justify-between gap-4 pb-4 border-b border-gray-200/80">
+        <div>
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">ACTIVITY MEMORY</span>
+          <h2 className="text-xl font-bold text-gray-950 tracking-tight mt-0.5">활동 기록 &amp; AI 정합 검토</h2>
+          <p className="text-xs text-gray-500 mt-1">수행평가를 포함한 모든 활동을 기록하고 생기부와의 일치 여부를 점검합니다.</p>
+        </div>
+        <div className="text-right flex-none">
+          <span className="text-[11px] text-gray-400 block font-medium">누적 기록</span>
+          <strong className="text-lg font-bold text-gray-950">{workspace.activities.length}건</strong>
+        </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
       {/* Form */}
-      <div className="activity-form-card">
-        <h2>활동 추가</h2>
+      <div className="activity-form-card md:col-span-1">
+        <h2>활동 간편 등록</h2>
         <div className="form-field" style={{ marginBottom: "14px" }}>
           <label htmlFor="act-plan">연결할 로드맵 활동 주제 (선택 · 변경 가능)</label>
           <select id="act-plan" value={planEventId} onChange={(e) => setPlanEventId(e.target.value)}>
@@ -3290,7 +3426,8 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             <span>다른 학기 주제도 보기</span>
           </label>
         </div>
-        <div className="form-grid-3" style={{ marginBottom: "14px" }}>
+        {/* 폼이 좁은 왼쪽 열에 들어가므로 3열로 눌러 담지 않고 세로로 쌓는다. */}
+        <div style={{ marginBottom: "14px", display: "grid", gap: "12px" }}>
           <div className="form-field">
             <label htmlFor="act-type">활동 유형</label>
             <select id="act-type" value={form.activityType} onChange={(e) => setForm({ ...form, activityType: e.target.value })}>
@@ -3365,20 +3502,35 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       )}
 
       {/* History */}
-      <div className="history-cols">
-        <div className="history-card">
-          <div className="history-card-head">
-            <span className="kicker">ACTIVITY MEMORY</span>
-            <h2>활동 타임라인</h2>
+      <div className="md:col-span-2 space-y-4">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">ACTIVITY TIMELINE</span>
+              <h3 className="text-base font-extrabold text-gray-950 mt-0.5">활동 타임라인</h3>
+            </div>
+            <span className="text-[11px] text-gray-400">{workspace.activities.length}건</span>
           </div>
           {workspace.activities.length ? (
-            <div className="history-list">
-              {workspace.activities.map((activity) => (
-                <div className="history-item" key={activity.id}>
-                  <time className="history-time">{activity.completedAt || activity.periodLabel}</time>
+            <div className="space-y-3">
+              {workspace.activities.map((activity) => {
+                const match = workspace.reconciliations.find((log) => log.activityId === activity.id);
+                return (
+                <div className="bg-white p-4 rounded-xl border border-gray-200/80 hover:border-brand-300 transition space-y-2" key={activity.id}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-bold text-brand-600 truncate">{activity.subject || activity.activityCategory || activity.activityType}</span>
+                      <span className="text-xs text-gray-400 font-medium tabular-nums whitespace-nowrap">{activity.completedAt || activity.periodLabel}</span>
+                    </div>
+                    {/* 일치도는 백엔드의 정합 판정(confidence)이다 — 없는 활동에는 배지를 그리지 않는다. */}
+                    {match && (
+                      <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded whitespace-nowrap">
+                        일치도 {Math.round(match.confidence * (match.confidence <= 1 ? 100 : 1))}%
+                      </span>
+                    )}
+                  </div>
                   <div className="history-info">
-                    <span className="type-pill">{activity.activityType} · {activity.subject}</span>
-                    <h3>{activity.title}</h3>
+                    <h3 className="text-sm font-semibold text-gray-900">{activity.title}</h3>
                     <p>{activity.summary}</p>
                     {activity.reflection && <div className="activity-reflection"><strong>배운 점과 느낀 점</strong><p>{activity.reflection}</p></div>}
                     {activity.linkedPlanTitle && <small style={{ color: "var(--fg-muted)", display: "block", marginBottom: 8 }}>연결한 로드맵 주제: {activity.linkedPlanTitle}</small>}
@@ -3411,7 +3563,8 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="empty-state">
@@ -3420,10 +3573,10 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
           )}
         </div>
 
-        <div className="history-card">
-          <div className="history-card-head">
-            <span className="kicker">AI ACTIVITY REVIEW</span>
-            <h2>AI 활동 검토 결과</h2>
+        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
+          <div className="pb-3 border-b border-gray-100">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">AI ACTIVITY REVIEW</span>
+            <h3 className="text-base font-extrabold text-gray-950 mt-0.5">AI 활동 검토 결과</h3>
           </div>
           {workspace.activityReviews.length ? (
             <div className="history-list">
@@ -3447,6 +3600,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             </div>
           )}
         </div>
+      </div>
       </div>
       {recommendationPanelOpen && (
         <div className="modal-overlay" onClick={() => setRecommendationPanelOpen(false)} role="presentation">
