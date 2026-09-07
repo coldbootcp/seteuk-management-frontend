@@ -119,13 +119,20 @@ export function DashboardView({
               이번 학기({profile.grade}-{profile.semester}) 핵심 목표
             </h2>
           </div>
-          <button
-            className="text-xs font-bold text-brand-600 hover:text-brand-700 transition"
-            onClick={() => onNavigate("overview")}
-            type="button"
-          >
-            이번 학기 전체 보기 →
-          </button>
+          <div className="flex items-center gap-2">
+            {coreGoals.length > 0 && (
+              <span className="text-[11px] font-bold text-brand-700 bg-blue-50 border border-blue-200/80 px-2.5 py-1 rounded-full whitespace-nowrap">
+                {coreGoals.filter((goal) => completedPlanIds.has(goal.id)).length}건 작성 완료 · 총 {coreGoals.length}건
+              </span>
+            )}
+            <button
+              className="text-xs font-bold text-brand-600 hover:text-brand-700 transition whitespace-nowrap"
+              onClick={() => onNavigate("overview")}
+              type="button"
+            >
+              이번 학기 전체 보기 →
+            </button>
+          </div>
         </div>
 
         {activeNode ? (
@@ -160,6 +167,26 @@ export function DashboardView({
           </p>
         )}
       </section>
+
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="text-xl font-extrabold text-gray-950 tracking-tight">대시보드</h2>
+        <div className="flex items-center gap-2">
+          <button
+            className="px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-xs font-bold text-gray-700 transition"
+            onClick={() => onNavigate("activities")}
+            type="button"
+          >
+            활동 기록 보기
+          </button>
+          <button
+            className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition"
+            onClick={() => onNavigate("chat")}
+            type="button"
+          >
+            ✨ AI 컨설턴트에게 묻기
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 프로필 + 진행 */}

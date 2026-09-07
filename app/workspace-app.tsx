@@ -2566,6 +2566,8 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const hasDiagnosis = Boolean(workspace.dna.narrative);
+  const hasSchoolRecord = workspace.schoolRecordCourses.length > 0;
 
   useEffect(() => {
     setForm({
@@ -2608,36 +2610,35 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
       : { ...current, careerResolution: value });
   }
 
-  async function save(regenerate: boolean) {
+  async function save() {
     setBusy(true); setError(""); setMessage("");
     try {
       const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/profile", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ studentId: workspace.profile.id, profile: toProfileInput(form) }),
       });
-      let nextWorkspace = result.workspace;
-      if (regenerate) {
-        const regen = await jsonRequest<{ workspace: ProductWorkspace }>("/api/roadmaps/regenerate", {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ studentId: workspace.profile.id }),
-        });
-        nextWorkspace = regen.workspace;
-      }
-      onWorkspace(nextWorkspace);
-      setMessage(regenerate ? "프로필을 저장하고 로드맵 새 버전을 만들었습니다." : "프로필과 Student DNA를 갱신했습니다.");
+      onWorkspace(result.workspace);
+      setMessage("프로필을 저장했습니다. 다음 진단과 주제 제안에 반영됩니다.");
     } catch (e) { setError(e instanceof Error ? e.message : "프로필을 저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
 
   return (
-    <div className="profile-page">
-      <div className="profile-header">
-        <span className="kicker">MEMORY UPDATE</span>
-        <h1>현재 상태와 로드맵 기준</h1>
-        <p>학생이 직접 확인한 현재 상태와 제약만 바꿉니다. 저장 후 새 버전을 만들면 과거 기록은 유지하고 현재 이후의 주제 제안만 다시 구성합니다.</p>
+    <div className="space-y-6">
+      <div className="flex items-end justify-between gap-4 pb-4 border-b border-gray-200/80 flex-wrap">
+        <div>
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+            🎓 공식 학적 프로필
+          </span>
+          <h2 className="text-xl font-bold text-gray-950 tracking-tight mt-1.5">학생 프로필 및 진로 설정</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            학생이 직접 확인한 현재 상태와 제약만 바꿉니다. 저장하면 다음 진단과 주제 제안에 반영됩니다.
+          </p>
+        </div>
       </div>
 
-      <div className="profile-form-card">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="profile-form-card lg:col-span-8">
         <div className="form-grid-3" style={{ marginBottom: "20px" }}>
           <div className="form-field">
             <label htmlFor="pf-name">이름</label>
@@ -2696,27 +2697,130 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
         {error   && <div className="banner banner-error"   style={{ marginTop: "20px" }}>{error}</div>}
 
         <div className="profile-actions">
-          <button className="btn btn-secondary" disabled={busy} onClick={() => save(false)} type="button">프로필만 저장</button>
-          <button className="btn btn-primary"   disabled={busy} onClick={() => save(true)}  type="button">저장하고 로드맵 새 버전</button>
+          <button
+            className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold transition disabled:opacity-60"
+            disabled={busy}
+            onClick={() => save()}
+            type="button"
+          >
+            {busy ? "저장 중…" : "프로필 저장하기"}
+          </button>
         </div>
       </div>
 
-      <div className="data-priority-card">
-        <span className="kicker">DATA PRIORITY</span>
-        <h2>현재 저장 원칙</h2>
-        <div className="priority-list">
-          {[
-            "학생이 직접 입력한 사실",
-            "활동 원문에서 추출한 Evidence",
-            "학생이 확인한 AI 해석",
-            "아직 확인되지 않은 잠정 추론",
-          ].map((text, i) => (
-            <div className="priority-item" key={text}>
-              <span className="priority-num">{i + 1}</span>
-              {text}
+      {/* SETEUK PASS — 목업의 우측 카드. 상태 값은 전부 실제 기록에서 센 것이다. */}
+      <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-6">
+        <div className="bg-white rounded-2xl border border-gray-200/90 shadow-lg overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-5 text-white">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold tracking-widest text-blue-200">SETEUK PASS</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30">
+                {workspace.profile.grade}학년 {workspace.profile.semester}학기
+              </span>
             </div>
-          ))}
+          </div>
+
+          <div className="p-6 text-center -mt-10 relative">
+            <div className="relative inline-block mx-auto mb-3">
+              <div className="w-20 h-20 rounded-full border-4 border-white shadow-md bg-gradient-to-tr from-brand-600 to-sky-400 flex items-center justify-center text-white text-2xl font-black">
+                {workspace.profile.name.slice(-2)}
+              </div>
+              {hasSchoolRecord && (
+                <div
+                  className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-amber-400 text-amber-950 border-2 border-white font-black text-xs flex items-center justify-center"
+                  title="생기부가 연동된 계정"
+                >
+                  ✓
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-center gap-1.5 mb-0.5">
+              <h4 className="text-lg font-extrabold text-gray-950 tracking-tight">{workspace.profile.name}</h4>
+            </div>
+            <p className="text-xs text-gray-500 font-medium">
+              {workspace.profile.grade}학년 {workspace.profile.semester}학기
+              {workspace.profile.targetCareer && ` · ${workspace.profile.targetCareer}`}
+            </p>
+            {workspace.profile.targetMajors.length > 0 && (
+              <p className="text-[11px] text-brand-600 font-bold mt-0.5">
+                {workspace.profile.targetMajors.join(", ")} 지망
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 mt-5">
+              <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-100/80 text-center">
+                <span className="text-[10px] font-semibold text-blue-600 block mb-0.5">AI 진단</span>
+                <span className="text-xs font-black text-blue-950">{hasDiagnosis ? "완료" : "미실행"}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-gray-50 border border-gray-200/80 text-center">
+                <span className="text-[10px] font-semibold text-gray-500 block mb-0.5">누적 기록</span>
+                <span className="text-xs font-black text-gray-900">{workspace.activities.length}건</span>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-2.5 text-left border-t border-gray-100 pt-4 text-xs">
+              {[
+                {
+                  icon: "📄",
+                  label: "생기부 연동",
+                  ok: hasSchoolRecord,
+                  okText: "연동됨",
+                  noText: "미연결",
+                },
+                {
+                  icon: "🔬",
+                  label: "AI 진단 리포트",
+                  ok: hasDiagnosis,
+                  okText: "완료",
+                  noText: "미실행",
+                },
+                {
+                  icon: "🎯",
+                  label: "활동 정합 검토",
+                  ok: workspace.reconciliations.length > 0,
+                  okText: `${workspace.reconciliations.length}건`,
+                  noText: "없음",
+                },
+              ].map((row) => (
+                <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50/50" key={row.label}>
+                  <div className="flex items-center gap-2">
+                    <span>{row.icon}</span>
+                    <span className="text-gray-700 font-medium">{row.label}</span>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                      row.ok
+                        ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                        : "bg-gray-100 text-gray-500 border-gray-200"
+                    }`}
+                  >
+                    {row.ok ? row.okText : row.noText}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+
+        <div className="data-priority-card">
+          <span className="kicker">DATA PRIORITY</span>
+          <h2>현재 저장 원칙</h2>
+          <div className="priority-list">
+            {[
+              "학생이 직접 입력한 사실",
+              "활동 원문에서 추출한 Evidence",
+              "학생이 확인한 AI 해석",
+              "아직 확인되지 않은 잠정 추론",
+            ].map((text, i) => (
+              <div className="priority-item" key={text}>
+                <span className="priority-num">{i + 1}</span>
+                {text}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
       </div>
     </div>
   );
