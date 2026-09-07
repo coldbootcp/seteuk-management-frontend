@@ -240,9 +240,23 @@ function isSeteukAnalysisResult(value: unknown): value is SeteukAnalysisResult {
 // TypeScript 파서 parseSchoolRecordText는 그래서 제거했다 — 원본은
 // docs/reference/school-record-parser.ts와 main 히스토리에 있다.
 
+function isWithinMaxPeriod(
+  grade: number,
+  semester: number | null,
+  maxPeriod?: { grade: number; semester?: number | null }
+): boolean {
+  if (!maxPeriod || !maxPeriod.grade) return true;
+  if (grade > maxPeriod.grade) return false;
+  if (grade === maxPeriod.grade && semester !== null && maxPeriod.semester != null) {
+    return semester <= maxPeriod.semester;
+  }
+  return true;
+}
+
 export function parseSchoolRecordJson(
   jsonData: unknown,
-  academicStartYear: number
+  academicStartYear: number,
+  maxPeriod?: { grade: number; semester?: number | null }
 ): SchoolRecordParseResult {
   const courses = new Map<string, SchoolRecordCourse>();
   const entries = new Map<string, SchoolRecordDraft>();
@@ -260,6 +274,7 @@ export function parseSchoolRecordJson(
     if (title && author) {
       const grade = gradeValue(item.grade);
       const semester = semesterValue(item.semester);
+      if (!isWithinMaxPeriod(grade, semester, maxPeriod)) return;
       const subject = textValue(item.subject, "독서");
 
       const id = `${grade}-${semester}-${subject}`;
@@ -299,6 +314,7 @@ export function parseSchoolRecordJson(
     if (achievement || item.rank || item.raw_score != null) {
       const grade = gradeValue(item.grade);
       const semester = semesterValue(item.semester);
+      if (!isWithinMaxPeriod(grade, semester, maxPeriod)) return;
       const subject = textValue(item.subject, "공통");
 
       const id = `${grade}-${semester}-${subject}`;
@@ -340,6 +356,7 @@ export function parseSchoolRecordJson(
     const inferredPeriod = parsedDate ? periodFromDate(parsedDate, academicStartYear) : null;
     const grade = gradeValue(item.grade ?? inferredPeriod?.grade);
     const semester = semesterValue(item.semester ?? inferredPeriod?.semester);
+    if (grade && !isWithinMaxPeriod(grade, semester, maxPeriod)) return;
     const subject = "수상경력";
     const title = rank ? `${name} · ${rank}` : name;
     const entryId = keyFor(grade, semester, subject, title);
@@ -370,6 +387,7 @@ export function parseSchoolRecordJson(
     const inferredPeriod = parsedDate ? periodFromDate(parsedDate, academicStartYear) : null;
     const grade = gradeValue(item.grade ?? inferredPeriod?.grade);
     const semester = semesterValue(item.semester ?? inferredPeriod?.semester);
+    if (grade && !isWithinMaxPeriod(grade, semester, maxPeriod)) return;
     const hours = textValue(item.hours);
     const title = content || "봉사활동";
     const summary = [
@@ -405,6 +423,7 @@ export function parseSchoolRecordJson(
     if (!title) return;
     const grade = gradeValue(item.grade);
     const semester = semesterValue(item.semester);
+    if (!isWithinMaxPeriod(grade, semester, maxPeriod)) return;
     const periodKnown = periodIsKnown(item.semester);
     const category = apiActivityCategory(item);
     const sourceCategory = textValue(item.activity_category, "교과 외 활동");

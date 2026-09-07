@@ -14,6 +14,8 @@
 import { api } from "./api-client";
 import type {
   ActivityAttachment,
+  ConsultationSession,
+  ConsultationStatus,
   DnaDiagnosis,
   ProductWorkspace,
   ProfileInput,
@@ -39,6 +41,11 @@ const EMPTY_DNA: DnaDiagnosis = {
   gaps: [],
   narrative: "",
   riskFlags: [],
+  opportunities: [],
+  gradesTrend: [],
+  semesterReviews: [],
+  activityInventory: [],
+  knowledgeGraphLinks: [],
 };
 
 // --- 백엔드 모양 → 화면 모양 -------------------------------------------------
@@ -163,6 +170,7 @@ function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentA
     completedAt: (raw.performed_on as string) ?? "",
     periodLabel: `${grade}학년${semester ? ` ${semester}학기` : ""}`,
     createdAt: raw.created_at as string,
+    recordKind: "activity",
   };
 }
 
@@ -176,6 +184,7 @@ function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentA
 function toDna(raw: Json | null): DnaDiagnosis {
   if (!raw || raw.status !== "done") return EMPTY_DNA;
   const threads = (raw.career_thread as Json[]) ?? [];
+  const gradesTrend = ((raw.grades_trend as Json)?.overall as Json[]) ?? [];
   return {
     facts: threads.flatMap((thread) =>
       ((thread.entries as Json[]) ?? [])
@@ -192,6 +201,35 @@ function toDna(raw: Json | null): DnaDiagnosis {
     gaps: (raw.weaknesses as string[]) ?? [],
     narrative: (raw.headline_comment as string) ?? "",
     riskFlags: (raw.threats as string[]) ?? [],
+    opportunities: (raw.opportunities as string[]) ?? [],
+    gradesTrend: gradesTrend.map((point) => ({
+      grade: point.grade as number,
+      semester: point.semester as number,
+      averageRank: (point.average_rank as number) ?? null,
+      subjectCount: (point.subject_count as number) ?? 0,
+      excludedCount: (point.excluded_count as number) ?? 0,
+    })),
+    semesterReviews: ((raw.semester_reviews as Json[]) ?? []).map((review) => ({
+      grade: review.grade as number,
+      semester: review.semester as number,
+      gradesReview: (review.grades_review as string) ?? "",
+      readingReview: (review.reading_review as string) ?? "",
+      activitiesReview: (review.activities_review as string) ?? "",
+    })),
+    activityInventory: ((raw.activity_inventory as Json[]) ?? []).map((entry) => ({
+      activityId: entry.activity_id as string,
+      grade: entry.grade as number,
+      semester: (entry.semester as number) ?? null,
+      competency: entry.competency as string,
+      depthLevel: entry.depth_level as string,
+      headline: entry.headline as string,
+    })),
+    knowledgeGraphLinks: ((raw.knowledge_graph_links as Json[]) ?? []).map((link) => ({
+      fromActivityId: link.from_activity_id as string,
+      toActivityId: link.to_activity_id as string,
+      linkType: link.link_type as "vertical" | "horizontal",
+      relationLabel: link.relation_label as string,
+    })),
   };
 }
 
@@ -224,6 +262,60 @@ async function resolveActivityPeriod(
   }
   const profile = await api<Json>("/profile/me");
   return { grade: (profile.grade as number) ?? 1, semester: (profile.semester as number) ?? null };
+}
+
+function toConsultationStatus(raw: Json): ConsultationStatus {
+  return {
+    satisfied: Boolean(raw.satisfied),
+    requiredKind: (raw.required_kind as ConsultationStatus["requiredKind"]) ?? null,
+    targetGrade: (raw.target_grade as number) ?? null,
+    targetSemester: (raw.target_semester as number) ?? null,
+    resumableSessionId: (raw.resumable_session_id as string) ?? null,
+  };
+}
+
+function toConsultationSession(raw: Json): ConsultationSession {
+  return {
+    id: raw.id as string,
+    conversationId: raw.conversation_id as string,
+    kind: raw.kind as ConsultationSession["kind"],
+    targetGrade: raw.target_grade as number,
+    targetSemester: raw.target_semester as number,
+    status: raw.status as ConsultationSession["status"],
+    ready: Boolean(raw.ready),
+    fullReplanConfirmed: Boolean(raw.full_replan_confirmed),
+  };
+}
+
+/** 메인 화면 진입 전, 진단+상담 관문이 풀렸는지 확인한다. 프로필이 아직 없는
+ * 사용자에게는 백엔드가 satisfied=true를 준다(이 관문의 관심사가 아니므로) — 그러면
+ * 뒤이어 loadWorkspace()가 null을 돌려줘 온보딩 화면으로 자연스럽게 이어진다. */
+export async function getConsultationStatus(): Promise<ConsultationStatus> {
+  return toConsultationStatus(await api<Json>("/consultation/status"));
+}
+
+export async function createOrResumeConsultationSession(): Promise<ConsultationSession> {
+  return toConsultationSession(
+    await api<Json>("/consultation/sessions", { method: "POST", body: {} }),
+  );
+}
+
+export async function confirmFullReplan(
+  sessionId: string,
+  confirmed: boolean,
+): Promise<ConsultationSession> {
+  return toConsultationSession(
+    await api<Json>(`/consultation/sessions/${sessionId}/confirm-full-replan`, {
+      method: "POST",
+      body: { confirmed },
+    }),
+  );
+}
+
+export async function concludeConsultation(sessionId: string): Promise<ConsultationSession> {
+  return toConsultationSession(
+    await api<Json>(`/consultation/sessions/${sessionId}/conclude`, { method: "POST" }),
+  );
 }
 
 /**
@@ -319,6 +411,12 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
     optional(api<{ items: Json[] }>("/reading-activities?limit=200")),
   ]);
 
+  const DOMAIN_RECORD_KINDS: Record<string, "award" | "volunteer" | "reading"> = {
+    상장: "award",
+    봉사: "volunteer",
+    독서: "reading",
+  };
+
   function domainActivity(
     raw: Json,
     kind: string,
@@ -349,6 +447,7 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
       completedAt,
       periodLabel: grade == null ? "" : `${grade}학년${semester ? ` ${semester}학기` : ""}`,
       createdAt: raw.created_at as string,
+      recordKind: DOMAIN_RECORD_KINDS[kind],
     };
   }
 
@@ -425,11 +524,27 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
     ),
   );
 
+  const profile = toProfile(profileRaw, studentId);
+  const isWithinProfilePeriod = (grade: number | null | undefined, semester: number | null | undefined) => {
+    if (grade == null || grade === 0) return true;
+    if (grade > profile.grade) return false;
+    if (grade === profile.grade && semester != null && profile.semester && semester > profile.semester) {
+      return false;
+    }
+    return true;
+  };
+
+  const filteredActivities = activities.filter((a) => isWithinProfilePeriod(a.grade, a.semester));
+  const filteredSemesterCourses = semesterCourses.filter((c) => isWithinProfilePeriod(c.grade, c.semester));
+  const filteredSchoolRecordCourses = schoolRecordCourses.filter((c) => isWithinProfilePeriod(c.grade, c.semester));
+  const validCourseIds = new Set(filteredSemesterCourses.map((c) => c.id));
+  const filteredCourseGrades = courseGrades.filter((g) => validCourseIds.has(g.semesterCourseId));
+
   const activeNode = roadmap.nodes.find((node) => node.isCurrent) ?? roadmap.nodes.find((node) => node.status === "active");
   return {
-    profile: toProfile(profileRaw, studentId),
+    profile,
     roadmap,
-    activities,
+    activities: filteredActivities,
     attachments: attachmentLists.flat(),
     activityReviews: ((reviews ?? []) as Json[]).map((raw) => ({
       activityId: raw.activity_id as string,
@@ -443,9 +558,9 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
       // 사실과 다른 것을 말하게 된다.
       provider: ((raw.provider as string) ?? "deepseek") as "deepseek" | "rule",
     })),
-    semesterCourses,
-    courseGrades,
-    schoolRecordCourses,
+    semesterCourses: filteredSemesterCourses,
+    courseGrades: filteredCourseGrades,
+    schoolRecordCourses: filteredSchoolRecordCourses,
     reconciliations: ((reconciliations ?? []) as Json[]).map(
       (raw): ReconciliationLog => ({
         id: raw.id as string,
@@ -546,16 +661,11 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
 
   switch (true) {
     case path === "/api/onboarding": {
+      // 3개년 큰 계획(로드맵)은 더 이상 여기서 템플릿으로 자동 생성하지 않는다 —
+      // 진단+상담 관문을 반드시 거쳐야 하고, 그 상담이 끝나야(conclude) 비로소 큰
+      // 계획이 만들어진다. 온보딩은 프로필만 저장한다.
       await api("/profile", { method: "POST", body: profileToBackend(body.profile ?? body) });
-      // 미리보기에서 만든 로드맵은 draft다. 확정하지 않으면 활성 로드맵이 없는 채로
-      // 온보딩이 끝나고, 3개년 화면의 6학기 경로가 영영 비어 보인다 — 기록은
-      // 멀쩡히 있는데도 그렇다.
-      //
-      // 프로필을 저장한 뒤에 확정한다: 미리보기는 저장 전 값으로 만들어졌으므로,
-      // 저장된 프로필로 한 번 더 만들어야 학년·진로가 제대로 반영된다.
-      const roadmap = await api<Json>("/roadmaps", { method: "POST", body: {} });
-      await api(`/roadmaps/${roadmap.id}/confirm`, { method: "POST" });
-      return { workspace: await loadWorkspace() };
+      return { onboarded: true };
     }
     case path === "/api/onboarding/suggest": {
       const result = await api<{ majors: string[]; keywords: string[] }>("/profile/suggest", {
@@ -861,6 +971,34 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       };
     }
 
+    case path === "/api/diagnosis/pre-questions":
+      return await api<{ questions: Json[] }>("/diagnosis/pre-questions");
+
+    case path === "/api/diagnosis/pre-questions/answers": {
+      await api("/diagnosis/pre-questions/answers", {
+        method: "POST",
+        body: { answers: body.answers ?? [] },
+      });
+      return {};
+    }
+
+    case path === "/api/diagnosis/run": {
+      const created = await api<{ diagnosis_id: string; status: string }>("/diagnosis", {
+        method: "POST",
+      });
+      return { diagnosisId: created.diagnosis_id, status: created.status };
+    }
+    // 진단은 여러 LLM 호출을 순서대로 거치는 백그라운드 job이라 즉시 끝나지 않는다.
+    // 생기부 분석과 같은 방식으로 상태를 폴링하고, 끝나면 workspace를 다시 조립해
+    // 화면의 dna가 새 결과를 읽게 한다.
+    case path.startsWith("/api/diagnosis/status/"): {
+      const diagnosisId = path.split("/").pop()!;
+      const result = await api<Json>(`/diagnosis/${diagnosisId}`);
+      if (result.status === "failed") return { status: "failed" };
+      if (result.status !== "done") return { status: "processing" };
+      return { status: "done", workspace: await loadWorkspace() };
+    }
+
     case path === "/api/recommendation-feedback": {
       await api(`/recommendations/${body.analysisId ?? body.recommendationId}/feedback`, {
         method: "POST",
@@ -871,6 +1009,40 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
         },
       });
       return { workspace: await loadWorkspace() };
+    }
+
+    case path === "/api/recommendations/follow-up": {
+      return await api<Json>("/recommendations/follow-up", {
+        method: "POST",
+        body: {
+          source_activity_id: body.sourceActivityId,
+          desired_activity_type: body.desiredActivityType ?? null,
+          note: body.note ?? null,
+        },
+      });
+    }
+    case path.startsWith("/api/recommendations/") && path.endsWith("/adopt"): {
+      const recommendationId = path.split("/")[3];
+      return await api<Json>(`/recommendations/${recommendationId}/adopt`, {
+        method: "POST",
+        body: {
+          option_index: body.optionIndex ?? 0,
+          item_type: body.itemType ?? "activity",
+          target_grade: body.targetGrade ?? null,
+          target_semester: body.targetSemester ?? null,
+        },
+      });
+    }
+    case path.startsWith("/api/recommendations/") && path.endsWith("/feedback"): {
+      const recommendationId = path.split("/")[3];
+      return await api<Json>(`/recommendations/${recommendationId}/feedback`, {
+        method: "POST",
+        body: {
+          option_index: body.optionIndex ?? 0,
+          action: body.action,
+          reason: body.reason ?? null,
+        },
+      });
     }
 
     default:

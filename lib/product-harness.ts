@@ -98,6 +98,10 @@ export type StudentActivity = {
    *  생기부에서 온 활동은 날짜를 알 수 없기 때문이다. */
   periodLabel?: string;
   createdAt?: string;
+  /** 이 기록이 백엔드의 어느 테이블에서 왔는지. 후속 추천(`/recommendations/follow-up`)은
+   *  `activities` 테이블 행만 근거로 받을 수 있어, 상장·봉사·독서(각자의 테이블)와
+   *  구분해야 한다. */
+  recordKind?: "activity" | "award" | "volunteer" | "reading";
 };
 
 export type ActivityAttachment = {
@@ -143,6 +147,40 @@ export type ReconciliationLog = {
   createdAt?: string;
 };
 
+/** 학기별 평균 석차등급 한 점 — LLM을 거치지 않는 순수 계산값. */
+export type GradesTrendPoint = {
+  grade: number;
+  semester: number;
+  averageRank: number | null;
+  subjectCount: number;
+  excludedCount: number;
+};
+
+export type SemesterReview = {
+  grade: number;
+  semester: number;
+  gradesReview: string;
+  readingReview: string;
+  activitiesReview: string;
+};
+
+export type ActivityInventoryEntry = {
+  activityId: string;
+  grade: number;
+  semester: number | null;
+  competency: string;
+  depthLevel: string;
+  headline: string;
+};
+
+/** 계보(parent_activity_id)로는 안 잡히는, 활동 내용이 겹치는 숨은 연결. */
+export type KnowledgeGraphLink = {
+  fromActivityId: string;
+  toActivityId: string;
+  linkType: "vertical" | "horizontal";
+  relationLabel: string;
+};
+
 export type DnaDiagnosis = {
   facts: string[];
   interpretations: Array<{
@@ -155,6 +193,12 @@ export type DnaDiagnosis = {
   gaps: string[];
   narrative: string;
   riskFlags: string[];
+  /** 아직 기록에 없지만 남은 기간에 채우면 강점이 될 수 있는 것(SWOT의 O). */
+  opportunities: string[];
+  gradesTrend: GradesTrendPoint[];
+  semesterReviews: SemesterReview[];
+  activityInventory: ActivityInventoryEntry[];
+  knowledgeGraphLinks: KnowledgeGraphLink[];
 };
 
 export type AssignmentAnalysis = {
@@ -213,6 +257,26 @@ export type ProductWorkspace = {
     roadmapNodeId?: string;
   };
   latestAnalysis?: AssignmentAnalysis | null;
+};
+
+/** 진단+상담 관문 판정. 만족하지 않으면 메인 화면 대신 상담 화면을 그린다. */
+export type ConsultationStatus = {
+  satisfied: boolean;
+  requiredKind: "initial" | "semester_review" | null;
+  targetGrade: number | null;
+  targetSemester: number | null;
+  resumableSessionId: string | null;
+};
+
+export type ConsultationSession = {
+  id: string;
+  conversationId: string;
+  kind: "initial" | "semester_review";
+  targetGrade: number;
+  targetSemester: number;
+  status: "in_progress" | "ready" | "concluded" | "abandoned";
+  ready: boolean;
+  fullReplanConfirmed: boolean;
 };
 
 function activeIndex(profile: ProfileInput) {

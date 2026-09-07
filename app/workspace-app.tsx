@@ -1,14 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, logout, tokens } from "../lib/api-client";
-import { handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
+import { ApiError, downloadFile, logout, tokens } from "../lib/api-client";
+import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
 import { SignIn } from "./sign-in";
+import { ConsultationGate } from "./consultation-view";
 import { ChatView } from "./chat-view";
+import { TimetableView } from "./timetable-view";
+import { GradesView } from "./grades-view";
+import { DEFAULT_TIMETABLES, createEmptyTimetable, type TimetableConfig } from "./types/academic";
 import type { CSSProperties } from "react";
 import type {
+  ActivityAttachment,
   AssignmentAnalysis,
   ActivityReview,
+  ConsultationStatus,
   DnaDiagnosis,
   ProductWorkspace,
   ProfileInput,
@@ -16,6 +22,7 @@ import type {
   Roadmap,
   RoadmapNode,
   RoadmapPlanEvent,
+  StudentActivity,
 } from "../lib/product-harness";
 import { withParticle } from "../lib/product-harness";
 import {
@@ -26,12 +33,13 @@ import {
   type SeteukAnalysisResult,
   type SchoolRecordDraft,
   type SchoolRecordParseResult,
+  type SchoolRecordPeriod,
 } from "../lib/school-record-parser";
 
 /* ──────────────────────────────────────────────
    Types
    ────────────────────────────────────────────── */
-type TabId = "overview" | "roadmap" | "activities" | "grades" | "portfolio" | "chat" | "profile";
+type TabId = "overview" | "roadmap" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
@@ -89,6 +97,35 @@ type ClarificationResponse = {
 type OnboardingRecordContext = {
   expectedGrade?: string | null;
   studentName?: string;
+};
+
+/** 진단 실행 전 생기부-답변 갭을 메우는 사전질문 하나. 최초 진단에만 나온다. */
+type DiagnosisPreQuestion = {
+  key: string;
+  prompt: string;
+  options: string[];
+  allow_custom: boolean;
+};
+
+/** 활동 하나를 근거로 만든 후속 탐구 선택지 하나(기능2). */
+type RecommendationOption = {
+  topic: string;
+  connection_reason: string;
+  subject_relevance: string;
+  career_relevance: string;
+  record_potential: string;
+  difficulty: "easy" | "medium" | "hard";
+  materials: string[];
+  expected_output: string;
+  expansion_potential: string;
+};
+
+type FollowUpRecommendation = {
+  id: string;
+  source_activity_id: string | null;
+  desired_activity_type: string | null;
+  options: RecommendationOption[];
+  created_at: string;
 };
 
 /* ──────────────────────────────────────────────
@@ -163,7 +200,20 @@ function profileSemesterValue(form: ProfileForm) {
 }
 
 function currentGradeValueFromCompletedRecord(completedGrade: number) {
+  if (completedGrade === 2) return "2";
   return completedGrade >= 3 ? "graduated" : String(completedGrade + 1);
+}
+
+function expectedCurrentPeriodFromRecord(period: SchoolRecordPeriod | null): { grade: string; semester: string } | null {
+  if (!period) return null;
+  if (period.grade >= 3) return { grade: "graduated", semester: "" };
+  if (period.grade === 2) {
+    return { grade: "2", semester: "2" };
+  }
+  if (period.semester === 1) {
+    return { grade: String(period.grade), semester: "2" };
+  }
+  return { grade: String(period.grade + 1), semester: "1" };
 }
 
 function recordIsFinalizedForClarification(parsed: SchoolRecordParseResult | null, form: ProfileForm) {
@@ -630,7 +680,7 @@ function StatusBadge({ status }: { status: RoadmapNode["status"] }) {
 /* ──────────────────────────────────────────────
    Onboarding
    ────────────────────────────────────────────── */
-function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) => void }) {
+function Onboarding({ onComplete }: { onComplete: () => void }) {
   const [form, setForm] = useState<ProfileForm>(EMPTY_PROFILE);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [preview, setPreview] = useState<{
@@ -971,23 +1021,33 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
       const initialParsed = parseSchoolRecordJson(resultJson, fallbackAcademicStartYear);
       const latestPeriod = getLatestSchoolRecordPeriod(initialParsed);
       const completedGrade = latestPeriod?.grade;
-      const expectedCurrentGrade = completedGrade ? currentGradeValueFromCompletedRecord(completedGrade) : null;
+      const expectedPeriod = expectedCurrentPeriodFromRecord(latestPeriod);
+      const expectedCurrentGrade = expectedPeriod?.grade ?? (completedGrade ? currentGradeValueFromCompletedRecord(completedGrade) : null);
+      const expectedCurrentSemester = expectedPeriod?.semester ?? null;
       const studentName = typeof resultJson.student_name === "string" ? resultJson.student_name.trim() : "";
 
       const resolvedGrade = isGraduatedGrade(expectedCurrentGrade ?? form.grade) ? 3 : Number(expectedCurrentGrade ?? form.grade) || 1;
       const resolvedAcademicStartYear = new Date().getFullYear() - (resolvedGrade - 1);
-      const parsed = parseSchoolRecordJson(resultJson, resolvedAcademicStartYear);
+      const targetMaxGrade = isGraduatedGrade(expectedCurrentGrade ?? form.grade) ? 3 : Number(expectedCurrentGrade ?? form.grade) || 2;
+      const targetMaxSemester = isGraduatedGrade(expectedCurrentGrade ?? form.grade) ? null : Number(form.semester) || (expectedCurrentSemester ? Number(expectedCurrentSemester) : 2);
+      const parsed = parseSchoolRecordJson(resultJson, resolvedAcademicStartYear, {
+        grade: targetMaxGrade,
+        semester: targetMaxSemester,
+      });
       parsed.fileName = file.name;
       const summary = summarizeOnboardingRecord(parsed, completedGrade);
 
       if (expectedCurrentGrade && !form.grade) {
         updateGrade(expectedCurrentGrade);
+        if (expectedCurrentSemester && !isGraduatedGrade(expectedCurrentGrade)) {
+          update("semester", expectedCurrentSemester);
+        }
       }
       if (studentName && !form.name.trim()) update("name", studentName);
       if (summary.subjects.length && !form.preferredSubjects.trim()) update("preferredSubjects", summary.subjects.join(", "));
       if (summary.currentActivities && !form.currentEngagement.trim()) update("currentEngagement", summary.currentActivities);
       const periodMessage = completedGrade ? ` ${completedGrade}학년까지 확정된 기록으로 확인했습니다.` : "";
-      const gradeMessage = expectedCurrentGrade ? ` 현재 상태는 ${gradeLabel(expectedCurrentGrade)} 후보로 자동 입력했습니다${isGraduatedGrade(expectedCurrentGrade) ? "." : ", 학기는 직접 선택해주세요."}` : "";
+      const gradeMessage = expectedCurrentGrade ? ` 현재 상태는 ${gradeLabel(expectedCurrentGrade)}${expectedCurrentSemester ? ` ${expectedCurrentSemester}학기` : ""} 후보로 자동 입력했습니다.` : "";
       const nameMessage = studentName && !form.name.trim() ? ` 이름은 ${studentName} 학생으로 자동 입력했습니다.` : "";
       setOnboardingRecordParse(parsed);
       setRecordOnlyMode(Boolean(completedGrade && completedGrade >= 3));
@@ -1053,26 +1113,25 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
       const recordOnlyRoadmap = recordOnlyMode
         ? buildRecordOnlyRoadmap(crypto.randomUUID(), form.targetCareer.trim())
         : null;
-      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/onboarding", {
+      await jsonRequest("/api/onboarding", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ profile: toProfileInput(form), roadmap: recordOnlyRoadmap ?? preview?.roadmap }),
       });
-      let workspace = result.workspace;
       if (onboardingRecordParse && (onboardingRecordParse.courses.length || onboardingRecordParse.entries.some((entry) => entry.selected))) {
-        const imported = await jsonRequest<{ workspace: ProductWorkspace }>("/api/school-record/import", {
+        await jsonRequest("/api/school-record/import", {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            studentId: workspace.profile.id,
             fileName: onboardingRecordParse.fileName,
             totalPages: onboardingRecordParse.totalPages,
             courses: onboardingRecordParse.courses,
             entries: onboardingRecordParse.entries,
           }),
         });
-        workspace = imported.workspace;
       }
-      window.localStorage.setItem("seteuk-current-student", workspace.profile.id);
-      onComplete(workspace);
+      // 3개년 큰 계획은 이제 진단+상담 관문을 거쳐야 만들어진다 — 여기서는
+      // 프로필(과 선택적 생기부 반영)만 끝내고, 다음 화면 선택은 onComplete가
+      // 관문 상태를 다시 확인해서 정한다.
+      onComplete();
     } catch (e) { setError(e instanceof Error ? e.message : "가입 정보를 저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
@@ -1609,7 +1668,7 @@ function Onboarding({ onComplete }: { onComplete: (workspace: ProductWorkspace) 
 /* ──────────────────────────────────────────────
    Overview
    ────────────────────────────────────────────── */
-function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void; onConvertPlan: (draft: ActivityDraft) => void }) {
+function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void; onConvertPlan: (draft: ActivityDraft) => void; onWorkspace: (workspace: ProductWorkspace) => void }) {
   const active = workspace.roadmap.nodes.find((n) => n.isCurrent)
     ?? workspace.roadmap.nodes.find((n) => n.status === "active");
   // 백엔드가 쓰는 값은 done/partial이다. "completed"만 세면 실제로 달성한 학기가
@@ -1617,6 +1676,89 @@ function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: Product
   const completed = workspace.roadmap.nodes.filter((n) => n.status === "done").length;
   const [selectedPlan, setSelectedPlan] = useState<RoadmapPlanEvent | null>(null);
   const completedPlanIds = new Set(workspace.activities.map((activity) => activity.planEventId).filter(Boolean));
+
+  const [diagnosisBusy, setDiagnosisBusy] = useState(false);
+  const [diagnosisError, setDiagnosisError] = useState("");
+  const [preQuestions, setPreQuestions] = useState<DiagnosisPreQuestion[] | null>(null);
+  const [preAnswerDrafts, setPreAnswerDrafts] = useState<Record<string, string>>({});
+  const [diagnosisDetailOpen, setDiagnosisDetailOpen] = useState(false);
+  const hasDiagnosis = Boolean(workspace.dna.narrative);
+  const activityTitleById = new Map(workspace.activities.map((a) => [a.id, a.title]));
+
+  // 진단은 순서대로 이어지는 여러 LLM 호출을 거치는 백그라운드 job이라 즉시
+  // 끝나지 않는다. 생기부 분석과 같은 방식으로 상태를 폴링한다.
+  async function pollDiagnosis(diagnosisId: string) {
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      const poll = await jsonRequest<{ status: string; workspace?: ProductWorkspace }>(
+        `/api/diagnosis/status/${encodeURIComponent(diagnosisId)}`,
+      );
+      if (poll.status === "done") {
+        if (poll.workspace) onWorkspace(poll.workspace);
+        return;
+      }
+      if (poll.status === "failed") throw new Error("진단 생성에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    }
+    throw new Error("진단이 예상보다 오래 걸리고 있습니다. 잠시 후 다시 시도해주세요.");
+  }
+
+  async function startDiagnosisJob() {
+    setDiagnosisBusy(true);
+    setDiagnosisError("");
+    try {
+      const created = await jsonRequest<{ diagnosisId: string; status: string }>("/api/diagnosis/run", {
+        method: "POST",
+      });
+      await pollDiagnosis(created.diagnosisId);
+    } catch (error) {
+      setDiagnosisError(error instanceof Error ? error.message : "진단을 실행하지 못했습니다.");
+    } finally {
+      setDiagnosisBusy(false);
+    }
+  }
+
+  /** 진단 버튼을 누르면 사전질문부터 확인한다 — 최초 진단에만 나오고, 재진단은 빈
+   *  배열을 받아 바로 진단으로 넘어간다. */
+  async function beginDiagnosis() {
+    setDiagnosisError("");
+    setDiagnosisBusy(true);
+    try {
+      const pre = await jsonRequest<{ questions: DiagnosisPreQuestion[] }>("/api/diagnosis/pre-questions");
+      if (pre.questions.length > 0) {
+        setPreAnswerDrafts({});
+        setPreQuestions(pre.questions);
+        setDiagnosisBusy(false);
+        return;
+      }
+    } catch (error) {
+      setDiagnosisError(error instanceof Error ? error.message : "사전 질문을 불러오지 못했습니다.");
+      setDiagnosisBusy(false);
+      return;
+    }
+    await startDiagnosisJob();
+  }
+
+  async function submitPreQuestions(questions: DiagnosisPreQuestion[], skip: boolean) {
+    const answers = questions.map((question) => ({
+      key: question.key,
+      prompt: question.prompt,
+      answer: skip ? null : preAnswerDrafts[question.key]?.trim() || null,
+    }));
+    setPreQuestions(null);
+    setDiagnosisBusy(true);
+    try {
+      await jsonRequest("/api/diagnosis/pre-questions/answers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ answers }),
+      });
+    } catch (error) {
+      setDiagnosisError(error instanceof Error ? error.message : "답변을 저장하지 못했습니다.");
+      setDiagnosisBusy(false);
+      return;
+    }
+    await startDiagnosisJob();
+  }
 
   return (
     <div className="overview-page">
@@ -1642,7 +1784,6 @@ function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: Product
                   onClick={() => setSelectedPlan(ev)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedPlan(ev); } }}
                   role="button"
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 12, background: "var(--bg-elevated)", border: "1px dashed var(--border)", borderRadius: 8, cursor: "pointer" }}
                   tabIndex={0}
                 >
                   <div>
@@ -1696,31 +1837,135 @@ function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: Product
               <span className="kicker">MAJOR NARRATIVE DNA</span>
               <h2>관심분야와 증거를 분리해 보여줘요</h2>
             </div>
-            <span className="live-badge">LIVE</span>
+            {hasDiagnosis ? (
+              <button className="btn btn-ghost btn-sm" disabled={diagnosisBusy} onClick={() => void beginDiagnosis()} type="button">
+                {diagnosisBusy ? "진단 중…" : "다시 진단하기"}
+              </button>
+            ) : (
+              <button className="btn btn-primary btn-sm" disabled={diagnosisBusy} onClick={() => void beginDiagnosis()} type="button">
+                {diagnosisBusy ? "진단 중…" : "AI 진단 실행"}
+              </button>
+            )}
           </div>
           <div className="dna-card-body">
-            <p className="dna-narrative">{workspace.dna.narrative}</p>
-            <div className="dna-cols">
-              <div className="dna-col">
-                <strong>확인된 사실</strong>
-                {workspace.dna.facts.map((fact) => (
-                  <div className="dna-fact" key={fact}>{fact}</div>
-                ))}
-              </div>
-              <div className="dna-col">
-                <strong>AI 해석</strong>
-                {workspace.dna.interpretations.map((item) => (
-                  <div className="dna-interp" key={item.statement}>
-                    {item.statement}
-                    <small>{item.confidence}% · 미확인</small>
+            {diagnosisBusy && (
+              <p className="onboarding-record-note">
+                기록을 분석해 진단을 만드는 중입니다. 활동이 많으면 1~2분 정도 걸릴 수 있어요.
+              </p>
+            )}
+            {diagnosisError && <div className="banner banner-error" style={{ marginBottom: 12 }}>{diagnosisError}</div>}
+            {hasDiagnosis ? (
+              <>
+                <p className="dna-narrative">{workspace.dna.narrative}</p>
+                <div className="dna-cols">
+                  <div className="dna-col">
+                    <strong>확인된 사실</strong>
+                    {workspace.dna.facts.map((fact) => (
+                      <div className="dna-fact" key={fact}>{fact}</div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-            {workspace.dna.riskFlags.length > 0 && (
-              <div className="dna-risks">
-                {workspace.dna.riskFlags.map((flag) => <span key={flag}>주의 {flag}</span>)}
-              </div>
+                  <div className="dna-col">
+                    <strong>AI 해석</strong>
+                    {workspace.dna.interpretations.map((item) => (
+                      <div className="dna-interp" key={item.statement}>
+                        {item.statement}
+                        <small>{item.confidence}% · 미확인</small>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {workspace.dna.riskFlags.length > 0 && (
+                  <div className="dna-risks">
+                    {workspace.dna.riskFlags.map((flag) => <span key={flag}>주의 {flag}</span>)}
+                  </div>
+                )}
+                {workspace.dna.opportunities.length > 0 && (
+                  <div className="dna-risks" style={{ background: "var(--surface-2)", color: "var(--fg-muted)" }}>
+                    {workspace.dna.opportunities.map((item) => <span key={item}>기회 {item}</span>)}
+                  </div>
+                )}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setDiagnosisDetailOpen((cur) => !cur)}
+                  style={{ marginTop: 12 }}
+                  type="button"
+                >
+                  {diagnosisDetailOpen ? "진단 상세 접기 ▲" : "진단 상세 보기 ▼"}
+                </button>
+                {diagnosisDetailOpen && (
+                  <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 18 }}>
+                    {workspace.dna.gradesTrend.length > 0 && (
+                      <div>
+                        <strong>성적 추이 (학기별 평균 석차등급 · 1에 가까울수록 좋음)</strong>
+                        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 100, marginTop: 10, padding: "0 4px" }}>
+                          {workspace.dna.gradesTrend.map((point) => {
+                            const rank = point.averageRank;
+                            const heightPct = rank == null ? 0 : Math.max(6, ((10 - rank) / 9) * 100);
+                            return (
+                              <div key={`${point.grade}-${point.semester}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1, height: "100%", justifyContent: "flex-end" }}>
+                                <small style={{ color: "var(--fg-muted)" }}>{rank == null ? "기록 없음" : rank.toFixed(1)}</small>
+                                <div style={{ width: "60%", height: `${heightPct}%`, background: rank == null ? "var(--border)" : "var(--blue-500)", borderRadius: "4px 4px 0 0", minHeight: 4 }} />
+                                <small style={{ color: "var(--fg-muted)", marginTop: 4 }}>{point.grade}-{point.semester}</small>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {workspace.dna.gradesTrend.some((p) => p.excludedCount > 0) && (
+                          <small style={{ color: "var(--fg-muted)" }}>석차등급이 없는 과목(진로선택·전문교과 등)은 평균에서 제외했습니다.</small>
+                        )}
+                      </div>
+                    )}
+                    {workspace.dna.semesterReviews.length > 0 && (
+                      <div>
+                        <strong>학기별 평가</strong>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+                          {workspace.dna.semesterReviews.map((review) => (
+                            <div className="dna-interp" key={`${review.grade}-${review.semester}`} style={{ display: "block" }}>
+                              <strong>{review.grade}학년 {review.semester}학기</strong>
+                              <p style={{ margin: "6px 0 0" }}>{review.gradesReview}</p>
+                              <p style={{ margin: "6px 0 0" }}>{review.readingReview}</p>
+                              <p style={{ margin: "6px 0 0" }}>{review.activitiesReview}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {workspace.dna.activityInventory.length > 0 && (
+                      <div>
+                        <strong>활동 인벤토리 (역량 × 심화도)</strong>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                          {workspace.dna.activityInventory.map((entry) => (
+                            <div className="dna-fact" key={entry.activityId}>
+                              {entry.grade}학년{entry.semester ? ` ${entry.semester}학기` : ""} · {entry.competency} · {entry.depthLevel} — {entry.headline}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {workspace.dna.knowledgeGraphLinks.length > 0 && (
+                      <div>
+                        <strong>숨은 연결 (계보로는 안 잡히는 활동 간 연결)</strong>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                          {workspace.dna.knowledgeGraphLinks.map((link, index) => (
+                            <div className="dna-fact" key={`${link.fromActivityId}-${link.toActivityId}-${index}`}>
+                              {activityTitleById.get(link.fromActivityId) ?? "활동"} ↔ {activityTitleById.get(link.toActivityId) ?? "활동"}
+                              <small style={{ display: "block", color: "var(--fg-muted)" }}>
+                                {link.linkType === "vertical" ? "심화 연결" : "융합 연결"} · {link.relationLabel}
+                              </small>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              !diagnosisBusy && (
+                <p style={{ color: "var(--fg-muted)" }}>
+                  아직 진단을 실행하지 않았습니다. 지금까지 쌓인 기록으로 강점·약점과 진로 흐름을 분석하려면 진단을 실행해주세요.
+                </p>
+              )
             )}
           </div>
         </section>
@@ -1781,6 +2026,61 @@ function Overview({ workspace, onNavigate, onConvertPlan }: { workspace: Product
         )}
       </section>
       {selectedPlan && active && <PlanDetailModal plan={selectedPlan} node={active} courseSubjects={workspace.semesterCourses.filter((course) => course.roadmapNodeId === active.id).map((course) => course.subject)} onClose={() => setSelectedPlan(null)} onConvertPlan={onConvertPlan} />}
+      {preQuestions && (
+        <div className="modal-overlay" onClick={() => setPreQuestions(null)} role="presentation">
+          <section aria-label="진단 전 확인 질문" aria-modal="true" className="modal-panel diagnosis-prequestion-panel" onClick={(event) => event.stopPropagation()} role="dialog">
+            <div className="modal-head">
+              <h3>진단하기 전에 몇 가지만 확인할게요</h3>
+              <button className="btn btn-ghost btn-sm" onClick={() => setPreQuestions(null)} type="button">닫기</button>
+            </div>
+            <div className="modal-body">
+              <p className="onboarding-record-note">
+                생기부만으로는 알 수 없는 부분이에요. 답하지 않고 넘어가도 진단은 실행됩니다.
+              </p>
+              {preQuestions.map((question) => (
+                <div className="branch-question-card" key={question.key}>
+                  <div className="branch-question-head">
+                    <strong>{question.prompt}</strong>
+                  </div>
+                  {question.options.length > 0 && (
+                    <div className="clarity-choice-row">
+                      {question.options.map((option) => (
+                        <button
+                          className={`clarity-choice${preAnswerDrafts[question.key] === option ? " is-active" : ""}`}
+                          key={option}
+                          onClick={() => setPreAnswerDrafts((cur) => ({ ...cur, [question.key]: option }))}
+                          type="button"
+                        >
+                          <strong>{option}</strong>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {question.allow_custom && (
+                    <div className="form-field" style={{ marginTop: 10 }}>
+                      <label htmlFor={`pre-question-${question.key}`}>직접 입력</label>
+                      <input
+                        id={`pre-question-${question.key}`}
+                        onChange={(event) => setPreAnswerDrafts((cur) => ({ ...cur, [question.key]: event.target.value }))}
+                        placeholder="답변을 입력해주세요 (선택)"
+                        value={preAnswerDrafts[question.key] ?? ""}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-ghost" onClick={() => void submitPreQuestions(preQuestions, true)} type="button">
+                건너뛰고 진단하기
+              </button>
+              <button className="btn btn-primary" onClick={() => void submitPreQuestions(preQuestions, false)} type="button">
+                답변 제출하고 진단하기
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -1868,7 +2168,10 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
         }
         // 이미 반영을 마친 업로드는 검토할 것이 없다 — 연결됨 상태만 보이면 된다.
         if (latest.status !== "done" || latest.importedAt || !latest.result) return;
-        const parsed = parseSchoolRecordJson(latest.result, academicStartYear);
+        const parsed = parseSchoolRecordJson(latest.result, academicStartYear, {
+          grade: workspace.profile.grade,
+          semester: workspace.profile.semester,
+        });
         parsed.fileName = latest.fileName ?? parsed.fileName;
         importedEntries.current = new Map();
         setRecordParse(parsed);
@@ -1878,7 +2181,7 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
         console.warn("마지막 생기부 업로드를 되찾지 못했습니다", e);
       }
     })();
-  }, [academicStartYear]);
+  }, [academicStartYear, workspace.profile.grade, workspace.profile.semester]);
   const allSubjects = [...new Set([
     ...workspace.roadmap.nodes.flatMap((n) => n.candidateSubjects),
     ...workspace.activities.map((a) => a.subject),
@@ -1992,7 +2295,10 @@ function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: Pro
     setRecordBusy(true); setRecordFile(file.name); setRecordMessage(""); setError("");
     try {
       const resultJson = await analyzeSchoolRecordPdf(file, academicStartYear);
-      const parsedResult = parseSchoolRecordJson(resultJson, academicStartYear);
+      const parsedResult = parseSchoolRecordJson(resultJson, academicStartYear, {
+        grade: workspace.profile.grade,
+        semester: workspace.profile.semester,
+      });
       parsedResult.fileName = file.name;
 
       // index는 이 파싱 결과 안에서만 유효하므로 지난 누적을 버린다.
@@ -2787,6 +3093,15 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   const [files, setFiles] = useState<File[]>([]);
   const [lastReview, setLastReview] = useState<ActivityReview | null>(null);
   const [qualityNotice, setQualityNotice] = useState<string[] | null>(null);
+  const [recommendationPanelOpen, setRecommendationPanelOpen] = useState(false);
+  const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<string | null>(null);
+  const [recommendationBusyId, setRecommendationBusyId] = useState<string | null>(null);
+  const [recommendation, setRecommendation] = useState<FollowUpRecommendation | null>(null);
+  const [recommendationActivityTitle, setRecommendationActivityTitle] = useState("");
+  const [recommendationError, setRecommendationError] = useState("");
+  const [adoptBusyIndex, setAdoptBusyIndex] = useState<number | null>(null);
+  const [adoptedIndexes, setAdoptedIndexes] = useState<Set<number>>(new Set());
+  const [rejectedIndexes, setRejectedIndexes] = useState<Set<number>>(new Set());
   const allSelectablePlans = workspace.roadmap.nodes.flatMap((node) => (node.planEvents ?? []).map((event) => ({
     ...event,
     nodeId: node.id,
@@ -2851,6 +3166,96 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       onWorkspace(result.workspace);
     } catch {
       setError("파일을 삭제하지 못했습니다.");
+    }
+  }
+
+  /**
+   * 이 앱은 Next.js API 라우트가 없는 순수 클라이언트 SPA라, `<a href="/api/...">`로
+   * 첨부파일 다운로드를 걸면 실제 브라우저 내비게이션이 되는 순간 Authorization
+   * 헤더를 못 실어 404가 난다. fetch로 받아 blob URL을 만들어 그 자리에서 내려받는다.
+   */
+  async function downloadAttachment(attachment: ActivityAttachment) {
+    setDownloadingAttachmentId(attachment.id);
+    try {
+      const blob = await downloadFile(`/activities/attachments/${encodeURIComponent(attachment.id)}/file`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("파일을 내려받지 못했습니다.");
+    } finally {
+      setDownloadingAttachmentId(null);
+    }
+  }
+
+  /** 활동 하나를 근거로 후속 탐구 선택지를 만든다(기능2) — 대상 활동 하나가 아니라
+   *  그 활동의 계보 사슬 전체와 최신 진단을 근거로 삼는 것은 백엔드가 처리한다. */
+  async function requestFollowUp(activity: StudentActivity) {
+    setRecommendationPanelOpen(true);
+    setRecommendationBusyId(activity.id);
+    setRecommendationError("");
+    setRecommendation(null);
+    setRecommendationActivityTitle(activity.title);
+    setAdoptedIndexes(new Set());
+    setRejectedIndexes(new Set());
+    try {
+      const result = await jsonRequest<FollowUpRecommendation>("/api/recommendations/follow-up", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sourceActivityId: activity.id }),
+      });
+      setRecommendation(result);
+    } catch (e) {
+      setRecommendationError(e instanceof Error ? e.message : "후속 추천을 만들지 못했습니다.");
+    } finally {
+      setRecommendationBusyId(null);
+    }
+  }
+
+  /** 선택지를 계획으로 담는다 — "추천 → 계획 → 실행 → 기록" 루프를 잇는 지점.
+   *  계획(plan_items) 탭 화면이 아직 없어 담은 뒤 화면이 바로 바뀌지는 않는다. */
+  async function adoptRecommendationOption(optionIndex: number) {
+    if (!recommendation) return;
+    setAdoptBusyIndex(optionIndex);
+    try {
+      await jsonRequest(`/api/recommendations/${recommendation.id}/adopt`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          optionIndex,
+          targetGrade: workspace.profile.grade,
+          targetSemester: workspace.profile.semester,
+        }),
+      });
+      setAdoptedIndexes((cur) => new Set(cur).add(optionIndex));
+      await jsonRequest(`/api/recommendations/${recommendation.id}/feedback`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ optionIndex, action: "saved" }),
+      }).catch(() => undefined);
+    } catch (e) {
+      setRecommendationError(e instanceof Error ? e.message : "계획에 담지 못했습니다.");
+    } finally {
+      setAdoptBusyIndex(null);
+    }
+  }
+
+  async function rejectRecommendationOption(optionIndex: number) {
+    if (!recommendation) return;
+    setRejectedIndexes((cur) => new Set(cur).add(optionIndex));
+    try {
+      await jsonRequest(`/api/recommendations/${recommendation.id}/feedback`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ optionIndex, action: "rejected" }),
+      });
+    } catch {
+      /* 피드백 저장 실패는 조용히 무시 — 다음 추천의 개인화 신호일 뿐, 화면 흐름을 막을 정도는 아니다. */
     }
   }
 
@@ -2982,10 +3387,28 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
                     </div>
                     {workspace.attachments.filter((attachment) => attachment.activityId === activity.id).map((attachment) => (
                       <div key={attachment.id} style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
-                        <a href={`/api/activity-files/${encodeURIComponent(attachment.id)}?studentId=${encodeURIComponent(workspace.profile.id)}`}>{attachment.fileName}</a>
+                        <button
+                          className="btn-link"
+                          disabled={downloadingAttachmentId === attachment.id}
+                          onClick={() => void downloadAttachment(attachment)}
+                          type="button"
+                        >
+                          {downloadingAttachmentId === attachment.id ? "내려받는 중…" : attachment.fileName}
+                        </button>
                         <button className="btn btn-ghost btn-sm" onClick={() => deleteAttachment(attachment.id)} type="button">삭제</button>
                       </div>
                     ))}
+                    {activity.recordKind === "activity" && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        disabled={recommendationBusyId === activity.id}
+                        onClick={() => void requestFollowUp(activity)}
+                        style={{ marginTop: 10 }}
+                        type="button"
+                      >
+                        {recommendationBusyId === activity.id ? "후속 탐구 찾는 중…" : "이 활동 기반 후속 탐구 추천"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -3025,21 +3448,232 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
           )}
         </div>
       </div>
+      {recommendationPanelOpen && (
+        <div className="modal-overlay" onClick={() => setRecommendationPanelOpen(false)} role="presentation">
+          <section
+            aria-label="후속 탐구 추천"
+            aria-modal="true"
+            className="modal-panel diagnosis-prequestion-panel"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal-head">
+              <div>
+                <span className="kicker">FOLLOW-UP RECOMMENDATION</span>
+                <h2>{recommendationActivityTitle || "이 활동"}의 다음 탐구 후보</h2>
+              </div>
+              <button aria-label="닫기" className="focus-close" onClick={() => setRecommendationPanelOpen(false)} type="button">×</button>
+            </div>
+            <div className="modal-body">
+              {recommendationBusyId && (
+                <p className="onboarding-record-note">
+                  이 활동의 계보와 최신 진단을 근거로 후속 탐구를 만드는 중입니다. 20~40초 정도 걸릴 수 있어요.
+                </p>
+              )}
+              {recommendationError && <div className="banner banner-error">{recommendationError}</div>}
+              {recommendation?.options.map((option, index) => {
+                const difficultyLabel = option.difficulty === "easy" ? "쉬움" : option.difficulty === "hard" ? "심화" : "보통";
+                const adopted = adoptedIndexes.has(index);
+                const rejected = rejectedIndexes.has(index);
+                return (
+                  <div className="branch-question-card" key={option.topic}>
+                    <div className="branch-question-head">
+                      <strong>{option.topic}</strong>
+                      <small>난이도 {difficultyLabel}</small>
+                    </div>
+                    <p className="onboarding-record-note">{option.connection_reason}</p>
+                    <p><small style={{ color: "var(--fg-muted)" }}>연결 과목: {option.subject_relevance}</small></p>
+                    <p><small style={{ color: "var(--fg-muted)" }}>진로 연결: {option.career_relevance}</small></p>
+                    <p><small style={{ color: "var(--fg-muted)" }}>생기부 기록 가능성: {option.record_potential}</small></p>
+                    <p><small style={{ color: "var(--fg-muted)" }}>예상 산출물: {option.expected_output}</small></p>
+                    {option.materials.length > 0 && (
+                      <div className="concept-tags">
+                        {option.materials.map((material) => <span className="concept-tag" key={material}>{material}</span>)}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={adopted || adoptBusyIndex === index}
+                        onClick={() => void adoptRecommendationOption(index)}
+                        type="button"
+                      >
+                        {adopted ? "계획에 담았습니다" : adoptBusyIndex === index ? "담는 중…" : "계획에 담기"}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={adopted || rejected}
+                        onClick={() => void rejectRecommendationOption(index)}
+                        type="button"
+                      >
+                        {rejected ? "관심없음으로 표시했습니다" : "관심없음"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {adoptedIndexes.size > 0 && (
+                <p className="onboarding-record-note">
+                  계획으로 담은 주제는 완료하면 이 활동의 후속 기록으로 이어집니다. 계획 목록 화면은 아직 준비 중이라, 지금은 챗봇에게 "내 계획 보여줘"라고 물어보면 확인할 수 있습니다.
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
 
 function PortfolioView({ workspace }: { workspace: ProductWorkspace }) {
-  const records = [...workspace.activities].sort((a, b) => a.completedAt.localeCompare(b.completedAt));
-  const themes = [...new Set(records.flatMap((record) => record.concepts))].slice(0, 6);
-  return <div className="activities-page">
-    <div className="activities-header"><span className="kicker">ADMISSIONS PORTFOLIO</span><h1>수시 준비 자료</h1><p>3년 활동의 사실과 증거를 자소서 서사와 면접 대비 질문으로 정리합니다.</p></div>
-    <div className="activity-form-card"><h2>자소서 서사 초안</h2><p>{workspace.profile.targetCareer} 관심을 바탕으로 {records.length}개의 실제 활동을 축적했습니다. {themes.length ? `핵심 키워드는 ${themes.join(", ")}입니다.` : "활동을 더 기록하면 핵심 키워드가 자동으로 정리됩니다."}</p><ol>{records.map((record) => <li key={record.id}><strong>{record.completedAt || record.periodLabel} · {record.title}</strong><br />{record.summary}{record.reflection && <><br /><small>배운 점·느낀 점: {record.reflection}</small></>}</li>)}</ol></div>
-    <div className="activity-form-card"><h2>면접 대비 질문</h2>{records.length ? <ol>{records.slice(-5).reverse().map((record) => <li key={record.id}>“{record.title}에서 무엇을 직접 탐구했고, 결과가 {workspace.profile.targetCareer} 관심과 어떻게 이어졌나요?”</li>)}</ol> : <p>실제 활동을 저장하면 활동별 면접 질문이 만들어집니다.</p>}</div>
-  </div>;
+  const records = [...workspace.activities].sort((a, b) => (a.completedAt || "").localeCompare(b.completedAt || ""));
+  const themes = [...new Set(records.flatMap((record) => record.concepts))].slice(0, 8);
+  const [copiedQuestionId, setCopiedQuestionId] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, id: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      void navigator.clipboard.writeText(text);
+      setCopiedQuestionId(id);
+      setTimeout(() => setCopiedQuestionId(null), 2000);
+    }
+  };
+
+  return (
+    <div className="portfolio-page">
+      <div className="portfolio-header">
+        <div>
+          <span className="kicker">ADMISSIONS PORTFOLIO</span>
+          <h1>수시 학생부종합 준비</h1>
+          <p>3년간 축적한 실제 활동의 사실과 증거를 바탕으로 자소서 서사 흐름과 심층 면접 질문을 정리합니다.</p>
+        </div>
+        <div className="portfolio-stat-pill">
+          <span className="stat-label">누적 검증 활동</span>
+          <strong className="stat-num">{records.length}건</strong>
+        </div>
+      </div>
+
+      {/* Target & Keywords Overview Card */}
+      <div className="portfolio-hero-card">
+        <div className="portfolio-hero-meta">
+          <span className="hero-badge">목표 진로 및 학과</span>
+          <h2 className="hero-title">{workspace.profile.targetCareer} <span className="hero-sub">({workspace.profile.targetMajors.join(", ") || "전공 미정"})</span></h2>
+          <p className="hero-desc">
+            {records.length > 0
+              ? `${workspace.profile.targetCareer} 전공 적합성을 중심으로 ${records.length}개의 탐구·수행 기록이 유기적으로 연계되어 있습니다.`
+              : "활동을 기록하면 진로 관심과 연결된 자소서 핵심 서사가 자동으로 구조화됩니다."}
+          </p>
+        </div>
+        {themes.length > 0 && (
+          <div className="portfolio-keywords-box">
+            <span className="keywords-title">핵심 역량 키워드</span>
+            <div className="keywords-wrap">
+              {themes.map((theme) => (
+                <span className="portfolio-keyword-chip" key={theme}>#{theme}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Two Column Layout: 자소서 서사 vs 면접 대비 */}
+      <div className="portfolio-grid">
+        {/* Left: Narrative Timeline */}
+        <section className="portfolio-section-card">
+          <div className="section-head">
+            <div>
+              <span className="kicker">NARRATIVE TIMELINE</span>
+              <h2>자소서 서사 흐름</h2>
+            </div>
+            <span className="section-badge">{records.length}개 탐구 연계</span>
+          </div>
+
+          {records.length === 0 ? (
+            <div className="portfolio-empty-box">
+              <p>아직 기록된 활동이 없습니다. [활동 기록] 탭에서 이번 학기 수행평가와 탐구 활동을 남겨보세요.</p>
+            </div>
+          ) : (
+            <div className="narrative-timeline">
+              {records.map((record, index) => (
+                <article className="narrative-item" key={record.id}>
+                  <div className="narrative-marker">
+                    <span className="marker-dot" />
+                    {index < records.length - 1 && <span className="marker-line" />}
+                  </div>
+                  <div className="narrative-content">
+                    <div className="narrative-top">
+                      <span className="narrative-period">{record.completedAt || record.periodLabel}</span>
+                      <span className="narrative-subject">{record.subject}</span>
+                    </div>
+                    <h3 className="narrative-title">{record.title}</h3>
+                    <p className="narrative-summary">{record.summary}</p>
+                    {record.reflection && (
+                      <blockquote className="narrative-reflection">
+                        <strong>배운 점 · 느낀 점</strong>
+                        <span>{record.reflection}</span>
+                      </blockquote>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Right: Interview Preparation */}
+        <section className="portfolio-section-card">
+          <div className="section-head">
+            <div>
+              <span className="kicker">INTERVIEW PREP</span>
+              <h2>면접 대비 예상 질문</h2>
+            </div>
+            <span className="section-badge">심층 압박 대비</span>
+          </div>
+
+          {records.length === 0 ? (
+            <div className="portfolio-empty-box">
+              <p>활동을 저장하면 입학사정관 및 교수 관점의 면접 검증 질문이 자동으로 생성됩니다.</p>
+            </div>
+          ) : (
+            <div className="interview-list">
+              {records.slice(-6).reverse().map((record, index) => {
+                const questionText = `“${record.title}”에서 본인이 주도적으로 탐구한 핵심 원리는 무엇이며, 이 과정이 ${workspace.profile.targetCareer} 진로에 미친 영향은?`;
+                const isCopied = copiedQuestionId === record.id;
+                return (
+                  <div className="interview-card" key={record.id}>
+                    <div className="interview-header">
+                      <span className="interview-num">Q{index + 1}</span>
+                      <span className="interview-subject">{record.subject}</span>
+                      <button
+                        className={`btn-copy-q${isCopied ? " copied" : ""}`}
+                        onClick={() => copyToClipboard(questionText, record.id)}
+                        type="button"
+                      >
+                        {isCopied ? "복사됨 ✓" : "질문 복사"}
+                      </button>
+                    </div>
+                    <p className="interview-question">{questionText}</p>
+                    <div className="interview-tips">
+                      <div className="tip-row">
+                        <strong>검증 포인트</strong>
+                        <span>단순 참여가 아닌 본인의 구체적 문제해결 과정 설명</span>
+                      </div>
+                      <div className="tip-row">
+                        <strong>근거 기록</strong>
+                        <span>{record.title} ({record.completedAt || record.periodLabel})</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
 }
 
-function GradesView({ workspace, onWorkspace, onNavigate }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void; onNavigate: (tab: TabId) => void }) {
+function LegacyGradesView({ workspace, onWorkspace, onNavigate }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void; onNavigate: (tab: TabId) => void }) {
   const [period, setPeriod] = useState(`${workspace.profile.grade}-${workspace.profile.semester}`);
   const [drafts, setDrafts] = useState<Record<string, { rank: string; score: string; note: string }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -3140,41 +3774,28 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  return (
-    <div className="profile-page">
-      <div className="profile-header">
-        <span className="kicker">STUDENT PROFILE</span>
-        <h1>학생 정보</h1>
-        <p>이 화면은 현재 학생과 확정된 로드맵 기준을 확인하는 용도입니다. 여기서 로드맵을 직접 수정하지 않습니다.</p>
-      </div>
-
-      <div className="profile-form-card">
-        <div className="form-grid-3" style={{ marginBottom: "20px" }}>
-          <div className="form-field"><label>이름</label><p>{workspace.profile.name || "미입력"}</p></div>
-          <div className="form-field"><label>현재 학년</label><p>{workspace.profile.grade}학년</p></div>
-          <div className="form-field"><label>현재 학기</label><p>{workspace.profile.semester}학기</p></div>
-        </div>
-        <div className="form-grid-2">
-          <div className="form-field form-span-2"><label>현재 관심 분야 또는 진로</label><p>{workspace.profile.targetCareer || "미입력"}</p></div>
-          <div className="form-field"><label>관심 학과</label><p>{workspace.profile.targetMajors.join(", ") || "미입력"}</p></div>
-          <div className="form-field"><label>로드맵 관심 축</label><p>{workspace.profile.interests.join(", ") || "미입력"}</p></div>
-        </div>
-        <div className="banner banner-info" style={{ marginTop: "20px" }}>
-          로드맵 기준을 바꾸고 싶다면 추후 챗봇에서 이유와 현재 기록을 함께 검토한 뒤 새 버전을 제안합니다. 과거 기록과 확정된 로드맵은 이 화면에서 임의로 바뀌지 않습니다.
-        </div>
-      </div>
-
-      <div className="data-priority-card">
-        <span className="kicker">DATA PRIORITY</span>
-        <h2>현재 저장 원칙</h2>
-        <div className="priority-list">
-          {["학생이 직접 확인한 기본 정보", "실제 활동과 첨부자료의 근거", "학생이 확인한 AI 해석", "아직 확인되지 않은 잠정 추론"].map((text, i) => (
-            <div className="priority-item" key={text}><span className="priority-num">{i + 1}</span>{text}</div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    setForm({
+      name: workspace.profile.name,
+      grade: String(workspace.profile.grade),
+      semester: workspace.profile.semester ? String(workspace.profile.semester) : "",
+      targetCareer: workspace.profile.targetCareer,
+      targetMajors: workspace.profile.targetMajors.join(", "),
+      interests: workspace.profile.interests.join(", "),
+      concreteResearchQuestion: "",
+      knowledgeLevel: "",
+      motivationTrigger: workspace.profile.motivationTrigger,
+      preferredSubjects: workspace.profile.preferredSubjects.join(", "),
+      currentEngagement: workspace.profile.currentEngagement.join(", "),
+      careerResolution: workspace.profile.careerResolution,
+      strengths: workspace.profile.strengths.join(", "),
+      gaps: workspace.profile.gaps.join(", "),
+      constraints: workspace.profile.constraints.join(", "),
+      outputPreference: workspace.profile.outputPreference,
+      collaborationStyle: workspace.profile.collaborationStyle,
+      roadmapDesignNotes: "",
+    });
+  }, [workspace.profile]);
 
   function update<K extends keyof ProfileForm>(key: K, value: ProfileForm[K]) {
     setForm((cur) => ({ ...cur, [key]: value }));
@@ -3320,16 +3941,142 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
 }) {
   const [tab, setTab] = useState<TabId>("roadmap");
   const [activityDraft, setActivityDraft] = useState<ActivityDraft | null>(null);
+  const studentId = workspace.profile.id;
+  const storageKey = `seteuk-timetables-${studentId}`;
+
+  const [timetables, setTimetables] = useState<TimetableConfig[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = window.localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+    return [createEmptyTimetable(workspace.profile.grade, workspace.profile.semester)];
+  });
+
+  const handleTimetablesChange = (updated: TimetableConfig[]) => {
+    setTimetables(updated);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch {
+        // ignore storage error
+      }
+    }
+  };
+
+  useEffect(() => {
+    const hasCurrent = timetables.some(
+      (t) => t.grade === workspace.profile.grade && t.semester === workspace.profile.semester
+    );
+    if (!hasCurrent) {
+      const newTt = createEmptyTimetable(workspace.profile.grade, workspace.profile.semester);
+      handleTimetablesChange([...timetables, newTt]);
+    }
+  }, [workspace.profile.grade, workspace.profile.semester]);
+
+  const defaultTimetable = useMemo(
+    () => timetables.find((t) => t.isDefault) || timetables[0] || null,
+    [timetables]
+  );
+
   const initials = workspace.profile.name.slice(-2);
 
-  const tabs: Array<{ id: TabId; label: string; icon: string }> = [
-    { id: "roadmap",    label: "3개년 기록",    icon: "3Y" },
-    { id: "overview",   label: "이번 학기",     icon: "●" },
-    { id: "activities", label: "활동 기록",      icon: "◎"  },
-    { id: "grades",     label: "성적",          icon: "A"  },
-    { id: "portfolio",  label: "수시 준비",      icon: "↗"  },
-    { id: "chat",       label: "챗봇",          icon: "◍"  },
-    { id: "profile",    label: "프로필",         icon: "◉"  },
+  const tabs: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
+    {
+      id: "roadmap",
+      label: "3개년 기록",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2" />
+          <polyline points="2 17 12 22 22 17" />
+          <polyline points="2 12 12 17 22 12" />
+        </svg>
+      ),
+    },
+    {
+      id: "timetable",
+      label: "시간표",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      ),
+    },
+    {
+      id: "grades",
+      label: "성적",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      ),
+    },
+    {
+      id: "overview",
+      label: "이번 학기",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="6" />
+          <circle cx="12" cy="12" r="2" />
+        </svg>
+      ),
+    },
+    {
+      id: "activities",
+      label: "활동 기록",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+          <polyline points="10 9 9 9 8 9" />
+        </svg>
+      ),
+    },
+    {
+      id: "portfolio",
+      label: "수시 준비",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: "chat",
+      label: "챗봇",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
+      ),
+    },
+    {
+      id: "profile",
+      label: "프로필",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      ),
+    },
   ];
 
   function startActivity(draft: ActivityDraft) {
@@ -3395,8 +4142,35 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
         </header>
 
         <div className="product-content">
-          {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} />}
+          {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} onWorkspace={onWorkspace} />}
           {tab === "roadmap"    && <RoadmapView workspace={workspace} onWorkspace={onWorkspace} onConvertPlan={startActivity} />}
+          {tab === "timetable"  && (
+            <TimetableView
+              currentGrade={workspace.profile.grade}
+              currentSemester={workspace.profile.semester}
+              timetables={timetables}
+              onTimetablesChange={handleTimetablesChange}
+              onNavigateToGrades={() => setTab("grades")}
+              onNavigateToActivities={(subject) => {
+                startActivity({ title: `${subject} 심화 탐구`, subject });
+              }}
+              onUpdateCurrentPeriod={async (grade, semester) => {
+                const updatedProfile = {
+                  ...workspace.profile,
+                  grade,
+                  semester,
+                };
+                const result = (await handleLegacyRoute("/api/profile", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ profile: updatedProfile }),
+                })) as { workspace: ProductWorkspace };
+                if (result?.workspace) {
+                  onWorkspace(result.workspace);
+                }
+              }}
+            />
+          )}
           {tab === "activities" && (
             <ActivitiesView
               key={activityDraft?.title ?? "activity-entry"}
@@ -3406,7 +4180,19 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               clearDraft={() => setActivityDraft(null)}
             />
           )}
-          {tab === "grades"     && <GradesView workspace={workspace} onNavigate={setTab} onWorkspace={onWorkspace} />}
+          {tab === "grades"     && (
+            <GradesView
+              currentGrade={workspace.profile.grade}
+              currentSemester={workspace.profile.semester}
+              defaultTimetable={defaultTimetable}
+              timetables={timetables}
+              onNavigateToTimetable={() => setTab("timetable")}
+              onNavigateToActivities={(subject) => {
+                startActivity({ title: `${subject} 세특 활동`, subject });
+              }}
+              onRecordsChanged={onRefresh}
+            />
+          )}
           {tab === "portfolio" && <PortfolioView workspace={workspace} />}
           {tab === "chat"       && <ChatView onRecordsChanged={onRefresh} />}
           {tab === "profile"    && <ProfileView workspace={workspace} onWorkspace={onWorkspace} />}
@@ -3426,6 +4212,8 @@ export function WorkspaceApp() {
   // 학생 식별은 이제 백엔드 JWT가 한다 — localStorage의 studentId로 작업공간을 찾던
   // 방식은 서버 로직이 이 앱을 떠나면서 함께 사라졌다.
   const [signedIn, setSignedIn] = useState(false);
+  // null이면 아직 확인 전, satisfied=false면 진단+상담 관문이 메인 화면을 막는다.
+  const [consultationStatus, setConsultationStatus] = useState<ConsultationStatus | null>(null);
 
   /**
    * `quiet`는 로딩 화면을 띄우지 않고 데이터만 갈아 끼운다. 챗봇 수정 모드가 기록을
@@ -3451,6 +4239,30 @@ export function WorkspaceApp() {
       });
   }, []);
 
+  /**
+   * 로그인/온보딩 직후, 그리고 상담이 끝난 직후에 부른다. 진단+상담 관문이 안
+   * 풀렸으면 무거운 loadWorkspace()(로드맵 등 관문에 막힌 자원을 부른다)를 아예
+   * 건너뛰고 상담 화면을 보여준다 — 관문을 만족했을 때만(또는 프로필이 아직 없어
+   * 이 관문의 관심사가 아닐 때만) 원래 흐름으로 넘어간다.
+   */
+  const checkGate = useCallback(() => {
+    setLoading(true);
+    getConsultationStatus()
+      .then((status) => {
+        setConsultationStatus(status);
+        if (status.satisfied) {
+          refresh();
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        // 상태 조회 자체가 실패하면(네트워크 등) 기존 흐름으로 넘어가 원인을
+        // 다시 드러낸다.
+        refresh();
+      });
+  }, [refresh]);
+
   useEffect(() => {
     if (!tokens.access) {
       setSignedIn(false);
@@ -3458,8 +4270,8 @@ export function WorkspaceApp() {
       return;
     }
     setSignedIn(true);
-    refresh();
-  }, [refresh]);
+    checkGate();
+  }, [checkGate]);
 
 
   const loadingCopy = useMemo(() => (loading ? "학생 작업공간을 불러오는 중…" : ""), [loading]);
@@ -3471,7 +4283,7 @@ export function WorkspaceApp() {
       <SignIn
         onSignedIn={() => {
           setSignedIn(true);
-          refresh();
+          checkGate();
         }}
       />
     );
@@ -3491,10 +4303,17 @@ export function WorkspaceApp() {
     );
   }
 
+  // satisfied=false는 프로필이 이미 있는(=온보딩을 마친) 학생에게만 나온다 — 관문은
+  // current_grade/semester가 있어야 판단하므로, 이 분기가 !workspace 체크보다
+  // 먼저 와야 재방문 학생이 온보딩 화면으로 잘못 돌아가지 않는다.
+  if (consultationStatus && !consultationStatus.satisfied) {
+    return <ConsultationGate status={consultationStatus} onSatisfied={checkGate} />;
+  }
+
   if (!workspace) {
     return (
       <>
-        <Onboarding onComplete={setWorkspace} />
+        <Onboarding onComplete={checkGate} />
         {error && <div className="floating-error">{error}</div>}
       </>
     );

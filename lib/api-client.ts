@@ -104,6 +104,28 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * 인증이 필요한 파일 다운로드 전용. `api()`는 항상 JSON 응답을 기대하므로 바이너리에는
+ * 쓸 수 없다 — 이 SPA는 Next.js API 라우트가 없어 `<a href="/api/...">` 같은 실제
+ * 브라우저 내비게이션은 Authorization 헤더를 못 실어 보내 404가 난다(파일 다운로드가
+ * 유독 이 문제를 겪는 이유). fetch로 받아 blob URL을 만들어 우회한다.
+ */
+export async function downloadFile(path: string, retry = true): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  const access = tokens.access;
+  if (access) headers.Authorization = `Bearer ${access}`;
+
+  const response = await fetch(`${API}${path}`, { headers });
+
+  if (response.status === 401 && retry && (await refreshAccessToken())) {
+    return downloadFile(path, false);
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, "DOWNLOAD_FAILED", "파일을 내려받지 못했습니다.");
+  }
+  return await response.blob();
+}
+
 export async function login(email: string, password: string): Promise<void> {
   const body = await api<{ access_token: string; refresh_token: string }>("/auth/login", {
     method: "POST",
