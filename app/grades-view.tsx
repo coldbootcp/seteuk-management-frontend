@@ -321,13 +321,32 @@ export function GradesView({
       }
     });
 
+    // 세특 연계 지표 — 목업의 "교과 세특 연계율 / 이번 학기 세특 작성"에 대응한다.
+    // 지어낸 값이 아니라 각 과목 행의 seteukCount를 실제로 센 것이다.
+    let linkedCourses = 0;
+    let totalCourses = 0;
+    let currentSemesterSeteuk = 0;
+    semestersData.forEach((sem) => {
+      sem.items.forEach((item) => {
+        totalCourses += 1;
+        if (item.seteukCount > 0) linkedCourses += 1;
+        if (sem.grade === currentGrade && sem.semester === currentSemester) {
+          currentSemesterSeteuk += item.seteukCount;
+        }
+      });
+    });
+
     return {
       overallAvg,
       coreAvg,
       distribution,
       trendData,
+      linkedCourses,
+      totalCourses,
+      linkRate: totalCourses ? Math.round((linkedCourses / totalCourses) * 100) : 0,
+      currentSemesterSeteuk,
     };
-  }, [semestersData]);
+  }, [semestersData, currentGrade, currentSemester]);
 
   // 현재 선택된 학기의 요약 통계 (전체 평점, 국수영 평점)
   const currentSemStats = useMemo(() => {
@@ -555,35 +574,73 @@ export function GradesView({
       {/* ──────────────────────────────────────────
           상단 학점계산기 대시보드 카드 (에타 스타일)
           ────────────────────────────────────────── */}
-      <section className="grades-kpi-card">
-        <div className="grades-kpi-top">
-          <div className="kpi-metric">
-            <small>전체 평점</small>
-            <div className="kpi-value-row">
-              <span className="kpi-main-val">{stats.overallAvg}</span>
-              <span className="kpi-sub-val">/ 9등급</span>
-            </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex items-center justify-between text-gray-500 text-xs font-semibold mb-2">
+            <span>전체 누적 평점</span>
+            <span className="text-brand-500 bg-brand-50 px-2 py-0.5 rounded-full text-[10px] font-bold">전체 학기</span>
           </div>
-
-          <div className="kpi-metric">
-            <small>국수영 평점</small>
-            <div className="kpi-value-row">
-              <span className="kpi-main-val">{stats.coreAvg}</span>
-              <span className="kpi-sub-val">/ 9등급</span>
-            </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-3xl font-extrabold text-brand-500 tabular-nums tracking-tight">{stats.overallAvg}</span>
+            <span className="text-sm text-gray-400 font-medium">/ 9.00</span>
           </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px]">
+            <span className="text-gray-500">등급이 있는 과목</span>
+            <span className="font-bold text-gray-800">{stats.totalCourses}과목</span>
+          </div>
+        </div>
 
-          {/* 시간표로 이동 바로가기 */}
-          <div className="kpi-nav-action">
-            <button
-              type="button"
-              className="btn-link-timetable"
-              onClick={onNavigateToTimetable}
-            >
+        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex items-center justify-between text-gray-500 text-xs font-semibold mb-2">
+            <span>국·수·영 평점</span>
+            <span className="text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full text-[10px] font-bold">핵심 교과</span>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-3xl font-extrabold text-gray-900 tabular-nums tracking-tight">{stats.coreAvg}</span>
+            <span className="text-sm text-gray-400 font-medium">/ 9.00</span>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px]">
+            <span className="text-gray-500">전체 평점 대비</span>
+            <span className="font-bold text-gray-800">
+              {stats.coreAvg !== "-" && stats.overallAvg !== "-"
+                ? `${(Number(stats.coreAvg) - Number(stats.overallAvg)).toFixed(2)}p`
+                : "-"}
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex items-center justify-between text-gray-500 text-xs font-semibold mb-2">
+            <span>교과 세특 연계율</span>
+            <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full text-[10px] font-bold">연계 분석</span>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-3xl font-extrabold text-emerald-600 tabular-nums tracking-tight">{stats.linkRate}%</span>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px]">
+            <span className="text-gray-500">세특이 연결된 과목</span>
+            <span className="font-bold text-gray-800">{stats.linkedCourses} / {stats.totalCourses}과목</span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex items-center justify-between text-gray-500 text-xs font-semibold mb-2">
+            <span>이번 학기 세특</span>
+            <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full text-[10px] font-bold">{currentGrade}-{currentSemester}</span>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-3xl font-extrabold text-gray-900 tabular-nums tracking-tight">{stats.currentSemesterSeteuk}</span>
+            <span className="text-sm text-gray-400 font-medium">건</span>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px]">
+            <button className="text-brand-600 font-bold hover:underline" onClick={onNavigateToTimetable} type="button">
               시간표 이동 ›
             </button>
           </div>
         </div>
+      </div>
+
+      <section className="grades-kpi-card">
 
         {/* 꺾은선 추이 그래프 & 성적 분포 막대 */}
         <div className="grades-charts-row">
