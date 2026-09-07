@@ -516,7 +516,7 @@ export function TimetableView({
                     : `${selectedSlot.courseName} 심화 주제 탐구 보고서`}
                 </strong>
                 <p className="tt-act-summary">
-                  로드맵 노드 2-2 &apos;소자 특성 이해&apos;와 연계된 후속 탐구 계획
+                  이번 학기 목표와 연계된 후속 탐구 계획
                 </p>
               </div>
 

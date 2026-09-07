@@ -215,7 +215,7 @@ export function ConsultationGate({
             ? "이번 학기를 점검하고 다음 학기 목표를 정해요"
             : "3개년 큰 계획을 함께 세워요"}
         </h1>
-        <p>이 상담을 마쳐야 성적·시간표·로드맵 등 메인 화면으로 들어갈 수 있어요.</p>
+        <p>이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요.</p>
       </header>
 
       {diagnosisError && <div className="banner banner-error">{diagnosisError}</div>}

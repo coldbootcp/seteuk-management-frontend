@@ -4,35 +4,30 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, downloadFile, logout, tokens } from "../lib/api-client";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
 import { SignIn } from "./sign-in";
+import { LandingView } from "./landing-view";
 import { ConsultationGate } from "./consultation-view";
 import { ChatView } from "./chat-view";
 import { TimetableView } from "./timetable-view";
 import { GradesView } from "./grades-view";
 import { DashboardView } from "./dashboard-view";
-import { DEFAULT_TIMETABLES, createEmptyTimetable, type TimetableConfig } from "./types/academic";
-import type { CSSProperties } from "react";
+import { createEmptyTimetable, type TimetableConfig } from "./types/academic";
 import type {
   ActivityAttachment,
-  AssignmentAnalysis,
   ActivityReview,
   ConsultationStatus,
-  DnaDiagnosis,
   ProductWorkspace,
   ProfileInput,
   ReconciliationLog,
-  Roadmap,
   RoadmapNode,
   RoadmapPlanEvent,
   StudentActivity,
 } from "../lib/product-harness";
-import { withParticle } from "../lib/product-harness";
 import {
   SCHOOL_RECORD_MAX_FILE_SIZE,
   SCHOOL_RECORD_MAX_FILE_SIZE_LABEL,
   getLatestSchoolRecordPeriod,
   parseSchoolRecordJson,
   type SeteukAnalysisResult,
-  type SchoolRecordDraft,
   type SchoolRecordParseResult,
   type SchoolRecordPeriod,
 } from "../lib/school-record-parser";
@@ -40,7 +35,7 @@ import {
 /* ──────────────────────────────────────────────
    Types
    ────────────────────────────────────────────── */
-type TabId = "overview" | "dashboard" | "roadmap" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
+type TabId = "overview" | "dashboard" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
@@ -51,16 +46,6 @@ type ProfileForm = {
   outputPreference: string; collaborationStyle: string; roadmapDesignNotes: string;
 };
 
-type RoadmapPhase = "past" | "current" | "future";
-type RoadmapLayoutMode = "map" | "board";
-type ActivityFilter = "all" | RoadmapEventCategory;
-type RoadmapEventCategory = "계획" | "상장" | "활동" | "봉사" | "독서" | "시험";
-
-type RoadmapTimelineEvent = {
-  id: string; date: string;
-  category: RoadmapEventCategory;
-  subject: string; title: string; isPlan: boolean;
-};
 
 type ActivityDraft = {
   title: string;
@@ -146,20 +131,6 @@ const EMPTY_PROFILE: ProfileForm = {
 const APP_VERSION = "0.7.0";
 const AI_JUDGEMENT_OPTION = "잘 모르겠음 — AI 판단에 맡길게요";
 const OTHER_CLARIFICATION_OPTION = "기타 직접 입력";
-
-const ROADMAP_CATEGORIES: Array<{ category: RoadmapEventCategory; icon: string }> = [
-  { category: "계획", icon: "📌" },
-  { category: "상장", icon: "A" },
-  { category: "활동", icon: "▤" },
-  { category: "봉사", icon: "V" },
-  { category: "독서", icon: "B" },
-  { category: "시험", icon: "E" },
-];
-
-const SUBJECT_COLORS = [
-  "#3182f6", "#00a881", "#f59f00", "#e64980",
-  "#845ef7", "#12b886", "#15aabf", "#fa5252",
-];
 
 /* ──────────────────────────────────────────────
    Utilities
@@ -314,39 +285,6 @@ function toProfileInput(form: ProfileForm): ProfileInput {
   };
 }
 
-function buildRecordOnlyRoadmap(studentId: string, career: string): Roadmap {
-  const roadmapId = crypto.randomUUID();
-  return {
-    id: roadmapId,
-    studentId,
-    version: 1,
-    careerTrack: career || "학생부 기록 정리",
-    templateId: "record-only",
-    status: "draft",
-    nodes: Array.from({ length: 6 }, (_, index) => {
-      const grade = Math.floor(index / 2) + 1;
-      const semester = (index % 2) + 1;
-      return {
-        id: crypto.randomUUID(),
-        roadmapId,
-        studentId,
-        orderIndex: index,
-        grade,
-        semester,
-        narrativeStage: "확정 기록",
-        title: "계획 없음",
-        objective: "졸업자 학생부의 확정 기록만 표시합니다.",
-        candidateSubjects: [],
-        competencyGoals: [],
-        status: "skipped" as const,
-        isCurrent: false,
-        instantiatedActivityId: null,
-        planEvents: [],
-      };
-    }),
-  };
-}
-
 /**
  * 예전에는 이 앱 안의 /api/* 라우트를 부르는 함수였다. 서버 로직이 전부 백엔드로
  * 옮겨간 뒤로는 어댑터가 그 경로를 백엔드 호출로 바꿔 준다 — 화면 코드를 그대로
@@ -407,54 +345,14 @@ async function analyzeSchoolRecordPdf(file: File, academicStartYear: number, sig
   throw new Error("분석 시간이 5분을 초과했습니다. 잠시 후 다시 시도해주세요.");
 }
 
-function roadmapIndex(grade: number, semester: number) { return (grade - 1) * 2 + semester - 1; }
-
-function roadmapPhase(workspace: ProductWorkspace, node: RoadmapNode): RoadmapPhase {
-  const current = roadmapIndex(workspace.profile.grade, workspace.profile.semester);
-  const target = roadmapIndex(node.grade, node.semester);
-  if (target < current) return "past";
-  if (target === current) return "current";
-  return "future";
-}
-
-function subjectColor(subject: string) {
-  const hash = [...subject].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-  return SUBJECT_COLORS[hash % SUBJECT_COLORS.length];
-}
-
-const ROADMAP_EVENT_CATEGORIES: readonly RoadmapEventCategory[] = [
-  "계획",
-  "상장",
-  "활동",
-  "봉사",
-  "독서",
-  "시험",
-];
 
 /**
  * 갈래 이름을 그대로 받는다. 예전에는 부분 문자열로 찾았는데, 그러면 엉뚱한 곳에
  * 걸린다 — "영**상장**치"가 상장으로 읽히는 사고가 실제로 있었다. 어댑터가 이미
  * 정확한 갈래를 넣어 주므로 추측할 이유가 없다.
  */
-function activityCategory(activityType: string): RoadmapEventCategory {
-  const exact = ROADMAP_EVENT_CATEGORIES.find((category) => category === activityType);
-  return exact ?? "활동";
-}
-
 function planTitleWithPriority(title: string, priority?: "core" | "optional") {
   return priority === "core" ? `★ ${title}` : title;
-}
-
-function commonSemesterCourseSuggestions(grade: number, semester: number, candidateSubjects: string[]) {
-  const common: Record<string, string[]> = {
-    "1-1": ["공통국어1", "공통수학1", "공통영어1", "통합사회1", "통합과학1", "한국사1"],
-    "1-2": ["공통국어2", "공통수학2", "공통영어2", "통합사회2", "통합과학2", "한국사2"],
-    "2-1": ["문학", "독서", "수학Ⅰ", "영어Ⅰ", "확률과 통계", "물리학Ⅰ", "화학Ⅰ", "생명과학Ⅰ", "지구과학Ⅰ"],
-    "2-2": ["문학", "독서", "수학Ⅱ", "영어Ⅱ", "확률과 통계", "물리학Ⅰ", "화학Ⅰ", "생명과학Ⅰ", "지구과학Ⅰ"],
-    "3-1": ["화법과 언어", "독서", "미적분", "확률과 통계", "영어 독해와 작문", "물리학Ⅱ", "화학Ⅱ", "생명과학Ⅱ", "지구과학Ⅱ"],
-    "3-2": ["화법과 언어", "심화국어", "미적분", "확률과 통계", "영어 독해와 작문", "진로 선택 과목"],
-  };
-  return [...new Set([...candidateSubjects, ...(common[`${grade}-${semester}`] ?? [])])].slice(0, 10);
 }
 
 function subjectConceptGuide(subject: string) {
@@ -601,29 +499,6 @@ function PlanDetailModal({ plan, node, courseSubjects, onClose, onConvertPlan }:
   );
 }
 
-function academicTimelinePosition(date: string) {
-  const [, monthText = "3", dayText = "1"] = date.split("-");
-  const month = Number(monthText); const day = Number(dayText);
-  const academicMonth = month >= 3 ? month - 3 : month + 9;
-  const daysInMonth = new Date(2024, month, 0).getDate();
-  return Math.max(0.5, Math.min(99.5, ((academicMonth + (day - 1) / daysInMonth) / 12) * 100));
-}
-
-function timelineClusters(events: RoadmapTimelineEvent[]) {
-  const clusters: Array<{ id: string; position: number; events: RoadmapTimelineEvent[] }> = [];
-  for (const event of events) {
-    const position = academicTimelinePosition(event.date);
-    const prev = clusters[clusters.length - 1];
-    if (prev && Math.abs(position - prev.position) <= 3) {
-      prev.events.push(event);
-      prev.position = prev.events.reduce((sum, e) => sum + academicTimelinePosition(e.date), 0) / prev.events.length;
-    } else {
-      clusters.push({ id: `cluster-${event.id}`, position, events: [event] });
-    }
-  }
-  return clusters;
-}
-
 function summarizeOnboardingRecord(parsed: SchoolRecordParseResult, completedGrade?: number) {
   const isInScope = (item: { grade: number }) => !completedGrade || item.grade <= completedGrade;
   const courses = parsed.courses.filter(isInScope);
@@ -638,25 +513,6 @@ function summarizeOnboardingRecord(parsed: SchoolRecordParseResult, completedGra
   };
 }
 
-const FLOW_POSITIONS = [
-  { x: 14.0, y: 73 },
-  { x: 28.4, y: 27 },
-  { x: 42.8, y: 73 },
-  { x: 57.2, y: 27 },
-  { x: 71.6, y: 73 },
-  { x: 86.0, y: 27 },
-];
-
-function flowConnectorPath(points: typeof FLOW_POSITIONS) {
-  return points.reduce((path, point, index) => {
-    if (index === 0) return `M ${point.x} ${point.y}`;
-    const prev = points[index - 1];
-    const midX = (prev.x + point.x) / 2;
-    return `${path} C ${midX} ${prev.y}, ${midX} ${point.y}, ${point.x} ${point.y}`;
-  }, "");
-}
-
-const FLOW_CONNECTOR_PATH = flowConnectorPath(FLOW_POSITIONS);
 
 /* ──────────────────────────────────────────────
    Shared Components
@@ -684,10 +540,6 @@ function StatusBadge({ status }: { status: RoadmapNode["status"] }) {
 function Onboarding({ onComplete }: { onComplete: () => void }) {
   const [form, setForm] = useState<ProfileForm>(EMPTY_PROFILE);
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [preview, setPreview] = useState<{
-    profile: ProfileInput & { id: string };
-    roadmap: Roadmap; dna: DnaDiagnosis;
-  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [onboardingRecordFile, setOnboardingRecordFile] = useState("");
@@ -704,7 +556,6 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
   const [clarificationBusy, setClarificationBusy] = useState(false);
   const [clarificationBlocked, setClarificationBlocked] = useState(false);
   const [clarificationComplete, setClarificationComplete] = useState(false);
-  const [roadmapHypothesis, setRoadmapHypothesis] = useState<Roadmap | null>(null);
   const [clarificationAnswers, setClarificationAnswers] = useState<Array<{ id: string; question: string; answer: string }>>([]);
   const [recordOnlyMode, setRecordOnlyMode] = useState(false);
   const onboardingRecordRef = useRef<HTMLInputElement>(null);
@@ -778,16 +629,6 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     answerClarification(question, allowsMultipleClarificationAnswers(question) ? next.join(" | ") : nextOther);
   }
 
-  function roadmapProfile(includeClarificationAnswers = true) {
-    const answerNotes = includeClarificationAnswers
-      ? clarificationAnswers.map((answer) => `${answer.question} / ${answer.answer}`)
-      : [];
-    return toProfileInput({
-      ...form,
-      roadmapDesignNotes: [removeClarificationAnswers(form.roadmapDesignNotes), ...answerNotes].filter(Boolean).join("\n"),
-    });
-  }
-
   useEffect(() => {
     const topic = form.targetCareer.trim();
     if (topic.length < 2) {
@@ -851,30 +692,6 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     setOnboardingRecordMessage(`학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 기록에 반영합니다.${detectedMessage}${gradeMessage}`);
   }, [form.grade, onboardingRecordAutoFields, onboardingRecordParse]);
 
-  async function createPreview() {
-    if (clarificationBlocked) {
-      setError("3학년까지 확정된 졸업자 학생부로 확인되어 재학생용 로드맵을 진행할 수 없습니다.");
-      return;
-    }
-    if (onboardingRecordBusy) {
-      setError("학생부 분석이 끝난 뒤 로드맵을 설계할 수 있어요. 분석 결과까지 반영해서 더 정확하게 만들겠습니다.");
-      return;
-    }
-    if (!clarificationComplete) {
-      setError("확인 질문의 답변을 반영한 뒤, AI가 추가 확인이 필요 없다고 판단하면 최종 로드맵 초안을 보여드릴게요.");
-      return;
-    }
-    setBusy(true); setError("");
-    try {
-      const result = await jsonRequest<typeof preview>("/api/onboarding/preview", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify(roadmapProfile()),
-      });
-      setPreview(result);
-    } catch (e) { setError(e instanceof Error ? e.message : "로드맵을 만들지 못했습니다."); }
-    finally { setBusy(false); }
-  }
-
   async function prepareClarification(restart = false) {
     if (onboardingRecordBusy) {
       setError("학생부 분석이 아직 진행 중입니다. 분석이 끝나면 Step1·2와 학생부를 함께 읽고 필요한 확인 질문을 만들게요.");
@@ -899,16 +716,6 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     const fallbackQuestions = buildClarificationQuestions(form, onboardingRecordParse, onboardingRecordContext);
 
     try {
-      let hypothesis = restart ? null : roadmapHypothesis;
-      if (!hypothesis) {
-        const candidate = await jsonRequest<{ roadmap: Roadmap }>("/api/onboarding/preview", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(roadmapProfile(!restart)),
-        });
-        hypothesis = candidate.roadmap;
-        setRoadmapHypothesis(candidate.roadmap);
-      }
       const result = await jsonRequest<ClarificationResponse>("/api/onboarding/clarify", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -944,7 +751,6 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
               }
             : null,
           recordContext: onboardingRecordContext,
-          roadmapHypothesis: hypothesis,
           answers: restart ? [] : clarificationAnswers,
         }),
       });
@@ -985,7 +791,6 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
   }
 
   function startClarification() {
-    setRoadmapHypothesis(null);
     setClarificationAnswers([]);
     setClarificationComplete(false);
     setForm((current) => ({ ...current, roadmapDesignNotes: removeClarificationAnswers(current.roadmapDesignNotes) }));
@@ -1010,7 +815,6 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     setClarificationSummary("");
     setClarificationBlocked(false);
     setClarificationComplete(false);
-    setRoadmapHypothesis(null);
     setClarificationAnswers([]);
     try {
       const fallbackGrade = isGraduatedGrade(form.grade) ? 3 : Number(form.grade || 1);
@@ -1066,7 +870,6 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
       setOnboardingRecordContext({});
       setClarificationBlocked(false);
       setClarificationComplete(false);
-      setRoadmapHypothesis(null);
       setClarificationAnswers([]);
       setRecordOnlyMode(false);
     } finally {
@@ -1092,31 +895,17 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     setClarificationSummary("");
     setClarificationBlocked(false);
     setClarificationComplete(false);
-    setRoadmapHypothesis(null);
     setClarificationAnswers([]);
     setError("");
     if (onboardingRecordRef.current) onboardingRecordRef.current.value = "";
   }
 
-  function editPreviewNode(nodeId: string, field: "title" | "objective", value: string) {
-    setPreview((cur) => cur ? {
-      ...cur, roadmap: {
-        ...cur.roadmap,
-        nodes: cur.roadmap.nodes.map((n) => n.id === nodeId ? { ...n, [field]: value } : n),
-      },
-    } : cur);
-  }
-
   async function confirmOnboarding() {
-    if (!preview && !recordOnlyMode) return;
     setBusy(true); setError("");
     try {
-      const recordOnlyRoadmap = recordOnlyMode
-        ? buildRecordOnlyRoadmap(crypto.randomUUID(), form.targetCareer.trim())
-        : null;
       await jsonRequest("/api/onboarding", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ profile: toProfileInput(form), roadmap: recordOnlyRoadmap ?? preview?.roadmap }),
+        body: JSON.stringify({ profile: toProfileInput(form) }),
       });
       if (onboardingRecordParse && (onboardingRecordParse.courses.length || onboardingRecordParse.entries.some((entry) => entry.selected))) {
         await jsonRequest("/api/school-record/import", {
@@ -1137,94 +926,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
     finally { setBusy(false); }
   }
 
-  const canPreview = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && !!form.targetCareer.trim();
-
-  /* ── Preview Screen ── */
-  if (preview) {
-    return (
-      <div className="onboarding-page">
-        <div className="onboarding-layout">
-          {/* Left panel */}
-          <aside className="onboarding-panel">
-            <div className="ob-brand">
-              <img alt="세특연구소 로고" src="/logo.png?v=2" style={{ width: 32, height: 32, objectFit: 'contain' }} />
-              <div>
-                <strong>세특연구소 <span style={{ color: 'var(--blue-500)', fontWeight: 800 }}>Pro</span></strong>
-                <small>Personalized School Coach</small>
-              </div>
-            </div>
-            <div className="ob-tagline">
-              <h1>{preview.profile.name} 학생의<br />첫 3개년</h1>
-              <p>관심분야와 기존 기록을 바탕으로 만든 첫 설계안입니다. 내용을 직접 수정한 뒤 저장할 수 있어요.</p>
-            </div>
-            <div className="ob-progress">
-              <span className="ob-step-dot is-done">✓</span>
-              <span className="ob-step-connector is-done" />
-              <span className="ob-step-dot is-done">✓</span>
-              <span className="ob-step-connector is-done" />
-              <span className="ob-step-dot is-active">3</span>
-            </div>
-          </aside>
-
-          {/* Right — preview */}
-          <main className="ob-preview-panel">
-            <div className="ob-preview-header">
-              <span className="kicker">ROADMAP PREVIEW · Version 1</span>
-              <h2>{preview.profile.name}의 고교 3개년 로드맵</h2>
-              <p>학기별 제목과 목표를 지금 바로 수정할 수 있어요. 저장 후에도 언제든지 편집 가능합니다.</p>
-            </div>
-
-            <div className="preview-dna-card">
-              <small>잠정 전공 서사 DNA</small>
-              <h3>{preview.dna.narrative}</h3>
-              <div className="preview-dna-facts">
-                {preview.dna.facts.map((fact) => <span key={fact}>{fact}</span>)}
-              </div>
-            </div>
-
-            <div className="preview-notice">
-              학생부 기록이나 실제 활동을 더 추가하면 관심분야와 로드맵 정합도를 다시 계산합니다.
-            </div>
-
-            <div className="preview-nodes">
-              {preview.roadmap.nodes.map((node) => (
-                <article className={`preview-node ${node.status}`} key={node.id}>
-                  <div className="preview-node-head">
-                    <span className="preview-node-period">{node.grade}학년 {node.semester}학기 · {node.narrativeStage}</span>
-                    <StatusBadge status={node.status} />
-                  </div>
-                  <input
-                    aria-label={`${node.grade}학년 ${node.semester}학기 제목`}
-                    value={node.title}
-                    onChange={(e) => editPreviewNode(node.id, "title", e.target.value)}
-                  />
-                  <textarea
-                    aria-label={`${node.grade}학년 ${node.semester}학기 목표`}
-                    value={node.objective}
-                    onChange={(e) => editPreviewNode(node.id, "objective", e.target.value)}
-                  />
-                  <div className="preview-node-tags">
-                    {node.candidateSubjects.map((s) => <span key={s}>{s}</span>)}
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {error && <div className="banner banner-error">{error}</div>}
-
-            <div className="preview-actions">
-              <button className="btn btn-secondary" onClick={() => setPreview(null)} type="button">
-                ← 응답 수정
-              </button>
-              <button className="btn btn-primary" disabled={busy} onClick={confirmOnboarding} type="button">
-                {busy ? "작업공간 만드는 중…" : "이 로드맵으로 시작 →"}
-              </button>
-            </div>
-          </main>
-        </div>
-      </div>
-    );
-  }
+  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && !!form.targetCareer.trim();
 
   /* ── Form Screen ── */
   return (
@@ -1651,11 +1353,11 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
                 </button>
                 <button
                   className="btn btn-primary"
-                  disabled={(!recordOnlyMode && clarificationBlocked) || busy || clarificationBusy || onboardingRecordBusy || !canPreview}
-                  onClick={recordOnlyMode ? confirmOnboarding : clarificationComplete ? createPreview : continueClarification}
+                  disabled={(!recordOnlyMode && clarificationBlocked) || busy || clarificationBusy || onboardingRecordBusy || !canSubmitProfile}
+                  onClick={recordOnlyMode || clarificationComplete ? confirmOnboarding : continueClarification}
                   type="button"
                 >
-                  {recordOnlyMode ? "학생부 기록으로 메인 화면 보기 →" : clarificationBlocked ? "졸업자 학생부로 진행 불가" : onboardingRecordBusy ? "학생부 분석 대기 중…" : clarificationBusy ? "답변 반영해 다시 검토 중…" : busy ? "로드맵 설계 중…" : clarificationComplete ? "최종 로드맵 초안 보기 →" : "답변 반영하고 다시 검토하기 →"}
+                  {recordOnlyMode ? "학생부 기록으로 시작하기 →" : clarificationBlocked ? "졸업자 학생부로 진행 불가" : onboardingRecordBusy ? "학생부 분석 대기 중…" : clarificationBusy ? "답변 반영해 다시 검토 중…" : busy ? "저장하는 중…" : clarificationComplete ? "진단 상담 시작하기 →" : "답변 반영하고 다시 검토하기 →"}
                 </button>
               </>
             )}
@@ -2098,7 +1800,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
             {active && <StatusBadge status={active.status} />}
           </div>
           <p className="text-xs text-gray-600 leading-relaxed flex-1">
-            {active?.objective ?? "모든 노드를 검토했습니다. 새로운 진로 방향이 있다면 로드맵을 다시 설계해보세요."}
+            {active?.objective ?? "이번 학기 목표가 아직 없습니다. 상담을 마치면 여기에 표시됩니다."}
           </p>
           {active && active.candidateSubjects.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
@@ -2109,13 +1811,6 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
               ))}
             </div>
           )}
-          <button
-            className="w-full py-2 rounded-lg border border-gray-200 hover:border-brand-300 hover:bg-brand-50/40 text-xs font-bold text-gray-700 hover:text-brand-600 transition"
-            onClick={() => onNavigate("roadmap")}
-            type="button"
-          >
-            전체 3개년 로드맵 보기 →
-          </button>
         </section>
       </div>
 
@@ -2211,986 +1906,6 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
           </section>
         </div>
       )}
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────
-   RoadmapView
-   ────────────────────────────────────────────── */
-function RoadmapView({ workspace, onWorkspace, onConvertPlan }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void; onConvertPlan: (draft: ActivityDraft) => void }) {
-  const [editing, setEditing] = useState<RoadmapNode | null>(null);
-  const [checkpointOpen, setCheckpointOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [layoutMode, setLayoutMode] = useState<RoadmapLayoutMode>("map");
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
-  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<{ plan: RoadmapPlanEvent; node: RoadmapNode } | null>(null);
-  const [studentNudge, setStudentNudge] = useState(false);
-  const [studentHovering, setStudentHovering] = useState(false);
-  const [recordFile, setRecordFile] = useState("");
-  const [recordParse, setRecordParse] = useState<SchoolRecordParseResult | null>(null);
-  const [recordBusy, setRecordBusy] = useState(false);
-  const [recordMessage, setRecordMessage] = useState("");
-  // state가 아니라 ref다. state로 두면 이 값을 바꾸는 순간 리렌더가 일어나고,
-  // 복구 effect의 cleanup이 돌면서 자기가 띄운 요청을 스스로 취소해 버린다.
-  const recordRestored = useRef(false);
-  // 이미 반영한 항목. 화면의 카테고리(상장·활동·봉사·독서·시험)와 백엔드의 영역은
-  // 1:1이 아니다 — 이름에 "봉사"가 든 활동은 봉사 탭에 보이지만 실제로는 activities
-  // 영역에 있다. 그래서 한 카테고리만 보내면 백엔드가 그 영역을 "이게 전부"로 알고
-  // 앞서 반영한 것을 지운다. 반영한 것을 모아 두었다가 매번 함께 보낸다.
-  const importedEntries = useRef<Map<string, SchoolRecordDraft>>(new Map());
-  const [gradeImportConflicts, setGradeImportConflicts] = useState<Array<{ courseId: string; grade: number; semester: number; subject: string; currentRank: number; importedRank: number }>>([]);
-  const [gradeImportChoices, setGradeImportChoices] = useState<Record<string, "keep" | "replace">>({});
-  const [courseDraft, setCourseDraft] = useState("");
-  const [courseBusy, setCourseBusy] = useState(false);
-  const [courseManagerOpen, setCourseManagerOpen] = useState(false);
-  const [importCategory, setImportCategory] = useState<RoadmapEventCategory>("상장");
-  const [summarizingNodeId, setSummarizingNodeId] = useState<string | null>(null);
-  const uploadRef = useRef<HTMLInputElement>(null);
-
-  async function summarizeNode(nodeId: string) {
-    setSummarizingNodeId(nodeId);
-    setError("");
-    try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/roadmaps/summarize-node", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ studentId: workspace.profile.id, nodeId }),
-      });
-      onWorkspace(result.workspace);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "노드 요약을 실패했습니다.");
-    } finally {
-      setSummarizingNodeId(null);
-    }
-  }
-
-  const focusedNode = workspace.roadmap.nodes.find((n) => n.id === focusedNodeId) ?? null;
-  const currentNode = workspace.roadmap.nodes.find(
-    (n) => n.grade === workspace.profile.grade && n.semester === workspace.profile.semester,
-  );
-  const academicStartYear = new Date().getFullYear() - (workspace.profile.grade - 1);
-
-  // 파싱은 몇 분 걸린다. 그 사이 새로고침하면 예전에는 검토 화면을 통째로 잃었다 —
-  // 업로드 id도 파싱 결과도 이 컴포넌트의 state에만 있었기 때문이다. 백엔드는
-  // 마지막 업로드와 그 결과를 갖고 있으므로 화면을 그릴 때 되찾는다.
-  useEffect(() => {
-    if (recordRestored.current) return;
-    recordRestored.current = true;
-    (async () => {
-      try {
-        const { latest } = await jsonRequest<{
-          latest: {
-            uploadId: string;
-            status: string;
-            fileName: string | null;
-            importedAt: string | null;
-            error: string | null;
-            result: unknown;
-          } | null;
-        }>("/api/school-record/latest");
-        if (!latest) return;
-        if (latest.fileName) setRecordFile(latest.fileName);
-        if (latest.status === "failed") {
-          setError(latest.error || "생기부 분석에 실패했습니다.");
-          return;
-        }
-        // 이미 반영을 마친 업로드는 검토할 것이 없다 — 연결됨 상태만 보이면 된다.
-        if (latest.status !== "done" || latest.importedAt || !latest.result) return;
-        const parsed = parseSchoolRecordJson(latest.result, academicStartYear, {
-          grade: workspace.profile.grade,
-          semester: workspace.profile.semester,
-        });
-        parsed.fileName = latest.fileName ?? parsed.fileName;
-        importedEntries.current = new Map();
-        setRecordParse(parsed);
-      } catch (e) {
-        // 되찾기는 부가 기능이라 화면을 막지는 않지만, 조용히 삼키면 왜 검토 화면이
-        // 안 뜨는지 알 길이 없다.
-        console.warn("마지막 생기부 업로드를 되찾지 못했습니다", e);
-      }
-    })();
-  }, [academicStartYear, workspace.profile.grade, workspace.profile.semester]);
-  const allSubjects = [...new Set([
-    ...workspace.roadmap.nodes.flatMap((n) => n.candidateSubjects),
-    ...workspace.activities.map((a) => a.subject),
-    ...workspace.schoolRecordCourses.map((c) => c.subject),
-  ])];
-  const recordConnected = workspace.schoolRecordCourses.length > 0 || workspace.activities.some((activity) => activity.outputs.includes("생활기록부"));
-  const completedPlanIds = new Set(workspace.activities.map((activity) => activity.planEventId).filter(Boolean));
-
-  function activitiesForNode(node: RoadmapNode) {
-    // 학기를 아는 기록은 그 학기 마디에만 놓는다. 자율활동·동아리활동처럼 생기부가
-    // 학기를 나누지 않는 기록은 그 학년의 두 학기에 함께 보여준다 — 어느 한 학기의
-    // 것이 아니므로 한쪽에만 놓으면 나머지 학기가 근거 없이 비어 보인다.
-    // 시점을 아예 알 수 없는 기록(날짜 없는 수상 등)은 어느 학기에도 놓지 않는다.
-    return workspace.activities.filter(
-      (a) =>
-        a.roadmapNodeId === node.id ||
-        (a.roadmapNodeId === null && a.semester === null && a.grade === node.grade),
-    );
-  }
-
-  function eventsForNode(node: RoadmapNode): RoadmapTimelineEvent[] {
-    const actualEvents = activitiesForNode(node).map((a) => ({
-      id: a.id, date: a.completedAt,
-      category: activityCategory(a.activityType),
-      subject: a.subject || a.activityCategory, title: a.title, isPlan: false,
-    }));
-    const planYear = academicStartYear + node.grade - 1;
-    const plannedEvents = roadmapPhase(workspace, node) === "past" ? [] :
-      (node.planEvents ?? []).map((ev) => ({
-        id: ev.id, date: `${planYear}-${ev.monthDay}`,
-        category: activityCategory(ev.category), subject: ev.subject, title: ev.title, isPlan: true,
-      }));
-    const remaining = plannedEvents.filter((plan) => !actualEvents.some((actual) => {
-      const dist = Math.abs(new Date(actual.date).getTime() - new Date(plan.date).getTime()) / 86_400_000;
-      return actual.category === plan.category && dist <= 21;
-    }));
-    return [...actualEvents, ...remaining].sort((a, b) => a.date.localeCompare(b.date));
-  }
-
-  function applyActivityFilter(events: RoadmapTimelineEvent[]) {
-    return activityFilter === "all" ? events : events.filter((ev) => ev.category === activityFilter);
-  }
-
-  function visibleEvents(node: RoadmapNode) {
-    return applyActivityFilter(eventsForNode(node));
-  }
-
-  const focusedEvents = focusedNode ? applyActivityFilter(eventsForNode(focusedNode)) : [];
-  const focusedRecords = focusedEvents.filter((ev) => !ev.isPlan);
-  const focusedPlanIds = new Set(focusedEvents.filter((ev) => ev.isPlan).map((ev) => ev.id));
-  const focusedPlans = focusedNode ? (focusedNode.planEvents ?? []).filter((ev) => focusedPlanIds.has(ev.id)) : [];
-  const focusedSemesterCourses = focusedNode ? workspace.semesterCourses.filter((course) => course.roadmapNodeId === focusedNode.id) : [];
-  const suggestedSemesterCourses = focusedNode
-    ? commonSemesterCourseSuggestions(focusedNode.grade, focusedNode.semester, focusedNode.candidateSubjects)
-      .filter((subject) => !focusedSemesterCourses.some((course) => course.subject === subject))
-    : [];
-
-  async function addFocusedCourse(subject = courseDraft) {
-    const normalizedSubject = subject.trim();
-    // courseBusy(state)만으로는 부족하다 — 한글 입력 중 마지막 글자를 조합
-    // 확정하며 누른 Enter가 keydown을 두 번(조합 확정용 + 실제 Enter) 낼 수
-    // 있는데, 두 번째 호출이 state 갱신 전에 통과하면 같은 과목이 두 번 추가된다.
-    if (!focusedNode || !normalizedSubject || courseBusy) return;
-    setCourseBusy(true); setError("");
-    try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/semester-courses", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ studentId: workspace.profile.id, roadmapNodeId: focusedNode.id, subject: normalizedSubject }),
-      });
-      onWorkspace(result.workspace); setCourseDraft("");
-    } catch (e) { setError(e instanceof Error ? e.message : "과목을 추가하지 못했습니다."); }
-    finally { setCourseBusy(false); }
-  }
-
-  async function removeFocusedCourse(courseId: string) {
-    setCourseBusy(true); setError("");
-    try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/semester-courses", {
-        method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ studentId: workspace.profile.id, courseId }),
-      });
-      onWorkspace(result.workspace);
-    } catch (e) { setError(e instanceof Error ? e.message : "과목을 삭제하지 못했습니다."); }
-    finally { setCourseBusy(false); }
-  }
-
-  function closeFocusedNode() {
-    setCourseManagerOpen(false);
-    setFocusedNodeId(null);
-  }
-
-  function reconciliationsForNode(node: RoadmapNode) {
-    return workspace.reconciliations.filter((log) => log.nodeId === node.id);
-  }
-
-  function attentionCount(node: RoadmapNode) {
-    const visibleRecordIds = new Set(applyActivityFilter(eventsForNode(node)).filter((ev) => !ev.isPlan).map((ev) => ev.id));
-    return reconciliationsForNode(node).filter((log) =>
-      ["PARTIAL_MATCH", "DIVERGE", "MISS"].includes(log.matchType),
-    ).filter((log) =>
-      activityFilter === "all" || visibleRecordIds.has(log.activityId),
-    ).length;
-  }
-
-  async function analyzeRecordFile(file: File | undefined) {
-    if (!file) return;
-    if (file.size > SCHOOL_RECORD_MAX_FILE_SIZE) {
-      setError(`파일이 너무 큽니다. ${SCHOOL_RECORD_MAX_FILE_SIZE_LABEL} 이하의 PDF를 선택해주세요.`);
-      if (uploadRef.current) uploadRef.current.value = "";
-      return;
-    }
-    setRecordBusy(true); setRecordFile(file.name); setRecordMessage(""); setError("");
-    try {
-      const resultJson = await analyzeSchoolRecordPdf(file, academicStartYear);
-      const parsedResult = parseSchoolRecordJson(resultJson, academicStartYear, {
-        grade: workspace.profile.grade,
-        semester: workspace.profile.semester,
-      });
-      parsedResult.fileName = file.name;
-
-      // index는 이 파싱 결과 안에서만 유효하므로 지난 누적을 버린다.
-      importedEntries.current = new Map();
-      setRecordParse(parsedResult);
-      // 첫 번째 카테고리로 탭 초기화
-      setImportCategory("상장");
-    } catch (e) { setError(e instanceof Error ? e.message : "생기부를 분석하지 못했습니다."); setRecordFile(""); }
-    finally { setRecordBusy(false); if (uploadRef.current) uploadRef.current.value = ""; }
-  }
-
-  function updateRecordEntry(id: string, patch: Partial<SchoolRecordDraft>) {
-    setRecordParse((cur) => cur ? {
-      ...cur, entries: cur.entries.map((e) => e.id === id ? { ...e, ...patch } : e),
-    } : cur);
-  }
-
-  async function confirmRecordImport(courseGradeChoices?: Record<string, "keep" | "replace">) {
-    if (!recordParse) return;
-    const targetEntries = recordParse.entries.filter((e) => e.category === importCategory && e.selected);
-    const targetCourses = importCategory === "시험" ? recordParse.courses : [];
-    const isPastPeriod = (grade: number, semester: number) =>
-      grade < workspace.profile.grade || (grade === workspace.profile.grade && semester < workspace.profile.semester);
-    const currentCourses = new Map(workspace.semesterCourses.map((course) => [`${course.grade}-${course.semester}-${course.subject}`, course]));
-    const currentGrades = new Map(workspace.courseGrades.map((grade) => [grade.semesterCourseId, grade]));
-    const conflicts = targetCourses.filter((course) => isPastPeriod(course.grade, course.semester) && course.rank !== null && course.rank !== undefined).flatMap((course) => {
-      const currentCourse = currentCourses.get(`${course.grade}-${course.semester}-${course.subject}`);
-      const currentRank = currentCourse ? currentGrades.get(currentCourse.id)?.rank : null;
-      return currentRank !== null && currentRank !== undefined && currentRank !== course.rank
-        ? [{ courseId: course.id, grade: course.grade, semester: course.semester, subject: course.subject, currentRank, importedRank: course.rank! }]
-        : [];
-    });
-    if (conflicts.length && !courseGradeChoices) {
-      setGradeImportConflicts(conflicts);
-      setGradeImportChoices(Object.fromEntries(conflicts.map((conflict) => [conflict.courseId, "keep"])));
-      return;
-    }
-    setRecordBusy(true); setError("");
-    try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace; importedCount: number }>("/api/school-record/import", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          studentId: workspace.profile.id,
-          fileName: recordParse.fileName,
-          totalPages: recordParse.totalPages,
-          courses: targetCourses,
-          // 이번 카테고리 + 앞서 반영한 것을 함께 보낸다. 백엔드는 영역 단위로
-          // 교체하므로, 이번 것만 보내면 같은 영역에 있던 지난 반영분이 사라진다.
-          entries: [...importedEntries.current.values(), ...targetEntries],
-          newEntryIds: targetEntries.map((entry) => entry.id),
-          courseGradeChoices,
-        }),
-      });
-      for (const entry of targetEntries) importedEntries.current.set(entry.id, entry);
-      onWorkspace(result.workspace);
-      setGradeImportConflicts([]); setGradeImportChoices({});
-
-      const remainingEntries = recordParse.entries.filter((e) => e.category !== importCategory || (e.category === importCategory && !e.selected));
-      const remainingCourses = importCategory === "시험" ? [] : recordParse.courses;
-
-      setRecordMessage(`[${importCategory}] 항목 ${result.importedCount}개를 반영했습니다.${importCategory === "시험" ? " 지난 학기의 수강 과목·성적도 함께 갱신했습니다." : ""}`);
-
-      if (remainingEntries.length === 0 && remainingCourses.length === 0) {
-        setRecordParse(null);
-      } else {
-        setRecordParse({ ...recordParse, entries: remainingEntries, courses: remainingCourses });
-        const nextCat = ROADMAP_CATEGORIES.map((c) => c.category).find((cat) => remainingEntries.some((e) => e.category === cat) || (cat === "시험" && remainingCourses.length > 0));
-        if (nextCat) setImportCategory(nextCat);
-      }
-    } catch (e) { setError(e instanceof Error ? e.message : "생기부 기록을 반영하지 못했습니다."); }
-    finally { setRecordBusy(false); }
-  }
-
-  async function saveNode() {
-    if (!editing) return;
-    setBusy(true);
-    try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/roadmaps/nodes", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ studentId: workspace.profile.id, nodeId: editing.id, title: editing.title, objective: editing.objective }),
-      });
-      onWorkspace(result.workspace); setEditing(null);
-    } catch (e) { setError(e instanceof Error ? e.message : "노드를 수정하지 못했습니다."); }
-    finally { setBusy(false); }
-  }
-
-  async function regenerate() {
-    setBusy(true); setError("");
-    try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/roadmaps/regenerate", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ studentId: workspace.profile.id }),
-      });
-      onWorkspace(result.workspace);
-    } catch (e) { setError(e instanceof Error ? e.message : "로드맵을 다시 만들지 못했습니다."); }
-    finally { setBusy(false); }
-  }
-
-  async function recordMiss(decision: "carry" | "skip") {
-    setBusy(true); setError("");
-    try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/roadmaps/checkpoint", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ studentId: workspace.profile.id, decision }),
-      });
-      onWorkspace(result.workspace); setCheckpointOpen(false);
-    } catch (e) { setError(e instanceof Error ? e.message : "학기 점검을 기록하지 못했습니다."); }
-    finally { setBusy(false); }
-  }
-
-  return (
-    <div className="roadmap-page">
-      {/* Header */}
-      <div className="roadmap-header">
-        <div>
-          <span className="kicker">3-YEAR SCHOOL RECORD</span>
-          <h1>{workspace.profile.name}의 고교 3개년</h1>
-          <p>지나온 학기는 생활기록부의 사실로, 앞으로의 학기는 로드맵 제안으로 이어서 봅니다.</p>
-        </div>
-        <div className={`record-import-card${recordFile || recordConnected ? " is-connected" : ""}`}>
-          <input
-            accept=".pdf,application/pdf"
-            aria-label="생활기록부 파일 선택"
-            hidden
-            onChange={(e) => analyzeRecordFile(e.target.files?.[0])}
-            ref={uploadRef}
-            type="file"
-          />
-          <span className={`record-dot ${recordBusy ? "record-dot-busy" : recordFile || recordConnected ? "record-dot-connected" : "record-dot-idle"}`} />
-          <div className="record-import-info">
-            <strong>{recordBusy ? "생기부 분석 중" : recordFile || recordConnected ? "생기부 연결됨" : "생기부 미연결"}</strong>
-            <small>{recordFile || (recordConnected ? "분석된 학생부 기록이 메인 화면에 반영되어 있습니다" : "학생부 PDF를 업로드하면 AI가 구조화된 데이터를 자동 추출합니다")}</small>
-          </div>
-          <button
-            className="btn btn-secondary btn-sm"
-            disabled={recordBusy}
-            onClick={() => uploadRef.current?.click()}
-            type="button"
-          >
-            {recordBusy ? "분석 중…" : recordFile || recordConnected ? "다른 PDF" : "생기부 PDF 분석"}
-          </button>
-        </div>
-      </div>
-
-      {recordMessage && <div className="banner banner-success">✓ {recordMessage}</div>}
-      {error && !editing && !checkpointOpen && <div className="banner banner-error">{error}</div>}
-
-      {/* Toolbar */}
-      <div className="timeline-toolbar">
-        <div className="category-legend">
-          <button
-            className={`legend-item legend-filter${activityFilter === "all" ? " active" : ""}`}
-            onClick={() => setActivityFilter("all")}
-            type="button"
-          >
-            <i>ALL</i>전체
-          </button>
-          {ROADMAP_CATEGORIES.map((item) => (
-            <button
-              className={`legend-item legend-filter${activityFilter === item.category ? " active" : ""}`}
-              key={item.category}
-              onClick={() => setActivityFilter(item.category)}
-              type="button"
-            >
-              <i>{item.icon}</i>{item.category}
-            </button>
-          ))}
-        </div>
-        <div className="toolbar-actions">
-          <div className="view-toggle">
-            <button
-              className={`toggle-btn${layoutMode === "map" ? " active" : ""}`}
-              onClick={() => setLayoutMode("map")}
-              type="button"
-            >플로우 맵</button>
-            <button
-              className={`toggle-btn${layoutMode === "board" ? " active" : ""}`}
-              onClick={() => setLayoutMode("board")}
-              type="button"
-            >보드 뷰</button>
-          </div>
-        </div>
-      </div>
-
-      {/* Subject legend */}
-      <div className="subject-legend">
-        <small>SUBJECT COLOR</small>
-        {allSubjects.map((s) => (
-          <span className="subj-chip" key={s}>
-            <i style={{ background: subjectColor(s) }} />{s}
-          </span>
-        ))}
-      </div>
-
-      {/* Grid Timeline (Board View) */}
-      {layoutMode === "board" && (
-        <div className="grid-timeline">
-        {[1, 2, 3].map((grade) => {
-          const year = academicStartYear + grade - 1;
-          return (
-            <div className={`grid-year-row${grade === workspace.profile.grade ? " is-current-year" : ""}`} key={grade}>
-              <div className="grid-year-label">
-                <span className="grid-year-num">{grade}</span>
-                <span className="grid-year-txt">학년</span>
-                <span className="grid-year-range">{year}.03 — {year + 1}.02</span>
-              </div>
-              <div className="grid-semesters">
-                {[1, 2].map((semester) => {
-                  const node = workspace.roadmap.nodes.find((n) => n.grade === grade && n.semester === semester);
-                  if (!node) return null;
-                  const semEvents = visibleEvents(node);
-                  return (
-                    <div className={`grid-semester phase-${roadmapPhase(workspace, node)}`} key={semester}>
-                      <button
-                        aria-label={`${grade}학년 ${semester}학기 상세 보기`}
-                        className="grid-sem-header"
-                        onClick={() => setFocusedNodeId(node.id)}
-                        type="button"
-                      >
-                        <div className="grid-sem-title">
-                          <strong>{semester}학기</strong>
-                          <span className="grid-sem-stage">{node.narrativeStage}</span>
-                        </div>
-                        <StatusBadge status={node.status} />
-                      </button>
-                      
-                      <div className="grid-sem-body">
-                        {semEvents.length === 0 ? (
-                          <div className="grid-sem-empty">표시할 활동이 없습니다.</div>
-                        ) : (
-                          semEvents.map((ev) => {
-                            const cat = ROADMAP_CATEGORIES.find((c) => c.category === ev.category);
-                            return (
-                              <div
-                                className={`grid-event-card ${ev.isPlan ? "is-plan" : "is-record"}`}
-                                key={ev.id}
-                                style={{ "--subj": subjectColor(ev.subject) } as CSSProperties}
-                              >
-                                <div className="grid-event-indicator" />
-                                <div className="grid-event-icon" style={{ color: subjectColor(ev.subject) }}>
-                                  {cat?.icon}
-                                </div>
-                                <div className="grid-event-content">
-                                  <strong className="grid-event-title">{ev.title}</strong>
-                                  <div className="grid-event-meta">
-                                    <span className="grid-event-subject">{ev.subject}</span>
-                                    <span className="grid-event-date">{ev.date.slice(5).replace("-", ".")}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-        <div className="timeline-footer">
-          <span><i className="dot-record" /> 생활기록부 확정 기록 (채워진 카드)</span>
-          <span><i className="dot-plan" /> 앞으로의 계획 (점선 테두리 카드)</span>
-          <span>학기 헤더를 클릭하면 상세 보기가 열립니다</span>
-        </div>
-      </div>
-      )}
-
-      {/* Narrative Flow Map */}
-      {layoutMode === "map" && (
-        <div className="narrative-map-section">
-          <div className="narrative-map-header">
-            <div>
-              <span className="kicker">SEMESTER FLOW MAP</span>
-              <h2>{withParticle(workspace.roadmap.careerTrack, "으로", "로")} 이어지는 6학기 경로</h2>
-              <p>월별 세부 일정 대신, 각 학기에서 쌓은 기록과 앞으로의 계획을 하나의 서사 흐름으로 보여줍니다.</p>
-            </div>
-            <div className="map-summary">
-              {/* 학년 단위 기록은 두 학기 카드에 함께 나오므로 id로 세야 합계가 부풀지 않는다. */}
-              <span><strong>{new Set(workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => !ev.isPlan).map((ev) => ev.id)).size}</strong>기록</span>
-              <span><strong>{new Set(workspace.roadmap.nodes.flatMap((n) => visibleEvents(n)).filter((ev) => ev.isPlan).map((ev) => ev.id)).size}</strong>계획</span>
-              <span><strong>{workspace.roadmap.nodes.reduce((sum, node) => sum + attentionCount(node), 0)}</strong>보정</span>
-            </div>
-          </div>
-
-          <div className="narrative-flow-canvas">
-            <svg aria-hidden="true" className="flow-connector-svg" preserveAspectRatio="none" viewBox="0 0 100 100">
-              <defs>
-                <linearGradient id="flow-gradient" x1="0%" x2="100%" y1="0%" y2="0%">
-                  <stop offset="0%" stopColor="#3182F6" />
-                  <stop offset="55%" stopColor="#00A881" />
-                  <stop offset="100%" stopColor="#845EF7" />
-                </linearGradient>
-              </defs>
-              <path className="flow-connector-shadow" d={FLOW_CONNECTOR_PATH} />
-              <path className="flow-connector-line" d={FLOW_CONNECTOR_PATH} />
-            </svg>
-            {workspace.roadmap.nodes
-              .slice()
-              .sort((a, b) => a.orderIndex - b.orderIndex)
-              .map((node, index) => {
-                const position = FLOW_POSITIONS[index] ?? { x: 50, y: 50 };
-                const phase = roadmapPhase(workspace, node);
-                const semEvents = visibleEvents(node);
-                const recordCount = semEvents.filter((ev) => !ev.isPlan).length;
-                const planCount = semEvents.filter((ev) => ev.isPlan).length;
-                const correctionCount = attentionCount(node);
-                const isMuted = false;
-                const subjects = [...new Set([
-                  ...node.candidateSubjects,
-                  // 과목 없는 기록(자율활동 등)은 빈 칩이 되므로 뺀다.
-                  ...activitiesForNode(node).map((a) => a.subject).filter(Boolean),
-                ])].slice(0, 3);
-
-                return (
-                  <button
-                    aria-label={`${node.grade}학년 ${node.semester}학기 상세 보기`}
-                    className={`flow-node phase-${phase}${isMuted ? " is-muted" : ""}${phase === "current" && studentHovering ? " student-hovering" : ""}`}
-                    key={node.id}
-                    onClick={() => setFocusedNodeId(node.id)}
-                    style={{ left: `${position.x}%`, top: `${position.y}%` } as CSSProperties}
-                    type="button"
-                  >
-                    {phase === "current" && (
-                      <span
-                        aria-hidden="true"
-                        className={`flow-node-student${studentNudge ? " is-playing" : ""}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setStudentNudge(false);
-                          window.setTimeout(() => setStudentNudge(true), 0);
-                          window.setTimeout(() => setStudentNudge(false), 620);
-                        }}
-                        onMouseDown={(event) => event.stopPropagation()}
-                        onMouseEnter={() => setStudentHovering(true)}
-                        onMouseLeave={() => setStudentHovering(false)}
-                      >
-                        <span className="student-head" />
-                        <span className="student-body" />
-                        <span className="student-arm student-arm-left" />
-                        <span className="student-arm student-arm-right" />
-                        <span className="student-leg student-leg-left" />
-                        <span className="student-leg student-leg-right" />
-                      </span>
-                    )}
-                    <span className="flow-node-period">{node.grade}-{node.semester}</span>
-                    <span className="flow-node-stage">{node.narrativeStage}</span>
-                    <strong>{node.title}</strong>
-                    {/* 회고 마디의 objective는 "생기부 연동을 통해 과거 활동을 확인하세요"라는
-                        안내다. 이미 기록이 쌓인 학기에 그 말을 띄우면 아직 아무것도 안
-                        했다는 뜻으로 읽힌다 — 그때는 무엇이 있는지 말해 준다. */}
-                    <span className="flow-node-objective">
-                      {phase === "past" && recordCount > 0
-                        ? `생활기록부에서 확인된 기록 ${recordCount}건`
-                        : node.objective}
-                    </span>
-                    <span className="flow-node-stats">
-                      <i>{recordCount} 기록</i>
-                      <i>{planCount} 계획</i>
-                      {correctionCount > 0 && <i className="needs-attention">{correctionCount} 보정</i>}
-                    </span>
-                    <span className="flow-node-subjects">
-                      {subjects.map((subject) => (
-                        <em key={subject} style={{ "--subj": subjectColor(subject) } as CSSProperties}>{subject}</em>
-                      ))}
-                    </span>
-                    <span className="flow-node-events">
-                      {semEvents.slice(0, 5).map((ev) => (
-                        <b
-                          className={ev.isPlan ? "is-plan" : "is-record"}
-                          key={ev.id}
-                          style={{ "--subj": subjectColor(ev.subject) } as CSSProperties}
-                          title={ev.title}
-                        />
-                      ))}
-                    </span>
-                  </button>
-                );
-              })}
-          </div>
-
-          <div className="timeline-footer">
-            <span><i className="dot-record" /> 실제 기록</span>
-            <span><i className="dot-plan" /> 앞으로의 계획</span>
-            <span>학기 노드를 누르면 기록과 계획이 학기 단위로 열립니다</span>
-          </div>
-        </div>
-      )}
-
-      {/* Semester focus modal */}
-      {focusedNode && (
-        <div className="focus-backdrop" onClick={closeFocusedNode} role="presentation">
-          <section
-            aria-label={`${focusedNode.grade}학년 ${focusedNode.semester}학기 상세`}
-            aria-modal="true"
-            className="focus-panel"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-          >
-            <div className="focus-header">
-              <div>
-                <span className="kicker">SEMESTER FOCUS</span>
-                <h2>{focusedNode.grade}학년 {focusedNode.semester}학기</h2>
-                <p>{focusedNode.narrativeStage} · {focusedNode.title}</p>
-                {focusedNode.status === "skipped" && focusedRecords.length > 0 && focusedNode.title === "기존 활동 기록" && (
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => summarizeNode(focusedNode.id)}
-                    disabled={summarizingNodeId === focusedNode.id}
-                    style={{ marginTop: "12px", fontSize: "0.85rem", padding: "6px 12px" }}
-                    type="button"
-                  >
-                    {summarizingNodeId === focusedNode.id ? "AI가 요약하는 중..." : "✨ 기록 바탕으로 AI 학기 요약 생성하기"}
-                  </button>
-                )}
-              </div>
-              <div className="focus-header-right">
-                <div className="focus-subjects focus-course-summary">
-                  <small>이 학기 수강 과목</small>
-                  <div className="focus-course-list">
-                    {focusedSemesterCourses.map((course) => (
-                      <span className="focus-subj-pill" key={course.id}>
-                        <i style={{ background: subjectColor(course.subject) }} />{course.subject}
-                      </span>
-                    ))}
-                    {!focusedSemesterCourses.length && <span className="focus-month-empty">등록된 과목이 없습니다.</span>}
-                  </div>
-                  <button className="focus-course-manage" onClick={() => setCourseManagerOpen(true)} type="button">과목 관리</button>
-                </div>
-                <button aria-label="닫기" className="focus-close" onClick={closeFocusedNode} type="button">×</button>
-              </div>
-            </div>
-
-            <div className="focus-semester-stream">
-              <div className="focus-stream-column">
-                <div className="focus-stream-head">
-                  <span className="kicker">RECORDS</span>
-                  <strong>실제 기록</strong>
-                </div>
-                <div className="focus-stream-list">
-                  {focusedRecords.map((ev) => {
-                    const cat = ROADMAP_CATEGORIES.find((c) => c.category === ev.category);
-                    return (
-                      <div className="focus-event" key={ev.id} style={{ "--subj": subjectColor(ev.subject) } as CSSProperties}>
-                        <span className="focus-ev-icon">{cat?.icon}</span>
-                        <small>{ev.category}</small>
-                        <strong>{ev.title}</strong>
-                        <em>{ev.subject} · 기록</em>
-                      </div>
-                    );
-                  })}
-                  {!focusedRecords.length && <span className="focus-month-empty">아직 이 학기에 연결된 실제 기록이 없습니다.</span>}
-                </div>
-              </div>
-
-              <div className="focus-stream-column is-plan">
-                <div className="focus-stream-head">
-                  <span className="kicker">PLANS</span>
-                  <strong>활동 주제 제안</strong>
-                  <small>★ 먼저 검토하면 좋은 주제</small>
-                </div>
-                <div className="focus-stream-list">
-                  {focusedPlans.map((ev) => {
-                    const cat = ROADMAP_CATEGORIES.find((c) => c.category === ev.category);
-                    return (
-                      <div
-                        className="focus-event is-plan"
-                        key={ev.id}
-                        onClick={() => setSelectedPlan({ plan: ev, node: focusedNode })}
-                        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedPlan({ plan: ev, node: focusedNode }); } }}
-                        role="button"
-                        style={{ "--subj": subjectColor(ev.subject), cursor: "pointer" } as CSSProperties}
-                        tabIndex={0}
-                      >
-                        <span className="focus-ev-icon">{cat?.icon}</span>
-                        <small>{ev.category}</small>
-                        <strong>{planTitleWithPriority(ev.title, ev.priority)}{completedPlanIds.has(ev.id) && <small className="plan-completed-label">완료</small>}</strong>
-                        <em>{ev.subject} · 학교 기회에 맞춰 선택</em>
-                        <p style={{ margin: "6px 0", fontSize: "0.82rem", lineHeight: 1.5 }}>{ev.description || "이 학기의 목표와 연결되는 탐구 주제입니다."}</p>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={(event) => { event.stopPropagation(); onConvertPlan({ title: ev.title, subject: ev.subject, planEventId: ev.id, roadmapNodeId: focusedNode?.id }); }}
-                          type="button"
-                        >
-                          이 주제를 실제 활동에 연결
-                        </button>
-                      </div>
-                    );
-                  })}
-                  {!focusedPlans.length && <span className="focus-month-empty">추가 활동 주제 제안이 없습니다.</span>}
-                </div>
-              </div>
-            </div>
-
-            <div className="focus-footer">
-              <div className="focus-footer-info">
-                <span className="kicker">학기 목표</span>
-                <p>{focusedNode.objective}</p>
-                <div className="focus-goal-chips">
-                  {focusedNode.competencyGoals.map((goal) => <span key={goal}>{goal}</span>)}
-                </div>
-              </div>
-              <div className="focus-footer-actions">
-                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setEditing({ ...focusedNode })} type="button">학기 내용 수정</button>
-                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setCheckpointOpen(true)} type="button">학기 점검</button>
-                <button className="btn btn-primary btn-sm" disabled={busy} onClick={regenerate} type="button">새 버전 생성</button>
-              </div>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {courseManagerOpen && focusedNode && (
-        <div className="modal-overlay course-modal-overlay" onClick={() => setCourseManagerOpen(false)} role="presentation">
-          <section aria-label="학기 수강 과목 관리" aria-modal="true" className="modal-panel course-manager-panel" onClick={(event) => event.stopPropagation()} role="dialog">
-            <div className="modal-head">
-              <div>
-                <span className="kicker">SEMESTER COURSES</span>
-                <h2>{focusedNode.grade}학년 {focusedNode.semester}학기 수강 과목</h2>
-              </div>
-              <button aria-label="닫기" className="focus-close" onClick={() => setCourseManagerOpen(false)} type="button">×</button>
-            </div>
-            <div className="modal-body course-manager-body">
-              <p>활동 기록과 과목별 탐구 팁에 쓰일 실제 수강 과목만 등록하세요.</p>
-              <div className="course-manager-current">
-                <small>등록한 과목</small>
-                <div className="focus-course-list">
-                  {focusedSemesterCourses.map((course) => (
-                    <span className="focus-subj-pill" key={course.id}>
-                      <i style={{ background: subjectColor(course.subject) }} />{course.subject}
-                      <button aria-label={`${course.subject} 삭제`} disabled={courseBusy} onClick={() => removeFocusedCourse(course.id)} type="button">×</button>
-                    </span>
-                  ))}
-                  {!focusedSemesterCourses.length && <span className="focus-month-empty">아직 등록한 과목이 없습니다.</span>}
-                </div>
-              </div>
-              {suggestedSemesterCourses.length > 0 && (
-                <div className="focus-course-suggestions">
-                  <small>이 학기에 자주 편성되는 과목</small>
-                  <div>
-                    {suggestedSemesterCourses.map((subject) => (
-                      <button disabled={courseBusy} key={subject} onClick={() => addFocusedCourse(subject)} type="button">+ {subject}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="focus-course-add">
-                <input aria-label="수강 과목 직접 추가" disabled={courseBusy} onChange={(event) => setCourseDraft(event.target.value)} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === "Enter") { event.preventDefault(); void addFocusedCourse(); } }} placeholder="직접 입력 · 예: 수학Ⅰ" value={courseDraft} />
-                <button className="btn btn-secondary btn-sm" disabled={courseBusy || !courseDraft.trim()} onClick={() => void addFocusedCourse()} type="button">추가</button>
-              </div>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* School record review modal */}
-      {recordParse && (
-        <div className="record-review-overlay" role="presentation">
-          <section aria-label="생활기록부 분석 결과" aria-modal="true" className="record-review-panel" role="dialog">
-            <div className="record-review-head">
-              <div>
-                <span className="kicker">SCHOOL RECORD REVIEW</span>
-                <h2>분석 결과를 확인해주세요</h2>
-                <p>{recordParse.fileName} · {recordParse.totalPages ? `${recordParse.totalPages}쪽 · ` : ""}구조화 데이터 {recordParse.extractedCharacters.toLocaleString()}자</p>
-              </div>
-              <button aria-label="닫기" className="focus-close" onClick={() => setRecordParse(null)} type="button">×</button>
-            </div>
-            <div className="record-review-body">
-              <div className="rr-privacy-note">
-                <strong>업로드한 생기부 원본은 계정에 보관됩니다.</strong>
-                <span>아래에서 선택한 과목과 활동만 학생 기록에 반영됩니다.</span>
-              </div>
-              {recordParse.warnings.map((w) => <div className="rr-warning" key={w}>! {w}</div>)}
-              <div className="parsed-tabs">
-                {ROADMAP_CATEGORIES.map((c) => {
-                  const entryCount = recordParse.entries.filter((e) => e.category === c.category).length;
-                  const count = entryCount;
-                  if (count === 0) return null;
-                  
-                  return (
-                    <button
-                      key={c.category}
-                      className={`parsed-tab-btn ${importCategory === c.category ? "is-active" : ""}`}
-                      onClick={() => setImportCategory(c.category)}
-                      type="button"
-                      style={{ 
-                        padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "6px", 
-                        background: importCategory === c.category ? "var(--accent)" : "var(--surface)", 
-                        color: importCategory === c.category ? "white" : "inherit",
-                        marginRight: "8px", marginBottom: "8px", cursor: "pointer"
-                      }}
-                    >
-                      {c.icon} {c.category} <span style={{ opacity: 0.7, marginLeft: "4px" }}>({count})</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {importCategory === "시험" && recordParse.courses.length > 0 && (
-                <div className="parsed-section">
-                  <div className="parsed-section-title">
-                    <strong>인식한 교과 성적</strong>
-                    <span>{recordParse.courses.length}개</span>
-                  </div>
-                  <div className="parsed-courses">
-                    {recordParse.courses.map((course) => (
-                      <span className="parsed-course-pill" key={course.id}>
-                        <i style={{ background: subjectColor(course.subject), borderRadius: "3px", height: "8px", width: "14px", display: "inline-block", marginRight: "5px" }} />
-                        {course.grade}학년 {course.semester}학기 · {course.subject}{course.rank ? ` · ${course.rank}등급` : ""}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="parsed-section">
-                <div className="parsed-section-title">
-                  <strong>로드맵에 표시할 [{importCategory}] 활동</strong>
-                  <span>{recordParse.entries.filter((e) => e.category === importCategory && e.selected).length}개 선택</span>
-                </div>
-                <div className="parsed-entries">
-                  {recordParse.entries.filter((e) => e.category === importCategory).map((entry) => (
-                    <div className={`entry-card${entry.selected ? " is-selected" : ""}`} key={entry.id}>
-                      <div className="entry-card-top">
-                        <div className="entry-toggle">
-                          <input
-                            checked={entry.selected}
-                            onChange={(e) => updateRecordEntry(entry.id, { selected: e.target.checked })}
-                            type="checkbox"
-                          />
-                          <span>{entry.selected ? "반영" : "제외"}</span>
-                        </div>
-                        <div className="entry-period">
-                          <select aria-label="학년" value={entry.grade} onChange={(e) => updateRecordEntry(entry.id, { grade: Number(e.target.value) })}>
-                            <option value={1}>1학년</option><option value={2}>2학년</option><option value={3}>3학년</option>
-                          </select>
-                          <select aria-label="학기" value={entry.semester} onChange={(e) => updateRecordEntry(entry.id, { semester: Number(e.target.value) })}>
-                            <option value={1}>1학기</option><option value={2}>2학기</option>
-                          </select>
-                          <input aria-label="날짜" type="date" value={entry.completedAt} onChange={(e) => updateRecordEntry(entry.id, { completedAt: e.target.value, dateBasis: "document" })} />
-                        </div>
-                      </div>
-                      <div className="entry-fields">
-                        <input aria-label="연계 과목" value={entry.subject} onChange={(e) => updateRecordEntry(entry.id, { subject: e.target.value })} />
-                        <input aria-label="활동 제목" value={entry.title} onChange={(e) => updateRecordEntry(entry.id, { title: e.target.value })} />
-                      </div>
-                      <div className="entry-card-foot">
-                        <span className={entry.dateBasis === "document" ? "" : "date-inferred"}>
-                          {entry.dateBasis === "document" ? "문서 날짜" : "날짜 확인 안 됨 · 직접 입력"}
-                        </span>
-                        <span>신뢰도 {entry.confidence}%</span>
-                      </div>
-                    </div>
-                  ))}
-                  {!recordParse.entries.filter((e) => e.category === importCategory).length && (
-                    <div className="empty-state">
-                      <strong>자동으로 찾은 활동이 없습니다</strong>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {error && <div className="banner banner-error">{error}</div>}
-            </div>
-            <div className="record-review-foot">
-              <button className="btn btn-secondary" disabled={recordBusy} onClick={() => setRecordParse(null)} type="button">취소</button>
-              <button
-                className="btn btn-primary"
-                disabled={recordBusy || (importCategory === "시험" ? (!recordParse.courses.length && !recordParse.entries.some((e) => e.category === importCategory && e.selected)) : !recordParse.entries.some((e) => e.category === importCategory && e.selected))}
-                onClick={() => void confirmRecordImport()}
-                type="button"
-              >
-                {recordBusy ? "반영 중…" : `선택한 [${importCategory}] 항목 로드맵에 반영`}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {gradeImportConflicts.length > 0 && (
-        <div className="modal-overlay course-modal-overlay" onClick={() => setGradeImportConflicts([])} role="presentation">
-          <section aria-label="생활기록부 성적 차이 확인" aria-modal="true" className="modal-panel grade-conflict-panel" onClick={(event) => event.stopPropagation()} role="dialog">
-            <div className="modal-head">
-              <div><span className="kicker">RECORD CHECK</span><h2>기존 성적과 다른 항목이 있어요</h2></div>
-              <button aria-label="닫기" className="focus-close" onClick={() => setGradeImportConflicts([])} type="button">×</button>
-            </div>
-            <div className="modal-body">
-              <p className="grade-conflict-lead">사용자가 입력한 성적을 기본으로 유지합니다. 생활기록부 내용으로 바꿀 항목만 선택하세요.</p>
-              <div className="grade-conflict-list">
-                {gradeImportConflicts.map((conflict) => (
-                  <div className="grade-conflict-item" key={conflict.courseId}>
-                    <strong>{conflict.grade}학년 {conflict.semester}학기 · {conflict.subject}</strong>
-                    <span>기존 {conflict.currentRank}등급 · 생활기록부 {conflict.importedRank}등급</span>
-                    <div>
-                      <label><input checked={gradeImportChoices[conflict.courseId] !== "replace"} name={conflict.courseId} onChange={() => setGradeImportChoices((current) => ({ ...current, [conflict.courseId]: "keep" }))} type="radio" /> 기존 유지</label>
-                      <label><input checked={gradeImportChoices[conflict.courseId] === "replace"} name={conflict.courseId} onChange={() => setGradeImportChoices((current) => ({ ...current, [conflict.courseId]: "replace" }))} type="radio" /> 생활기록부로 변경</label>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="modal-foot">
-              <button className="btn btn-secondary" onClick={() => setGradeImportConflicts([])} type="button">돌아가기</button>
-              <button className="btn btn-primary" onClick={() => confirmRecordImport(gradeImportChoices)} type="button">선택대로 반영</button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* Edit node modal */}
-      {editing && (
-        <div className="modal-overlay">
-          <div className="modal-panel">
-            <div className="modal-head">
-              <div>
-                <span className="kicker">ROADMAP NODE</span>
-                <h2>{editing.grade}학년 {editing.semester}학기 수정</h2>
-              </div>
-              <button className="focus-close" onClick={() => setEditing(null)} type="button">×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-field">
-                <label htmlFor="edit-title">노드 제목</label>
-                <input id="edit-title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} />
-              </div>
-              <div className="form-field">
-                <label htmlFor="edit-objective">목표</label>
-                <textarea id="edit-objective" value={editing.objective} onChange={(e) => setEditing({ ...editing, objective: e.target.value })} />
-              </div>
-              {error && <div className="banner banner-error">{error}</div>}
-            </div>
-            <div className="modal-foot">
-              <button className="btn btn-secondary" onClick={() => setEditing(null)} type="button">취소</button>
-              <button className="btn btn-primary" disabled={busy} onClick={saveNode} type="button">저장</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Checkpoint modal */}
-      {checkpointOpen && (
-        <div className="modal-overlay">
-          <div className="modal-panel">
-            <div className="modal-head">
-              <div>
-                <span className="kicker">SEMESTER CHECKPOINT</span>
-                <h2>현재 노드를 완료하지 못했나요?</h2>
-              </div>
-              <button className="focus-close" onClick={() => setCheckpointOpen(false)} type="button">×</button>
-            </div>
-            <div className="modal-body">
-              <p style={{ color: "var(--muted)", fontSize: "13px", lineHeight: "1.65" }}>
-                MISS는 새 활동의 성격이 아니라 예정 시점까지 완료 활동이 없는 상태입니다. 자동으로 실패 처리하지 않고 학생이 이월 또는 건너뛰기를 결정합니다.
-              </p>
-              {error && <div className="banner banner-error">{error}</div>}
-            </div>
-            <div className="modal-foot">
-              <button className="btn btn-secondary" disabled={busy} onClick={() => recordMiss("carry")} type="button">다음 학기로 이월</button>
-              <button className="btn btn-primary" disabled={busy} onClick={() => recordMiss("skip")} type="button">건너뛰고 다음 노드</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {selectedPlan && <PlanDetailModal plan={selectedPlan.plan} node={selectedPlan.node} courseSubjects={workspace.semesterCourses.filter((course) => course.roadmapNodeId === selectedPlan.node.id).map((course) => course.subject)} onClose={() => setSelectedPlan(null)} onConvertPlan={onConvertPlan} />}
     </div>
   );
 }
@@ -3827,83 +2542,6 @@ function PortfolioView({ workspace }: { workspace: ProductWorkspace }) {
     </div>
   );
 }
-
-function LegacyGradesView({ workspace, onWorkspace, onNavigate }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void; onNavigate: (tab: TabId) => void }) {
-  const [period, setPeriod] = useState(`${workspace.profile.grade}-${workspace.profile.semester}`);
-  const [drafts, setDrafts] = useState<Record<string, { rank: string; score: string; note: string }>>({});
-  const [savingId, setSavingId] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [grade, semester] = period.split("-").map(Number);
-  const courses = workspace.semesterCourses.filter((course) => course.grade === grade && course.semester === semester);
-  const gradeByCourse = new Map(workspace.courseGrades.map((item) => [item.semesterCourseId, item]));
-  const savedRanks = courses.map((course) => gradeByCourse.get(course.id)?.rank).filter((rank): rank is number => rank !== null && rank !== undefined);
-  const savedScores = courses.map((course) => gradeByCourse.get(course.id)?.score).filter((score): score is number => score !== null && score !== undefined);
-  const periodOptions = workspace.roadmap.nodes.map((node) => `${node.grade}-${node.semester}`);
-
-  function valuesFor(courseId: string) {
-    const saved = gradeByCourse.get(courseId);
-    return drafts[courseId] ?? { rank: saved?.rank?.toString() ?? "", score: saved?.score?.toString() ?? "", note: saved?.note ?? "" };
-  }
-
-  function updateDraft(courseId: string, patch: Partial<{ rank: string; score: string; note: string }>) {
-    setDrafts((current) => ({ ...current, [courseId]: { ...valuesFor(courseId), ...patch } }));
-  }
-
-  async function saveGrade(courseId: string) {
-    const draft = valuesFor(courseId);
-    const rank = draft.rank ? Number(draft.rank) : null;
-    const score = draft.score ? Number(draft.score) : null;
-    if ((rank !== null && (!Number.isInteger(rank) || rank < 1 || rank > 5)) || (score !== null && (score < 0 || score > 100))) {
-      setError("내신 등급은 1~5, 원점수는 0~100 사이로 입력해주세요.");
-      return;
-    }
-    setSavingId(courseId); setError(""); setMessage("");
-    try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/course-grades", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ studentId: workspace.profile.id, semesterCourseId: courseId, rank, score, note: draft.note }),
-      });
-      onWorkspace(result.workspace);
-      setMessage("성적을 저장했습니다.");
-    } catch (e) { setError(e instanceof Error ? e.message : "성적을 저장하지 못했습니다."); }
-    finally { setSavingId(null); }
-  }
-
-  return <div className="grades-page">
-    <div className="activities-header"><span className="kicker">ACADEMIC RECORD</span><h1>성적</h1><p>실제 수강 과목별 성적을 학기 단위로 기록해 학업 흐름을 관리합니다.</p></div>
-    <section className="grade-overview-card">
-      <div><small>선택 학기</small><strong>{grade}학년 {semester}학기</strong></div>
-      <div><small>입력 과목</small><strong>{courses.length}개</strong></div>
-      <div><small>평균 내신 등급</small><strong>{savedRanks.length ? `${(savedRanks.reduce((sum, value) => sum + value, 0) / savedRanks.length).toFixed(2)}등급` : "미입력"}</strong></div>
-      <div><small>평균 원점수</small><strong>{savedScores.length ? `${(savedScores.reduce((sum, value) => sum + value, 0) / savedScores.length).toFixed(1)}점` : "미입력"}</strong></div>
-    </section>
-    <div className="grade-toolbar">
-      <label htmlFor="grade-period">학기 선택</label>
-      <select id="grade-period" value={period} onChange={(event) => { setPeriod(event.target.value); setError(""); setMessage(""); }}>
-        {periodOptions.map((option) => { const [optionGrade, optionSemester] = option.split("-"); return <option key={option} value={option}>{optionGrade}학년 {optionSemester}학기</option>; })}
-      </select>
-    </div>
-    {error && <div className="banner banner-error">{error}</div>}
-    {message && <div className="banner">{message}</div>}
-    {courses.length ? <div className="grade-course-list">{courses.map((course) => {
-      const values = valuesFor(course.id);
-      return <article className="grade-course-card" key={course.id}>
-        <div className="grade-course-name"><i style={{ background: subjectColor(course.subject) }} /><strong>{course.subject}</strong></div>
-        <div className="grade-inputs">
-          <label>내신 등급<select aria-label={`${course.subject} 내신 등급`} value={values.rank} onChange={(event) => updateDraft(course.id, { rank: event.target.value })}><option value="">미입력</option>{[1, 2, 3, 4, 5].map((rank) => <option key={rank} value={rank}>{rank}등급</option>)}</select></label>
-          <label>원점수<input aria-label={`${course.subject} 원점수`} inputMode="numeric" max="100" min="0" onChange={(event) => updateDraft(course.id, { score: event.target.value })} placeholder="선택" type="number" value={values.score} /></label>
-          <label className="grade-note">메모<input aria-label={`${course.subject} 성적 메모`} onChange={(event) => updateDraft(course.id, { note: event.target.value })} placeholder="예: 중간 이후 오답 유형 보완" value={values.note} /></label>
-        </div>
-        <button className="btn btn-secondary btn-sm" disabled={savingId === course.id} onClick={() => saveGrade(course.id)} type="button">{savingId === course.id ? "저장 중…" : "저장"}</button>
-      </article>;
-    })}</div> : <section className="empty-state grade-empty"><strong>이 학기에 등록한 수강 과목이 없습니다</strong><p>먼저 3개년 기록에서 해당 학기의 수강 과목을 등록하면 성적을 기록할 수 있습니다.</p><button className="btn btn-secondary btn-sm" onClick={() => onNavigate("roadmap")} type="button">3개년 기록으로 이동</button></section>}
-  </div>;
-}
-
-/* ──────────────────────────────────────────────
-   ProfileView
-   ────────────────────────────────────────────── */
 function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void }) {
   const [form, setForm] = useState<ProfileForm>({
     name: workspace.profile.name,
@@ -4185,17 +2823,6 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       ),
     },
     {
-      id: "roadmap",
-      label: "3개년 로드맵",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="12 2 2 7 12 12 22 7 12 2" />
-          <polyline points="2 17 12 22 22 17" />
-          <polyline points="2 12 12 17 22 12" />
-        </svg>
-      ),
-    },
-    {
       id: "grades",
       label: "성적 관리",
       icon: (
@@ -4422,7 +3049,6 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
         <div className="product-content">
           {tab === "dashboard" && <DashboardView workspace={workspace} onNavigate={setTab} />}
           {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} onWorkspace={onWorkspace} />}
-          {tab === "roadmap"    && <RoadmapView workspace={workspace} onWorkspace={onWorkspace} onConvertPlan={startActivity} />}
           {tab === "timetable"  && (
             <TimetableView
               currentGrade={workspace.profile.grade}
@@ -4491,6 +3117,8 @@ export function WorkspaceApp() {
   // 학생 식별은 이제 백엔드 JWT가 한다 — localStorage의 studentId로 작업공간을 찾던
   // 방식은 서버 로직이 이 앱을 떠나면서 함께 사라졌다.
   const [signedIn, setSignedIn] = useState(false);
+  /** 랜딩에서 로그인/시작하기를 눌렀는지. 누르기 전에는 인증 화면을 띄우지 않는다. */
+  const [authOpen, setAuthOpen] = useState(false);
   // null이면 아직 확인 전, satisfied=false면 진단+상담 관문이 메인 화면을 막는다.
   const [consultationStatus, setConsultationStatus] = useState<ConsultationStatus | null>(null);
 
@@ -4558,6 +3186,8 @@ export function WorkspaceApp() {
   // 조기 반환은 훅을 전부 부른 뒤에 온다. 훅보다 앞에 두면 로그인 전후로 호출
   // 순서가 달라져 Rules of Hooks를 어긴다.
   if (!signedIn) {
+    // 처음 오는 사람은 랜딩을 먼저 본다. 로그인/시작하기를 누른 뒤에만 인증 화면으로.
+    if (!authOpen) return <LandingView onGoToLogin={() => setAuthOpen(true)} />;
     return (
       <SignIn
         onSignedIn={() => {

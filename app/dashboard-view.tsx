@@ -14,7 +14,7 @@ import type { ProductWorkspace } from "../lib/product-harness";
 import { backendRecordToGradeItem, fetchAcademicRecords } from "../lib/academic-records-api";
 import type { HighSchoolGradeItem } from "./types/academic";
 
-type TabTarget = "overview" | "roadmap" | "grades" | "activities" | "profile" | "chat";
+type TabTarget = "overview" | "grades" | "activities" | "profile" | "chat";
 
 const GOAL_TONES = [
   { border: "border-blue-200/80", bg: "bg-blue-50/50", label: "text-brand-700", chip: "bg-blue-100 text-brand-700" },
@@ -74,7 +74,6 @@ export function DashboardView({
   );
 
   const plannedTopicCount = activeNode?.planEvents?.length ?? 0;
-  const completedNodeCount = roadmap.nodes.filter((node) => node.status === "done").length;
 
   /** 단위 가중 평균 — 성적 화면과 같은 식이다(석차등급이 있는 과목만). */
   const gradeSummary = useMemo(() => {
@@ -203,12 +202,12 @@ export function DashboardView({
               valueLabel={`${semesterActivityCount} / ${plannedTopicCount || "-"} 건`}
             />
             <ProgressBlock
-              caption="상담으로 확정한 6개 학기 중 완료로 표시된 학기"
-              label="3개년 학습 로드맵 단계"
-              onClick={() => onNavigate("roadmap")}
-              total={6}
-              value={completedNodeCount}
-              valueLabel={`${completedNodeCount} / 6 학기`}
+              caption="지금까지 남긴 활동·수상·봉사·독서 기록 전체"
+              label="누적 기록"
+              onClick={() => onNavigate("activities")}
+              total={Math.max(activities.length, 1)}
+              value={activities.length}
+              valueLabel={`${activities.length} 건`}
             />
           </div>
 
