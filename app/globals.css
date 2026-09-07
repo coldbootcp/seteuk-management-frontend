@@ -4,6 +4,45 @@
 */
 
 /* ======================================================
+   0. TAILWIND UTILITIES (preflight 제외)
+   ------------------------------------------------------
+   디자인 목업(preview-3200)이 Tailwind 유틸리티로 쓰여 있어, 마크업을 옮길 때
+   번역 없이 그대로 쓰려고 유틸리티만 켠다. **preflight(리셋)는 켜지 않는다** —
+   이 파일이 이미 자체 리셋을 갖고 있고, 그 위에 Tailwind 리셋을 얹으면 기존
+   6천 줄이 기대하는 기본값이 조용히 어긋난다.
+   ====================================================== */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* 목업의 Tailwind 테마를 그대로 옮긴 토큰. 유틸리티(bg-brand-500 등)가 이 값을 쓴다. */
+@theme {
+  --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Noto Sans KR", system-ui, sans-serif;
+
+  --color-brand-50:  #F0F7FF;
+  --color-brand-100: #E0EFFF;
+  --color-brand-200: #C0DEFF;
+  --color-brand-300: #8BC3FF;
+  --color-brand-400: #4D9EFF;
+  --color-brand-500: #3182F6;
+  --color-brand-600: #1B64DA;
+  --color-brand-700: #134EB2;
+  --color-brand-800: #113E8D;
+  --color-brand-900: #133572;
+
+  --color-surface-bg:     #F8F9FA;
+  --color-surface-card:   #FFFFFF;
+  --color-surface-border: #EAECEF;
+  --color-surface-subtle: #F1F3F5;
+
+  --shadow-card:       0 2px 12px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  --shadow-card-hover: 0 8px 24px rgba(49, 130, 246, 0.08), 0 2px 6px rgba(0, 0, 0, 0.03);
+  --shadow-brand-glow: 0 4px 16px rgba(49, 130, 246, 0.25);
+  --shadow-floating:   0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+/* ======================================================
    1. CUSTOM PROPERTIES (DESIGN TOKENS)
    ====================================================== */
 :root {

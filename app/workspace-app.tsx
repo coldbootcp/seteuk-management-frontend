@@ -3939,7 +3939,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
   /** 챗봇 수정 모드가 기록을 바꾸면 다른 화면도 최신으로 맞춘다. */
   onRefresh: () => void;
 }) {
-  const [tab, setTab] = useState<TabId>("roadmap");
+  const [tab, setTab] = useState<TabId>("overview");
   const [activityDraft, setActivityDraft] = useState<ActivityDraft | null>(null);
   const studentId = workspace.profile.id;
   const storageKey = `seteuk-timetables-${studentId}`;
@@ -3989,10 +3989,37 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
 
   const initials = workspace.profile.name.slice(-2);
 
-  const tabs: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
+  // 상단 전역 검색 — 백엔드에 검색 엔드포인트가 없으므로 이미 불러온 기록 안에서만
+  // 찾는다. 눌러도 아무 일이 없는 장식 입력창을 두지 않기 위해 실제로 동작시킨다.
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 1) return [];
+    return workspace.activities
+      .filter((activity) =>
+        [activity.title, activity.subject, activity.activityCategory, ...activity.concepts]
+          .filter(Boolean)
+          .some((field) => String(field).toLowerCase().includes(q)),
+      )
+      .slice(0, 6);
+  }, [searchQuery, workspace.activities]);
+
+  const tabs: Array<{ id: TabId; label: string; badge?: string; icon: React.ReactNode }> = [
+    {
+      id: "overview",
+      label: "이번 학기",
+      badge: `${workspace.profile.grade}-${workspace.profile.semester}`,
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="6" />
+          <circle cx="12" cy="12" r="2" />
+        </svg>
+      ),
+    },
     {
       id: "roadmap",
-      label: "3개년 기록",
+      label: "3개년 로드맵",
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polygon points="12 2 2 7 12 12 22 7 12 2" />
@@ -4002,10 +4029,21 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       ),
     },
     {
+      id: "grades",
+      label: "성적 관리",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      ),
+    },
+    {
       id: "timetable",
       label: "시간표",
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
@@ -4014,30 +4052,8 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       ),
     },
     {
-      id: "grades",
-      label: "성적",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="18" y1="20" x2="18" y2="10" />
-          <line x1="12" y1="20" x2="12" y2="4" />
-          <line x1="6" y1="20" x2="6" y2="14" />
-        </svg>
-      ),
-    },
-    {
-      id: "overview",
-      label: "이번 학기",
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <circle cx="12" cy="12" r="6" />
-          <circle cx="12" cy="12" r="2" />
-        </svg>
-      ),
-    },
-    {
       id: "activities",
-      label: "활동 기록",
+      label: "활동 & 세특",
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -4050,9 +4066,9 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
     },
     {
       id: "portfolio",
-      label: "수시 준비",
+      label: "수시 포트폴리오",
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
         </svg>
@@ -4060,18 +4076,18 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
     },
     {
       id: "chat",
-      label: "챗봇",
+      label: "AI 컨설턴트",
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
         </svg>
       ),
     },
     {
       id: "profile",
-      label: "프로필",
+      label: "프로필 설정",
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7" r="4" />
         </svg>
@@ -4090,55 +4106,150 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
     <div className="product-shell">
       {/* Sidebar */}
       <aside className="sidebar">
-        <div className="sidebar-brand">
-          <img alt="세특연구소 로고" src="/logo.png?v=2" style={{ width: 36, height: 36, objectFit: 'contain' }} />
-          <div className="brand-text">
-            <strong>세특연구소 <span style={{ color: 'var(--blue-500)', fontWeight: 800 }}>Pro</span></strong>
-            <small>Personal Coach</small>
-          </div>
-        </div>
+        <div className="flex-1 flex flex-col justify-between p-4 md:p-5 min-h-0">
+          <div>
+            <div className="flex items-center gap-3 px-2 py-2 mb-3 pb-4 border-b border-gray-100">
+              <img alt="세특연구소 로고" src="/logo.png?v=2" className="w-9 h-9 object-contain flex-none" />
+              <div className="flex-1 min-w-0">
+                <div className="font-extrabold text-[15px] text-gray-950 tracking-tight flex items-center gap-1.5 leading-none">
+                  <span>세특연구소</span>
+                  <span className="text-brand-600 font-extrabold text-[11px] px-1.5 py-0.5 rounded bg-brand-50 border border-brand-200/80 leading-none">Pro</span>
+                </div>
+                <div className="text-[11px] text-gray-400 font-medium leading-none mt-1.5">Personal Coach</div>
+              </div>
+            </div>
 
-        <div className="sidebar-student">
-          <div className="student-avatar">{initials}</div>
-          <div className="student-info">
-            <strong>{workspace.profile.name}</strong>
-            <small>{workspace.profile.grade}학년 {workspace.profile.semester}학기 · {workspace.profile.targetCareer}</small>
-          </div>
-        </div>
-
-        <nav className="sidebar-nav">
-          {tabs.map((item) => (
             <button
-              className={`nav-btn${tab === item.id ? " active" : ""}`}
-              id={`nav-${item.id}`}
-              key={item.id}
-              onClick={() => setTab(item.id)}
+              className="w-full flex items-center gap-3 p-2.5 mb-4 rounded-xl bg-gray-50/80 border border-gray-200/70 hover:border-brand-300 hover:bg-gray-100/70 transition cursor-pointer group text-left"
+              onClick={() => setTab("profile")}
               type="button"
             >
-              <span className="nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
+              <span className="w-9 h-9 rounded-full bg-brand-500 text-white font-bold text-xs flex items-center justify-center flex-none">
+                {initials}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="flex items-center gap-1.5">
+                  <span className="font-bold text-gray-900 text-xs truncate group-hover:text-brand-600 transition">{workspace.profile.name}</span>
+                  <span className="text-[10px] font-bold px-1.5 rounded bg-blue-50 text-brand-600 border border-blue-100">재학생</span>
+                </span>
+                <span className="text-[11px] text-gray-400 block truncate mt-0.5">
+                  {workspace.profile.grade}학년 {workspace.profile.semester}학기 · {workspace.profile.targetCareer}
+                </span>
+              </span>
             </button>
-          ))}
-        </nav>
 
-        <div className="sidebar-footer">
-          {/* 이 버튼은 실제로 로그아웃한다(토큰을 지우고 로그인 화면으로 보낸다).
-              "신규 학생 시작"이라는 이름은 계정마다 학생이 하나인 지금 구조에서
-              무슨 일이 일어나는지 감추기만 한다. */}
-          <button className="new-student-btn" id="btn-new-student" onClick={onNewStudent} type="button">
-            로그아웃
-          </button>
+            <nav className="space-y-1">
+              {tabs.map((item) => {
+                const isActive = tab === item.id;
+                return (
+                  <button
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                      isActive
+                        ? "bg-brand-50 text-brand-600 font-bold border border-brand-200/60"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-950 border border-transparent"
+                    }`}
+                    id={`nav-${item.id}`}
+                    key={item.id}
+                    onClick={() => setTab(item.id)}
+                    type="button"
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className={`flex-none ${isActive ? "text-brand-600" : "text-gray-400"}`}>{item.icon}</span>
+                      <span>{item.label}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      {item.badge && (
+                        <span className={`text-[10px] font-bold px-1.5 rounded ${isActive ? "bg-brand-500 text-white" : "bg-gray-100 text-gray-500"}`}>
+                          {item.badge}
+                        </span>
+                      )}
+                      {isActive && <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          <div className="space-y-2.5 pt-4 border-t border-gray-100">
+            {/* 이 버튼은 실제로 로그아웃한다(토큰을 지우고 로그인 화면으로 보낸다). */}
+            <button
+              className="w-full py-2.5 px-3 rounded-xl border border-dashed border-gray-300 hover:border-brand-400 hover:text-brand-600 hover:bg-brand-50/40 text-gray-500 text-xs font-semibold transition flex items-center justify-center gap-1.5"
+              id="btn-new-student"
+              onClick={onNewStudent}
+              type="button"
+            >
+              <span>🚪</span>
+              <span>로그아웃</span>
+            </button>
+            <div className="flex items-center justify-between text-[11px] text-gray-400 px-1 pt-0.5">
+              <span>로드맵 v{workspace.roadmap.version}</span>
+              <span>·</span>
+              <span className="text-gray-400 font-mono text-[10px]">v{APP_VERSION}</span>
+            </div>
+          </div>
         </div>
       </aside>
 
       {/* Main */}
       <section className="product-main">
         <header className="product-topbar">
-          <div>
-            <strong>{currentTabLabel}</strong>
-            <small>v{APP_VERSION} · 로드맵 v{workspace.roadmap.version}</small>
+          <div className="flex items-center gap-3">
+            <span className="font-extrabold text-base text-gray-950 tracking-tight">Academic Hub</span>
+            <span className="text-gray-300">/</span>
+            <span className="text-xs font-semibold text-gray-500">{currentTabLabel}</span>
           </div>
-          <span className="privacy-chip">학생별 데이터 격리</span>
+
+          <div className="relative w-80 max-w-[38%]">
+            <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 text-xs pointer-events-none">🔍</span>
+            <input
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-gray-200/90 text-xs bg-gray-50/60 focus:bg-white focus:border-brand-500 focus:outline-none transition"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="과목, 탐구 키워드, 활동 검색…"
+              type="search"
+              value={searchQuery}
+            />
+            {searchQuery.trim() && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-floating overflow-hidden z-40">
+                {searchResults.length ? (
+                  searchResults.map((activity) => (
+                    <button
+                      className="w-full text-left px-3.5 py-2.5 hover:bg-gray-50 transition border-b border-gray-50 last:border-b-0"
+                      key={activity.id}
+                      onClick={() => {
+                        setSearchQuery("");
+                        setTab("activities");
+                      }}
+                      type="button"
+                    >
+                      <span className="block text-xs font-semibold text-gray-900 truncate">{activity.title}</span>
+                      <span className="block text-[11px] text-gray-400 mt-0.5">
+                        {activity.periodLabel} · {activity.subject || activity.activityCategory}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-3.5 py-3 text-[11px] text-gray-400">기록에서 찾지 못했습니다.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200/80">
+              <span className="w-2 h-2 rounded-full bg-brand-500" />
+              <span className="text-[11px] font-bold text-brand-700">3개년 연동 · 학생별 데이터 격리</span>
+            </span>
+            <span className="h-4 w-px bg-gray-200" />
+            <button
+              aria-label="프로필 설정"
+              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition"
+              onClick={() => setTab("profile")}
+              type="button"
+            >
+              <span className="text-sm">⚙️</span>
+            </button>
+          </div>
         </header>
 
         <div className="product-content">
