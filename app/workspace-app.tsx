@@ -41,6 +41,7 @@ type TabId = "overview" | "dashboard" | "timetable" | "activities" | "grades" | 
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
+  freshmanAcademicYear: string;
   targetCareer: string; targetMajors: string; interests: string;
   concreteResearchQuestion: string; knowledgeLevel: string;
   motivationTrigger: string; careerResolution: string; currentEngagement: string;
@@ -126,7 +127,7 @@ type FollowUpRecommendation = {
    Constants
    ────────────────────────────────────────────── */
 const EMPTY_PROFILE: ProfileForm = {
-  name: "", grade: "", semester: "", targetCareer: "",
+  name: "", grade: "", semester: "", freshmanAcademicYear: "", targetCareer: "",
   concreteResearchQuestion: "", knowledgeLevel: "",
   targetMajors: "", interests: "", motivationTrigger: "",
   careerResolution: "",
@@ -299,6 +300,7 @@ function toProfileInput(form: ProfileForm): ProfileInput {
   ].filter(Boolean).join("\n");
   return {
     name: form.name.trim(), grade: profileGradeValue(form), semester: profileSemesterValue(form),
+    freshmanAcademicYear: form.freshmanAcademicYear ? Number(form.freshmanAcademicYear) : null,
     targetCareer: form.targetCareer.trim(), targetMajors: splitList(form.targetMajors),
     interests: splitList(branchInterests),
     motivationTrigger: form.motivationTrigger,
@@ -336,10 +338,9 @@ type SchoolRecordProgress = {
   error?: string | null;
 };
 
-async function analyzeSchoolRecordPdf(file: File, academicStartYear: number, signal?: AbortSignal, onProgress?: (state: SchoolRecordProgress) => void) {
+async function analyzeSchoolRecordPdf(file: File, signal?: AbortSignal, onProgress?: (state: SchoolRecordProgress) => void) {
   const payload = new FormData();
   payload.append("file", file);
-  payload.append("academicStartYear", String(academicStartYear));
   if (signal?.aborted) throw new Error("학생부 분석을 취소했습니다.");
   const initial = await jsonRequest<{ task_id?: string }>("/api/school-record/parse", {
     method: "POST",
@@ -844,13 +845,19 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     setClarificationComplete(false);
     setClarificationAnswers([]);
     try {
-      const fallbackGrade = isGraduatedGrade(form.grade) ? 3 : Number(form.grade || 1);
-      const fallbackAcademicStartYear = new Date().getFullYear() - (fallbackGrade - 1);
-      const resultJson = await analyzeSchoolRecordPdf(file, fallbackAcademicStartYear, controller.signal, (state) => {
+      // PDF 학적사항이 알려준 입학 연도 또는 학생이 직접 입력한 값만 쓴다. 현재
+      // 달력으로 거꾸로 계산하면 과거 졸업생 생기부의 날짜·학년이 틀어질 수 있다.
+      const providedFreshmanYear = Number(form.freshmanAcademicYear);
+      const manualFreshmanYear = Number.isInteger(providedFreshmanYear) ? providedFreshmanYear : undefined;
+      const resultJson = await analyzeSchoolRecordPdf(file, controller.signal, (state) => {
         if (state.stage) setOnboardingRecordStage(state.stage);
       });
       if (controller.signal.aborted) return;
-      const initialParsed = parseSchoolRecordJson(resultJson, fallbackAcademicStartYear);
+      const parsedFreshmanYear = Number(resultJson.freshman_academic_year);
+      const freshmanAcademicYear = Number.isInteger(parsedFreshmanYear)
+        ? parsedFreshmanYear
+        : manualFreshmanYear;
+      const initialParsed = parseSchoolRecordJson(resultJson, freshmanAcademicYear);
       const latestPeriod = getLatestSchoolRecordPeriod(initialParsed);
       const completedGrade = latestPeriod?.grade;
       const expectedPeriod = expectedCurrentPeriodFromRecord(latestPeriod);
@@ -858,11 +865,9 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       const expectedCurrentSemester = expectedPeriod?.semester ?? null;
       const studentName = typeof resultJson.student_name === "string" ? resultJson.student_name.trim() : "";
 
-      const resolvedGrade = isGraduatedGrade(expectedCurrentGrade ?? form.grade) ? 3 : Number(expectedCurrentGrade ?? form.grade) || 1;
-      const resolvedAcademicStartYear = new Date().getFullYear() - (resolvedGrade - 1);
       const targetMaxGrade = isGraduatedGrade(expectedCurrentGrade ?? form.grade) ? 3 : Number(expectedCurrentGrade ?? form.grade) || 2;
       const targetMaxSemester = isGraduatedGrade(expectedCurrentGrade ?? form.grade) ? null : Number(form.semester) || (expectedCurrentSemester ? Number(expectedCurrentSemester) : 2);
-      const parsed = parseSchoolRecordJson(resultJson, resolvedAcademicStartYear, {
+      const parsed = parseSchoolRecordJson(resultJson, freshmanAcademicYear, {
         grade: targetMaxGrade,
         semester: targetMaxSemester,
       });
@@ -876,18 +881,22 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
         }
       }
       if (studentName && !form.name.trim()) update("name", studentName);
+      if (freshmanAcademicYear && !form.freshmanAcademicYear) {
+        update("freshmanAcademicYear", String(freshmanAcademicYear));
+      }
       if (summary.subjects.length && !form.preferredSubjects.trim()) update("preferredSubjects", summary.subjects.join(", "));
       if (summary.currentActivities && !form.currentEngagement.trim()) update("currentEngagement", summary.currentActivities);
       const periodMessage = completedGrade ? ` ${completedGrade}학년까지 확정된 기록으로 확인했습니다.` : "";
       const gradeMessage = expectedCurrentGrade ? ` 현재 상태는 ${gradeLabel(expectedCurrentGrade)}${expectedCurrentSemester ? ` ${expectedCurrentSemester}학기` : ""} 후보로 자동 입력했습니다.` : "";
       const nameMessage = studentName && !form.name.trim() ? ` 이름은 ${studentName} 학생으로 자동 입력했습니다.` : "";
+      const policyMessage = freshmanAcademicYear ? ` 입학 연도는 ${freshmanAcademicYear}학년도로 확인했습니다.` : "";
       setOnboardingRecordParse(parsed);
       setRecordOnlyMode(Boolean(completedGrade && completedGrade >= 3));
       setOnboardingRecordAutoFields(true);
       setOnboardingRecordContext({ expectedGrade: expectedCurrentGrade, studentName });
       setOnboardingRecordMessage(completedGrade && completedGrade >= 3
         ? "3학년까지 확정된 졸업자 학생부로 확인했습니다. 계획은 만들지 않고, 분석·정리한 학생부 기록을 보여드립니다."
-        : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}`);
+        : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}${policyMessage}`);
     } catch (e) {
       if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : "학생부를 분석하지 못했습니다. 건너뛰고 시작해도 됩니다.");
@@ -953,7 +962,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     finally { setBusy(false); }
   }
 
-  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && !!form.targetCareer.trim();
+  const hasValidFreshmanYear = /^(19|20)\d{2}$/.test(form.freshmanAcademicYear);
+  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && !!form.targetCareer.trim() && hasValidFreshmanYear;
   const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution;
   const recordLocked = Boolean(onboardingRecordFile || onboardingRecordBusy);
   /**
@@ -963,6 +973,10 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
    */
   const recordStudentName = onboardingRecordContext.studentName?.trim() ?? "";
   const recordNameMismatch = Boolean(recordStudentName && form.name.trim() && recordStudentName !== form.name.trim());
+  const recordFreshmanYear = onboardingRecordParse?.freshmanAcademicYear ?? null;
+  const freshmanYearMismatch = Boolean(
+    recordFreshmanYear && form.freshmanAcademicYear && Number(form.freshmanAcademicYear) !== recordFreshmanYear
+  );
   const gapValues = splitList(form.gaps);
 
   /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
@@ -1322,6 +1336,40 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                   <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
                     학년과 학기는 업로드한 학생부에서 확인한 값을 사용합니다. 다르면 다음 확인 질문에서 바로잡습니다.
                   </p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-freshman-year">
+                  고등학교 입학 연도
+                </label>
+                <input
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
+                  id="ob-freshman-year"
+                  inputMode="numeric"
+                  max="2100"
+                  min="1990"
+                  onChange={(event) => update("freshmanAcademicYear", event.target.value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="예: 2025"
+                  type="text"
+                  value={form.freshmanAcademicYear}
+                />
+                <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
+                  예: 2025학년도 고1이었다면 2025. 생기부를 올리면 학적사항에서 읽은 값으로 자동 입력하며, 직접 수정할 수 있습니다.
+                </p>
+                {freshmanYearMismatch && (
+                  <div className="mt-2 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-[11px] text-amber-900 leading-relaxed">
+                      업로드한 생기부 학적사항은 <strong className="font-bold">{recordFreshmanYear}학년도 입학</strong>으로 읽혔습니다. 입력값과 다르면 어느 값이 맞는지 확인해주세요.
+                    </span>
+                    <button
+                      className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-800 text-[11px] font-bold hover:bg-amber-100 transition flex-none"
+                      onClick={() => update("freshmanAcademicYear", String(recordFreshmanYear))}
+                      type="button"
+                    >
+                      학생부 값 사용
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -2809,6 +2857,7 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
     name: workspace.profile.name,
     grade: String(workspace.profile.grade),
     semester: String(workspace.profile.semester),
+    freshmanAcademicYear: "",
     targetCareer: workspace.profile.targetCareer,
     targetMajors: workspace.profile.targetMajors.join(", "),
     interests: workspace.profile.interests.join(", "),
@@ -2836,6 +2885,7 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
       name: workspace.profile.name,
       grade: String(workspace.profile.grade),
       semester: workspace.profile.semester ? String(workspace.profile.semester) : "",
+      freshmanAcademicYear: "",
       targetCareer: workspace.profile.targetCareer,
       targetMajors: workspace.profile.targetMajors.join(", "),
       interests: workspace.profile.interests.join(", "),

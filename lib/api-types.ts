@@ -567,6 +567,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/education-policies/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve My Education Policy
+         * @description 생기부 학적사항 또는 온보딩에 확정된 입학 연도로 제도를 판정한다.
+         */
+        get: operations["resolve_my_education_policy_api_v1_education_policies_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnosis/pre-questions": {
         parameters: {
             query?: never;
@@ -2031,6 +2051,38 @@ export interface components {
             /** Rate */
             rate: number | null;
         };
+        /** AdmissionPolicyRuleRead */
+        AdmissionPolicyRuleRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Admission Year Start */
+            admission_year_start: number | null;
+            /** Admission Year End */
+            admission_year_end: number | null;
+            /** Category */
+            category: string;
+            /** Decision Scope */
+            decision_scope: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Action Required */
+            action_required: string | null;
+            /** Source Label */
+            source_label: string;
+            /** Source Url */
+            source_url: string;
+            /** Source Published On */
+            source_published_on: string | null;
+            /** Verified At */
+            verified_at: string | null;
+        };
         /** AdmissionProgramOutcomeRead */
         AdmissionProgramOutcomeRead: {
             /** Recruitment Period */
@@ -2914,6 +2966,55 @@ export interface components {
          * @enum {string}
          */
         DiagnosisStatus: "processing" | "done" | "failed";
+        /** EducationPolicyRead */
+        EducationPolicyRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Title */
+            title: string;
+            /** Freshman Year Start */
+            freshman_year_start: number;
+            /** Freshman Year End */
+            freshman_year_end: number | null;
+            /** Curriculum Name */
+            curriculum_name: string;
+            /** Rank Grade Scale */
+            rank_grade_scale: number | null;
+            /** Summary */
+            summary: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /** Source Label */
+            source_label: string;
+            /** Source Url */
+            source_url: string;
+            /** Source Published On */
+            source_published_on: string | null;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /**
+         * EducationPolicyResolutionRead
+         * @description 현재 사용자에게 실제로 적용할 수 있는 기준만 묶어 돌려준다.
+         */
+        EducationPolicyResolutionRead: {
+            /** Freshman Academic Year */
+            freshman_academic_year: number | null;
+            policy: components["schemas"]["EducationPolicyRead"] | null;
+            /** Admission Rules */
+            admission_rules: components["schemas"]["AdmissionPolicyRuleRead"][];
+            /** Needs Freshman Academic Year */
+            needs_freshman_academic_year: boolean;
+            /** Message */
+            message?: string | null;
+        };
         /** EvidenceInput */
         EvidenceInput: {
             /**
@@ -3445,6 +3546,8 @@ export interface components {
             grade: number;
             /** Semester */
             semester: number;
+            /** Freshman Academic Year */
+            freshman_academic_year?: number | null;
             career_goal: components["schemas"]["CareerGoal"];
             /** Target Department */
             target_department: string;
@@ -3470,6 +3573,8 @@ export interface components {
             grade?: number | null;
             /** Semester */
             semester?: number | null;
+            /** Freshman Academic Year */
+            freshman_academic_year?: number | null;
             career_goal?: components["schemas"]["CareerGoal"] | null;
             /** Target Department */
             target_department?: string | null;
@@ -5150,6 +5255,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_my_education_policy_api_v1_education_policies_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EducationPolicyResolutionRead"];
                 };
             };
         };

@@ -122,6 +122,23 @@ test("the admissions workspace uses the catalog instead of free-text target data
   assert.match(preparation, /AI가 핵심 활동 추리기/);
 });
 
+test("grades follow the student's verified education policy", async () => {
+  const [grades, types] = await Promise.all([
+    source("app/grades-view.tsx"),
+    source("lib/api-types.ts"),
+  ]);
+
+  // 입학 연도 기준을 서버에서 받아야 하며, 화면에 5등급제를 하드코딩하지 않는다.
+  assert.match(grades, /"\/education-policies\/me"/);
+  assert.match(grades, /EducationPolicyResolutionRead/);
+  assert.match(grades, /rankGradeScale/);
+  assert.match(grades, /rankOptions\.map/);
+  assert.match(grades, /입학 연도 확인 필요/);
+  assert.match(grades, /대입 지원 관련 기준/);
+  assert.match(grades, /decision_scope === "track_specific"/);
+  assert.match(types, /EducationPolicyResolutionRead/);
+});
+
 test("no server-side or Workers code is left in the frontend", async () => {
   const pkg = JSON.parse(await source("package.json"));
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };

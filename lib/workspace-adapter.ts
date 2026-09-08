@@ -635,6 +635,7 @@ function profileToBackend(profile: ProfileInput): Json {
     name: profile.name,
     grade: profile.grade,
     semester: profile.semester,
+    freshman_academic_year: profile.freshmanAcademicYear ?? null,
     career_goal: { goal: profile.targetCareer, note: profile.motivationTrigger || null },
     target_department: profile.targetMajors[0] ?? "",
     interest_keywords: profile.interests,
