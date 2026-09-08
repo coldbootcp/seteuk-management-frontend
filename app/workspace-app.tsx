@@ -955,6 +955,13 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && !!form.targetCareer.trim();
   const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution;
   const recordLocked = Boolean(onboardingRecordFile || onboardingRecordBusy);
+  /**
+   * 이름은 학생부를 올려도 잠그지 않는다. 파서가 읽은 이름이 틀리거나(붙어 나온 글자,
+   * 옛 이름) 학생이 다르게 쓰고 싶을 때 고칠 길이 아예 없었다. 대신 학생부와 다르면
+   * 그 사실을 그 자리에서 알려 준다 — 다른 학생의 자료를 올린 것일 수도 있어서다.
+   */
+  const recordStudentName = onboardingRecordContext.studentName?.trim() ?? "";
+  const recordNameMismatch = Boolean(recordStudentName && form.name.trim() && recordStudentName !== form.name.trim());
   const gapValues = splitList(form.gaps);
 
   /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
@@ -1252,13 +1259,28 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               <div>
                 <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-name">학생 이름</label>
                 <input
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition disabled:text-gray-400"
-                  disabled={recordLocked}
+                  className={`w-full px-3.5 py-2 rounded-xl border text-xs font-semibold focus:outline-none bg-gray-50/50 focus:bg-white transition ${
+                    recordNameMismatch ? "border-amber-400 focus:border-amber-500" : "border-gray-200 focus:border-brand-500"
+                  }`}
                   id="ob-name"
                   onChange={(e) => update("name", e.target.value)}
                   placeholder="예: 김세특"
                   value={form.name}
                 />
+                {recordNameMismatch && (
+                  <div className="mt-2 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-[11px] text-amber-900 leading-relaxed">
+                      업로드한 학생부의 이름은 <strong className="font-bold">{recordStudentName}</strong>입니다. 다른 학생의 자료라면 학생부를 다시 올려주세요.
+                    </span>
+                    <button
+                      className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-800 text-[11px] font-bold hover:bg-amber-100 transition flex-none"
+                      onClick={() => update("name", recordStudentName)}
+                      type="button"
+                    >
+                      학생부 이름으로 바꾸기
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1297,7 +1319,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                 </div>
                 {recordLocked && (
                   <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
-                    업로드한 학생부에서 확인한 이름과 시점을 사용합니다. 값이 다르면 다음 확인 질문에서 바로잡습니다.
+                    학년과 학기는 업로드한 학생부에서 확인한 값을 사용합니다. 다르면 다음 확인 질문에서 바로잡습니다.
                   </p>
                 )}
               </div>
