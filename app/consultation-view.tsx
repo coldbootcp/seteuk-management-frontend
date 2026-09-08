@@ -295,7 +295,24 @@ export function ConsultationGate({
           </section>
         )}
 
-        {diagnosis && (
+        {diagnosis && diagnosisIsEmpty && (
+          <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs">
+            <div className="flex items-start gap-3">
+              <span className="w-9 h-9 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center flex-none text-base">
+                ⌁
+              </span>
+              <div className="space-y-1.5">
+                <h2 className="text-base font-extrabold text-gray-950">아직 과거 기록 기반 진단은 만들지 않았어요</h2>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  학생부 PDF나 이전 활동·성적 기록이 없으면 강점·약점·반복 패턴을 사실처럼 판단할 수 없습니다.
+                  기록을 추가하면 그 내용을 근거로 정밀 진단을 만들 수 있어요. 지금은 입력해 주신 진로와 관심사를 바탕으로 상담을 이어가겠습니다.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {diagnosis && !diagnosisIsEmpty && (
           <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-5">
             <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
               <span className="text-base">🔬</span>
