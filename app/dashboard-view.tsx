@@ -163,7 +163,7 @@ export function DashboardView({
           </>
         ) : (
           <p className="text-xs text-gray-400">
-            아직 3개년 계획이 없습니다. 상담을 마치면 이번 학기 목표가 여기에 표시됩니다.
+            아직 확정된 계획이 없습니다. 상담을 마치면 이번 학기 목표가 여기에 표시됩니다.
           </p>
         )}
       </section>

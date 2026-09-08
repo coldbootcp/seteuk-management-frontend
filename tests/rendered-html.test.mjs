@@ -11,7 +11,7 @@ async function source(path) {
 // 이 리포는 화면만 담당한다. 예전에 여기 있던 영속화·정합·파서 검사는 서버 로직과
 // 함께 백엔드로 옮겨갔고, 그쪽 pytest 스위트가 이어받는다.
 
-test("the product starts with onboarding and exposes every primary surface", async () => {
+test("the product exposes every primary surface", async () => {
   const [app, page, layout] = await Promise.all([
     source("app/workspace-app.tsx"),
     source("app/page.tsx"),
@@ -20,29 +20,46 @@ test("the product starts with onboarding and exposes every primary surface", asy
 
   assert.match(page, /WorkspaceApp/);
   assert.match(layout, /세특연구소/);
-  assert.match(app, /NEW STUDENT ONBOARDING/);
-  assert.match(app, /고교 3개년 로드맵/);
-  assert.match(app, /3-YEAR SCHOOL RECORD/);
-  assert.match(app, /생기부 PDF 분석/);
-  assert.match(app, /SCHOOL RECORD REVIEW/);
-  assert.match(app, /활동 타임라인/);
-  assert.match(app, /SEMESTER FOCUS/);
+
+  // 탭 구성. 기본 탭은 이번 학기다.
+  assert.match(app, /useState<TabId>\("overview"\)/);
+  for (const tab of ["overview", "dashboard", "timetable", "activities", "grades", "portfolio", "chat", "profile"]) {
+    assert.match(app, new RegExp(`id: "${tab}"`), `${tab} 탭이 사라졌다`);
+  }
+
+  assert.match(app, /활동 & 세특|활동 기록/);
   assert.match(app, /상장/);
-  assert.match(app, /활동/);
   assert.match(app, /봉사/);
   assert.match(app, /독서/);
-  assert.match(app, /시험/);
-  assert.match(app, /subjectColor/);
-  assert.match(app, /useState<TabId>\("roadmap"\)/);
-  assert.match(app, /v\{APP_VERSION\} · 로드맵 v/);
-  assert.match(app, /MAJOR NARRATIVE DNA/);
   assert.match(app, /활동 주제 제안/);
-  assert.match(app, /학교 기회에 맞춰 선택/);
-  assert.match(app, /이 주제를 실제 활동에 연결/);
-  assert.match(app, /연결할 로드맵 활동 주제 \(선택 · 변경 가능\)/);
-  assert.match(app, /모든 활동 기록과 정합/);
-  assert.match(app, /현재 상태와 로드맵 기준/);
   assert.doesNotMatch(app, /Codex is working|react-loading-skeleton|codex-preview/);
+});
+
+test("the onboarding walks select → profile → AI questions and always offers a way out", async () => {
+  const [app, gate] = await Promise.all([
+    source("app/workspace-app.tsx"),
+    source("app/gate-frame.tsx"),
+  ]);
+
+  // 세 걸음이 모두 살아 있어야 한다.
+  assert.match(app, /type OnboardingStep = "select" \| "profile" \| "ai"/);
+  assert.match(app, /학생부 올리고 시작하기/);
+  assert.match(app, /기본 정보로 시작하기/);
+  assert.match(app, /AI 맞춤 확인 질문/);
+
+  // 온보딩과 관문은 사이드바가 없는 화면이다 — 나가는 길이 없으면 계정이 갇힌다.
+  assert.match(gate, /로그아웃/);
+  assert.match(app, /<Onboarding onComplete=\{checkGate\} onSignOut=\{signOut\} \/>/);
+  assert.match(app, /onSignOut=\{signOut\}/);
+});
+
+test("the consultation gate renders the diagnosis pre-questions' own options", async () => {
+  const gate = await source("app/consultation-view.tsx");
+
+  // 백엔드가 선택지를 주는데 화면이 빈 입력칸만 그리면 그 선택지는 버려진다.
+  assert.match(gate, /question\.options\.map/);
+  assert.match(gate, /question\.allow_custom/);
+  assert.match(gate, /건너뛰고 진단하기/);
 });
 
 test("the school record review stays client-side and states the real storage policy", async () => {
@@ -70,6 +87,16 @@ test("the school record review stays client-side and states the real storage pol
 
   // 파싱 자체는 백엔드가 한다 — TypeScript 파서가 되살아나면 안 된다.
   assert.doesNotMatch(parser, /export function parseSchoolRecordText/);
+});
+
+test("the deleted 3-year roadmap screen does not come back", async () => {
+  const app = await source("app/workspace-app.tsx");
+
+  assert.doesNotMatch(app, /function RoadmapView/);
+  assert.doesNotMatch(app, /id: "roadmap"/);
+  // 화면에 보이는 문구에는 로드맵이 남지 않는다(주석은 백엔드 동작 설명이라 허용).
+  const visible = app.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.doesNotMatch(visible, /로드맵/);
 });
 
 test("no server-side or Workers code is left in the frontend", async () => {

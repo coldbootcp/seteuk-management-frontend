@@ -6,6 +6,7 @@ import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/
 import { SignIn } from "./sign-in";
 import { LandingView } from "./landing-view";
 import { ConsultationGate } from "./consultation-view";
+import { GateFrame } from "./gate-frame";
 import { ChatView } from "./chat-view";
 import { TimetableView } from "./timetable-view";
 import { GradesView } from "./grades-view";
@@ -46,6 +47,12 @@ type ProfileForm = {
   outputPreference: string; collaborationStyle: string; roadmapDesignNotes: string;
 };
 
+
+/**
+ * 온보딩 화면의 세 걸음. 예전에는 1/2/3 숫자였는데, 첫 화면(진단 방식 선택)이
+ * 생기면서 숫자와 "Step N" 표기가 어긋나기 시작해 이름으로 바꿨다.
+ */
+type OnboardingStep = "select" | "profile" | "ai";
 
 type ActivityDraft = {
   title: string;
@@ -127,6 +134,24 @@ const EMPTY_PROFILE: ProfileForm = {
   collaborationStyle: "",
   roadmapDesignNotes: "",
 };
+
+/**
+ * 온보딩에서 학생이 직접 고르는 고민. 백엔드의 `self_assessed_weaknesses`로 그대로
+ * 저장되므로 장식이 아니다 — 진단과 상담 프롬프트가 이 값을 읽는다.
+ */
+const ONBOARDING_CONCERNS = [
+  { title: "세특의 학술적 깊이", desc: "교과서 개념 요약을 넘어서는 심화 탐구가 부족합니다" },
+  { title: "활동 사이의 연계성", desc: "과목·동아리 활동이 하나의 서사로 이어지지 않습니다" },
+  { title: "성적과 세특의 균형", desc: "내신 관리와 탐구 보고서 작성 시간이 서로 부딪힙니다" },
+  { title: "차별화된 주제 찾기", desc: "같은 학과를 지망하는 학생들과 겹치지 않는 주제가 필요합니다" },
+];
+
+/** AI 확인 질문 카드의 색. 질문 순서대로 돌려 쓴다(목업의 파랑·보라·초록). */
+const AI_QUESTION_TONES = [
+  { chip: "bg-blue-50 text-brand-600", card: "border-brand-500 bg-blue-50/50 font-bold text-brand-800", dot: "bg-brand-500", badge: "bg-brand-100 text-brand-800" },
+  { chip: "bg-purple-50 text-purple-700", card: "border-purple-500 bg-purple-50/50 font-bold text-purple-900", dot: "bg-purple-600", badge: "bg-purple-100 text-purple-800" },
+  { chip: "bg-emerald-50 text-emerald-700", card: "border-emerald-500 bg-emerald-50/50 font-bold text-emerald-900", dot: "bg-emerald-600", badge: "bg-emerald-100 text-emerald-800" },
+];
 
 const APP_VERSION = "0.7.0";
 const AI_JUDGEMENT_OPTION = "잘 모르겠음 — AI 판단에 맡길게요";
@@ -537,9 +562,10 @@ function StatusBadge({ status }: { status: RoadmapNode["status"] }) {
 /* ──────────────────────────────────────────────
    Onboarding
    ────────────────────────────────────────────── */
-function Onboarding({ onComplete }: { onComplete: () => void }) {
+function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignOut: () => void }) {
   const [form, setForm] = useState<ProfileForm>(EMPTY_PROFILE);
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<OnboardingStep>("select");
+  const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [onboardingRecordFile, setOnboardingRecordFile] = useState("");
@@ -705,7 +731,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
       setClarificationSummary("졸업자 학생부로 확인되어 계획은 만들지 않고, 분석·정리한 학생부 기록만 보여드립니다.");
       setClarificationBlocked(true);
       setClarificationComplete(false);
-      setStep(3);
+      setStep("ai");
       setClarificationBusy(false);
       return;
     }
@@ -759,7 +785,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
         setClarificationBlocked(true);
         setClarificationComplete(false);
         setClarificationSummary(result.summary || "업로드한 학생부가 졸업자 학생부로 확인되어 진행할 수 없습니다.");
-        setStep(3);
+        setStep("ai");
         return;
       }
       const questions = Array.isArray(result.questions) ? result.questions : fallbackQuestions;
@@ -768,14 +794,14 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
       setClarificationSummary(result.draftChangeSummary
         ? `${result.summary || ""} ${result.draftChangeSummary}`.trim()
         : result.summary || "");
-      setStep(3);
+      setStep("ai");
     } catch {
       setClarificationQuestions(fallbackQuestions);
       setClarificationComplete(false);
       setClarificationSummary(onboardingRecordParse
         ? "학생부의 기존 기록과 Step1·2 입력을 기준으로 확인 질문을 만들었습니다."
         : "Step1·2 입력을 기준으로 확인 질문을 만들었습니다.");
-      setStep(3);
+      setStep("ai");
     } finally {
       setClarificationBusy(false);
     }
@@ -927,446 +953,806 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
   }
 
   const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && !!form.targetCareer.trim();
+  const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution;
+  const recordLocked = Boolean(onboardingRecordFile || onboardingRecordBusy);
+  const gapValues = splitList(form.gaps);
 
-  /* ── Form Screen ── */
+  /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
+  function startWithRecord(file: File | undefined) {
+    if (!file) return;
+    setStep("profile");
+    void analyzeOnboardingRecord(file);
+  }
+
+  function toggleGap(value: string) {
+    setForm((cur) => {
+      const values = splitList(cur.gaps);
+      const next = values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+      return { ...cur, gaps: next.join(", ") };
+    });
+  }
+
+  /** 진행 표시. "지금 어느 걸음인가"만 말하고 남은 걸음 수를 지어내지 않는다. */
+  function stepper(current: "profile" | "ai") {
+    return (
+      <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            className="text-xs text-gray-500 hover:text-gray-900 font-bold flex items-center gap-1"
+            onClick={() => setStep(current === "ai" ? "profile" : "select")}
+            type="button"
+          >
+            <span>←</span> {current === "ai" ? "1단계 수정" : "처음으로"}
+          </button>
+          <span className="text-gray-300">|</span>
+          <span
+            className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+              current === "ai" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-brand-600"
+            }`}
+          >
+            {current === "ai" ? "Step 2 / 2 · AI 맞춤 확인 질문" : "Step 1 / 2 · 기본 정보와 목표"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-gray-400 font-semibold">
+          {current === "ai" ? (
+            <>
+              <span className="text-emerald-600 font-bold">✓ 1. 기본 프로필</span>
+              <span>➔</span>
+              <span className="w-2 h-2 rounded-full bg-purple-600" />
+              <span className="text-purple-700 font-bold">2. AI 맞춤 질문</span>
+            </>
+          ) : (
+            <>
+              <span className="w-2 h-2 rounded-full bg-brand-500" />
+              <span className="text-brand-600 font-bold">1. 기본 프로필</span>
+              <span>➔</span>
+              <span>2. AI 맞춤 질문</span>
+            </>
+          )}
+          <span>➔</span>
+          <span>3. 정밀 진단</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="onboarding-page">
-      <div className="onboarding-layout">
-        {/* Left panel */}
-        <aside className="onboarding-panel">
-          <div className="ob-brand">
-            <img alt="세특연구소 로고" src="/logo.png?v=2" style={{ width: 32, height: 32, objectFit: 'contain' }} />
-            <div>
-              <strong>세특연구소 <span style={{ color: 'var(--blue-500)', fontWeight: 800 }}>Pro</span></strong>
-              <small>Personalized School Coach</small>
-            </div>
-          </div>
-          <div className="ob-tagline">
-            <h1>지금의 나에서<br />시작하는<br />3개년</h1>
-            <p>학생부 기록과 관심분야를 바탕으로 고교 3개년 전공 서사를 설계합니다.</p>
-          </div>
-          <div className="ob-features">
-            <strong>세 가지 원칙</strong>
-            <div className="ob-feature">
-              <span className="ob-feature-icon">1</span>
-              <div className="ob-feature-text">
-                <strong>학생부가 있으면 먼저 봅니다</strong>
-                <small>이미 쌓인 기록이 계획의 출발점입니다</small>
-              </div>
-            </div>
-            <div className="ob-feature">
-              <span className="ob-feature-icon">2</span>
-              <div className="ob-feature-text">
-                <strong>관심분야를 구체화합니다</strong>
-                <small>막연한 분야를 탐구 질문으로 좁힙니다</small>
-              </div>
-            </div>
-            <div className="ob-feature">
-              <span className="ob-feature-icon">3</span>
-              <div className="ob-feature-text">
-                <strong>실행 가능한 활동으로 바꿉니다</strong>
-                <small>과목·대회·보고서·독서까지 이어갑니다</small>
-              </div>
-            </div>
-          </div>
-          <div className="ob-progress">
-            <span className={`ob-step-dot ${step >= 1 ? "is-active" : ""}`}>1</span>
-            <span className={`ob-step-connector ${step >= 2 ? "is-done" : ""}`} />
-            <span className={`ob-step-dot ${step >= 2 ? "is-active" : ""}`}>2</span>
-            <span className={`ob-step-connector ${step >= 3 ? "is-done" : ""}`} />
-            <span className={`ob-step-dot ${step >= 3 ? "is-active" : ""}`}>3</span>
-          </div>
-        </aside>
+    <GateFrame badge={step === "select" ? "신규 온보딩" : step === "profile" ? "Step 1 / 2" : "Step 2 / 2"} onSignOut={onSignOut}>
+      {/* 파일 선택기는 세 화면이 함께 쓴다 — 어느 걸음에서도 학생부를 올릴 수 있다. */}
+      <input
+        accept="application/pdf,.pdf"
+        hidden
+        onChange={(event) => startWithRecord(event.target.files?.[0])}
+        ref={onboardingRecordRef}
+        type="file"
+      />
 
-        {/* Right — form */}
-        <main className="ob-form-panel">
-          <div className="ob-form-header">
-            <span className="kicker">NEW STUDENT ONBOARDING · Step {step} / 3</span>
-            <h2>{step === 1 ? "학생부와 관심분야" : step === 2 ? "탐구 설계와 실행 전략" : "진단 상담 전 확인"}</h2>
-            <p>
-              {step === 1
-                ? "학생부 PDF가 있으면 먼저 올려주세요. 없거나 지금 올리기 싫다면 건너뛰어도 됩니다."
-                : step === 2
-                  ? "성격 검사가 아니라, 관심분야를 어떤 탐구와 활동으로 증명할지 정합니다."
-                  : "학생부와 입력값을 바탕으로 탐구 방향을 한 번 더 맞춥니다."}
+      {error && <div className="banner banner-error mb-5">{error}</div>}
+
+      {/* ───────── 진단 방식 선택 ───────── */}
+      {step === "select" && (
+        <div className="w-full space-y-10">
+          <div className="text-center max-w-2xl mx-auto space-y-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-brand-600 text-xs font-bold tracking-wide">
+              <span className="w-2 h-2 rounded-full bg-brand-500" />
+              세특연구소 AI 정밀 학업 진단 · 시작하기
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-950 tracking-tight leading-tight">
+              지금의 나에서 시작하는
+              <br />
+              <span className="text-brand-500">맞춤 탐구 설계</span>를 먼저 진행해 주세요.
+            </h1>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              세특연구소는 단순한 주제 추천에 그치지 않습니다.
+              <br className="hidden sm:inline" />
+              지금까지의 기록과 관심분야를 읽어 <strong>이번 학기의 목표와 탐구 주제</strong>를 함께 정합니다.
             </p>
           </div>
 
-          {error && <div className="banner banner-error onboarding-error-banner">{error}</div>}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+            {/* 경로 1 — 학생부 업로드 */}
+            <div className="bg-white rounded-2xl border-2 border-brand-500/80 p-7 shadow-lg flex flex-col justify-between relative overflow-hidden">
+              <span className="absolute top-0 right-0 bg-brand-500 text-white text-[11px] font-extrabold px-3 py-1 rounded-bl-xl">
+                추천 · 기록부터 읽습니다
+              </span>
 
-          {step === 1 && (
-            <div className="form-steps">
-              <div className="ob-section">
-                <div className="ob-section-title">
-                  <small>학생부 선택 업로드</small>
-                  <strong>이미 쌓인 기록이 있다면 먼저 반영하기</strong>
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <span className="w-12 h-12 rounded-xl bg-blue-50 text-brand-600 flex items-center justify-center text-xl flex-none">📄</span>
+                  <span className="block">
+                    <span className="block text-lg font-bold text-gray-900">학교생활기록부(PDF)로 시작</span>
+                    <span className="block text-xs text-gray-500">정부24 · 나이스에서 내려받은 생기부 파일</span>
+                  </span>
                 </div>
-                <div className={`onboarding-record-card${onboardingRecordFile ? " is-connected" : ""}`}>
-                  <div className="record-import-info">
-                    <strong>{onboardingRecordBusy ? "학생부 분석 중…" : onboardingRecordFile ? "학생부 분석 완료" : "학생부 PDF가 있나요?"}</strong>
-                    <small>
-                      {onboardingRecordBusy
-                        ? `${onboardingRecordStage} · 약 1~2분 소요됩니다. 기다리는 동안 아래 기본 정보와 관심분야를 먼저 입력해 주세요.`
-                        : onboardingRecordFile || "올리면 이름과 마지막 확정 학년을 읽어 기본 정보를 자동 입력합니다. 업로드한 원본은 계정에 보관됩니다."}
-                    </small>
-                  </div>
-                  <input
-                    accept="application/pdf,.pdf"
-                    hidden
-                    onChange={(e) => analyzeOnboardingRecord(e.target.files?.[0])}
-                    ref={onboardingRecordRef}
-                    type="file"
-                  />
-                  <div className="onboarding-record-actions">
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      disabled={onboardingRecordBusy}
-                      onClick={() => onboardingRecordRef.current?.click()}
-                      type="button"
-                    >
-                      {onboardingRecordBusy ? "분석 중…" : onboardingRecordFile ? "다른 PDF" : "PDF 올리기"}
-                    </button>
-                    {onboardingRecordBusy && (
-                      <button
-                        aria-label="학생부 분석 취소"
-                        className="record-cancel-button"
-                        onClick={cancelOnboardingRecordAnalysis}
-                        title="분석 취소"
-                        type="button"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {onboardingRecordMessage && <div className="banner banner-success">{onboardingRecordMessage}</div>}
-                <p className="onboarding-record-note">학생부를 넣으면 이름과 현재 학년 후보를 자동 입력합니다. 재학생 학생부는 보통 1년 단위 확정본이라 학기까지는 확정하지 않습니다. 예를 들어 1학년 기록까지 있으면 현재 학년은 2학년 후보로 입력하고, 1학기인지 2학기인지는 직접 선택합니다.</p>
-              </div>
 
-              {/* Section 1 */}
-              <div className="ob-section">
-                <div className="ob-section-title">
-                  <small>기본 정보</small>
-                  <strong>학생과 현재 시점</strong>
+                <div
+                  className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition ${
+                    dragOver ? "border-brand-500 bg-blue-50/50" : "border-gray-200 hover:border-brand-400 bg-gray-50/60"
+                  }`}
+                  onClick={() => onboardingRecordRef.current?.click()}
+                  onDragLeave={() => setDragOver(false)}
+                  onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setDragOver(false);
+                    startWithRecord(event.dataTransfer.files?.[0]);
+                  }}
+                >
+                  <span className="text-2xl block mb-1">📤</span>
+                  <span className="text-xs font-bold text-gray-800 block">PDF를 끌어다 놓거나 눌러서 선택</span>
+                  <span className="text-[11px] text-gray-400 mt-0.5 block">{SCHOOL_RECORD_MAX_FILE_SIZE_LABEL} 이하 · 분석에 1~2분</span>
                 </div>
-                <div className="form-grid-3">
-                  <div className="form-field">
-                    <label htmlFor="ob-name">이름</label>
-                    <input id="ob-name" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="예: 김세특" disabled={Boolean(onboardingRecordFile || onboardingRecordBusy)} />
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="ob-grade">학년</label>
-                    <select id="ob-grade" value={form.grade} onChange={(e) => updateGrade(e.target.value)} disabled={Boolean(onboardingRecordFile || onboardingRecordBusy)}>
-                      <option value="">선택</option>
-                      <option value="1">1학년</option>
-                      <option value="2">2학년</option>
-                      <option value="3">3학년</option>
-                      <option value="graduated">졸업</option>
-                    </select>
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="ob-semester">학기</label>
-                    <select id="ob-semester" value={form.semester} onChange={(e) => update("semester", e.target.value)} disabled={Boolean(onboardingRecordFile || onboardingRecordBusy) || isGraduatedGrade(form.grade)}>
-                      <option value="">{isGraduatedGrade(form.grade) ? "해당 없음" : "선택"}</option>
-                      <option value="1">1학기</option>
-                      <option value="2">2학기</option>
-                    </select>
-                  </div>
-                </div>
-                {onboardingRecordFile && <p className="onboarding-record-note">업로드한 학생부에서 확인한 이름과 현재 시점을 사용합니다. 직접 수정할 수 없습니다.</p>}
-              </div>
 
-              {/* Section 2 */}
-              <div className="ob-section">
-                <div className="ob-section-title">
-                  <small>진로와 관심</small>
-                  <strong>넓은 분야에서 세부 관심으로 좁히기</strong>
-                </div>
-                <div className="form-grid-2">
-                  <div className="form-field form-span-2">
-                    <label htmlFor="ob-career">현재 가장 끌리는 분야 또는 진로</label>
-                    <input id="ob-career" value={form.targetCareer} onChange={(e) => update("targetCareer", e.target.value)} placeholder="예: 인공지능 의료, 뇌과학, 교육격차, 로봇공학" />
+                <div className="space-y-2 text-xs text-gray-600 pt-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-500 font-bold">✓</span> 과목·세특·수상·봉사·독서를 항목으로 정리
                   </div>
-                  {(suggestBusy || suggestions) && (
-                    <div className="ai-suggestion-panel form-span-2">
-                      <div className="ai-suggestion-head">
-                        <div>
-                          <strong>AI가 연결 후보를 찾고 있어요</strong>
-                          <small>마음에 드는 후보를 누르면 아래 입력칸에 추가됩니다.</small>
-                        </div>
-                        <span>{suggestBusy ? "생성 중…" : suggestions?.provider === "deepseek" ? "AI 추천" : "기본 추천"}</span>
-                      </div>
-                      <div className="ai-suggestion-group">
-                        <small>학과 후보</small>
-                        <div className="suggestion-chip-row">
-                          {suggestBusy && !suggestions
-                            ? Array.from({ length: 5 }).map((_, index) => <i className="suggestion-skeleton" key={index} />)
-                            : suggestions?.majors.map((major) => (
-                              <button key={major} onClick={() => addListValue("targetMajors", major)} type="button">{major}</button>
-                            ))}
-                        </div>
-                      </div>
-                      <div className="ai-suggestion-group">
-                        <small>탐구 큰 축 후보</small>
-                        <div className="suggestion-chip-row">
-                          {suggestBusy && !suggestions
-                            ? Array.from({ length: 6 }).map((_, index) => <i className="suggestion-skeleton is-wide" key={index} />)
-                            : suggestions?.keywords.map((keyword) => (
-                              <button key={keyword} onClick={() => addListValue("interests", keyword)} type="button">{keyword}</button>
-                            ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  <div className="form-field">
-                    <label htmlFor="ob-majors">연결 가능한 학과 후보</label>
-                    <input id="ob-majors" value={form.targetMajors} onChange={(e) => update("targetMajors", e.target.value)} placeholder="예: 컴퓨터공학, 의공학, 심리학, 교육학" />
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-500 font-bold">✓</span> 이름과 현재 학년을 읽어 기본 정보를 자동 입력
                   </div>
-                  <div className="form-field">
-                    <label htmlFor="ob-interests">앞으로 다룰 큰 관심 축</label>
-                    <textarea id="ob-interests" value={form.interests} onChange={(e) => update("interests", e.target.value)} placeholder="AI 추천 후보를 눌러 추가하거나, 6학기 동안 다뤄보고 싶은 큰 방향을 적어주세요." />
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-500 font-bold">✓</span> 정리한 기록이 그대로 진단과 상담의 근거가 됨
                   </div>
                 </div>
               </div>
 
-              <div className="ob-section">
-                <div className="ob-section-title">
-                  <small>진로 구체도에 따른 추가 질문</small>
-                  <strong>정해진 정도에 따라 필요한 정보만 더 받기</strong>
+              <div className="pt-6 mt-4 border-t border-gray-100">
+                <button
+                  className="w-full py-3 rounded-xl bg-brand-500 text-white font-bold text-sm hover:bg-brand-600 transition shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+                  onClick={() => onboardingRecordRef.current?.click()}
+                  type="button"
+                >
+                  <span>학생부 올리고 시작하기</span>
+                  <span>➔</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 경로 2 — 기록 없이 시작 */}
+            <div className="bg-white rounded-2xl border border-gray-200/90 p-7 shadow-xs flex flex-col justify-between">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <span className="w-12 h-12 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center text-xl flex-none">🌱</span>
+                  <span className="block">
+                    <span className="block text-lg font-bold text-gray-900">학생부 없이 새로 시작</span>
+                    <span className="block text-xs text-gray-500">1학년이거나, 지금은 올리고 싶지 않은 경우</span>
+                  </span>
                 </div>
-                <div className="form-grid-1">
-                  <div className="form-field">
-                    <label>현재 진로가 어느 정도 정해졌나요?</label>
-                    <div className="clarity-choice-row is-two">
-                      {[
-                        { value: "넓은 분야만 정한 단계", label: "넓은 분야만 있음", desc: "예: 의료, AI, 교육. 추가 질문 없이 상담에서 좁혀갑니다." },
-                        { value: "구체적인 학과나 직무까지 정한 단계", label: "구체 목표가 있음", desc: "학과·직무·주제가 꽤 명확" },
-                      ].map((item) => (
-                        <button
-                          className={`clarity-choice${form.careerResolution === item.value ? " is-active" : ""}`}
-                          key={item.value}
-                          onClick={() => updateCareerResolution(item.value)}
-                          type="button"
-                        >
-                          <strong>{item.label}</strong>
-                          <small>{item.desc}</small>
-                        </button>
+
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  과거 기록이 없어도 괜찮습니다. 관심분야와 목표를 답해주시면 AI가 그 자리에서 확인 질문을 만들고,
+                  이어지는 상담에서 이번 학기 목표와 탐구 주제를 함께 정합니다. 학생부는 나중에 [활동 &amp; 세특] 화면에서
+                  언제든 올릴 수 있습니다.
+                </p>
+
+                <div className="space-y-2.5 p-4 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                  <div>
+                    <span className="text-[11px] font-bold text-gray-500 block mb-1.5">이런 걸 물어봅니다</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["이름", "현재 학년·학기", "끌리는 진로 분야", "연결하고 싶은 학과", "탐구 관심 축", "지켜야 할 제약"].map((item) => (
+                        <span className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-white border border-gray-200 text-gray-700" key={item}>
+                          {item}
+                        </span>
                       ))}
                     </div>
                   </div>
-
-                  {form.careerResolution === "구체적인 학과나 직무까지 정한 단계" && (
-                    <div className="branch-question-card">
-                      <div className="branch-question-head">
-                        <strong>관련 배경지식에 맞춰 탐구 난이도를 조절합니다</strong>
-                        <small>배경지식이 있더라도 기초부터 차근차근 쌓고 싶다면 ‘하’를 선택하세요.</small>
-                      </div>
-                      <div className="form-grid-1">
-                        <div className="form-field">
-                          <label>관련 지식이 어느 정도 있나요?</label>
-                          <div className="knowledge-choice-row">
-                            {[
-                              { value: "하", label: "하", desc: "기초 개념부터 차근히 쌓고 싶음" },
-                              { value: "중", label: "중", desc: "기본 개념은 알고, 적용 활동을 해보고 싶음" },
-                              { value: "상", label: "상", desc: "심화 탐구·차별화 활동부터 설계 가능" },
-                            ].map((item) => (
-                              <button
-                                className={`knowledge-choice${form.knowledgeLevel === item.value ? " is-active" : ""}`}
-                                key={item.value}
-                                onClick={() => update("knowledgeLevel", item.value)}
-                                type="button"
-                              >
-                                <strong>{item.label}</strong>
-                                <small>{item.desc}</small>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="form-field">
-                          <label>특히 궁금한 세부 키워드나 문제</label>
-                          <textarea
-                            value={form.concreteResearchQuestion}
-                            onChange={(e) => update("concreteResearchQuestion", e.target.value)}
-                            placeholder={
-                              form.knowledgeLevel === "상"
-                                ? "예: 의료 AI 진단 모델의 오류 원인을 데이터 편향 관점에서 분석하고 싶음"
-                                : form.knowledgeLevel === "중"
-                                  ? "예: AI 진단 정확도, 의료 데이터, 모델 비교처럼 관심 키워드를 적어주세요"
-                                  : "아직 안 적어도 됩니다. 간략히 키워드 1~2개만 적어도 괜찮아요."
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              </div>
 
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="form-steps">
-              {/* 현실 제약만 확인 */}
-              <div className="ob-section">
-                <div className="ob-section-title">
-                  <small>현실 조건</small>
-                  <strong>계획을 짤 때 반드시 피해야 할 제약</strong>
-                </div>
-                <div className="form-grid-1">
-                  <div className="form-field form-span-2">
-                    <label htmlFor="ob-constraints">시간·환경 등 명확한 제약조건</label>
-                    <input id="ob-constraints" value={form.constraints} onChange={(e) => update("constraints", e.target.value)} placeholder="예: 코딩 불가, 실험실 사용 어려움, 교외대회 준비 시간 없음 / 없으면 비워두기" />
+                <div className="space-y-2 text-xs text-gray-600 pt-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-500 font-bold">✓</span> 진로 분야를 적으면 AI가 학과·탐구 축 후보를 제안
                   </div>
-                  <p className="onboarding-record-note">
-                    연결 과목, 강점, 보완점, 활용 자원은 학생부와 이후 활동 입력을 보고 시스템이 판단합니다.
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-500 font-bold">✓</span> 답한 내용만으로도 진단과 상담이 진행됨
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {step === 3 && (
-            <div className="form-steps">
-              <div className="ob-section">
-                <div className="ob-section-title">
-                  <small>AI 확인 질문</small>
-                  <strong>상담을 시작하기 전에 방향 맞추기</strong>
-                </div>
-                <div className="form-grid-1">
-                  <p className="onboarding-record-note">
-                    AI가 현재 입력에서 방향이 달라질 수 있는 질문만 골라 확인합니다. 답변 뒤에도 필요한 질문이 있으면 계속 이어갑니다.
-                  </p>
-                  {clarificationSummary && (
-                    <div className={`banner ${clarificationBlocked ? "banner-warning" : "banner-info"}`}>
-                      {clarificationSummary}
-                    </div>
-                  )}
-                  {recordOnlyMode && onboardingRecordParse && (
-                    <div className="record-only-summary">
-                      <div className="record-only-summary-head">
-                        <div>
-                          <small>학생부 정리 결과</small>
-                          <strong>{onboardingRecordParse.fileName}</strong>
-                        </div>
-                        <span>{onboardingRecordParse.entries.length}개 활동 · {onboardingRecordParse.courses.length}개 과목</span>
-                      </div>
-                      <div className="record-only-list">
-                        {onboardingRecordParse.entries.slice(0, 12).map((entry) => (
-                          <div className="record-only-item" key={entry.id}>
-                            <span>{entry.grade}학년 {entry.semester ? `${entry.semester}학기` : ""}</span>
-                            <div><strong>{entry.title}</strong><small>{entry.subject || entry.category} · {entry.summary}</small></div>
-                          </div>
-                        ))}
-                        {!onboardingRecordParse.entries.length && <p>구조화할 활동 후보를 찾지 못했습니다. PDF 원문을 다시 확인해주세요.</p>}
-                      </div>
-                      {onboardingRecordParse.entries.length > 12 && <small className="record-only-more">활동 후보 {onboardingRecordParse.entries.length - 12}개가 더 있습니다.</small>}
-                    </div>
-                  )}
-                  {clarificationQuestions.map((question) => {
-                    const selected = clarificationAnswers.find((answer) => answer.id === question.id)?.answer ?? readClarificationAnswer(form.roadmapDesignNotes, question.id);
-                    const selectedParts = clarificationAnswerParts(selected);
-                    const otherSelected = selectedParts.some((part) => part.startsWith("기타"));
-                    const otherValue = selectedParts.find((part) => part.startsWith("기타:"))?.replace(/^기타:\s*/, "") ?? "";
-                    return (
-                      <div className="branch-question-card" key={question.id}>
-                        <div className="branch-question-head">
-                          <strong>{question.question}</strong>
-                          <small>{question.label}</small>
-                        </div>
-                        {question.why && <p className="onboarding-record-note">이 답이 필요한 이유: {question.why}</p>}
-                        <div className="clarity-choice-row">
-                          {clarificationOptions(question).map((option) => (
-                            <button
-                              className={`clarity-choice${(option === OTHER_CLARIFICATION_OPTION ? otherSelected : selectedParts.includes(option)) ? " is-active" : ""}`}
-                              key={option}
-                              onClick={() => chooseClarificationOption(question, option)}
-                              type="button"
-                            >
-                              <strong>{option}</strong>
-                            </button>
-                          ))}
-                        </div>
-                        {allowsMultipleClarificationAnswers(question) && <small className="onboarding-record-note">복수 선택 가능</small>}
-                        {otherSelected && (
-                          <div className="form-field" style={{ marginTop: 10 }}>
-                            <label htmlFor={`other-${question.id}`}>직접 입력</label>
-                            <input id={`other-${question.id}`} value={otherValue} onChange={(event) => updateOtherClarificationAnswer(question, event.target.value)} placeholder="선택지에 없는 내용을 적어주세요" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {!clarificationBlocked && clarificationComplete && (
-                    <div className="form-field">
-                      <label htmlFor="ob-roadmap-notes">선택지에 없던 추가 조건 (선택)</label>
-                      <small className="onboarding-record-note">위에서 선택한 답변은 자동으로 반영됩니다. 여기에는 선택지에 없던 학교 상황이나 꼭 지켜야 할 방향만 적어주세요.</small>
-                      <textarea
-                        id="ob-roadmap-notes"
-                        value={form.roadmapDesignNotes}
-                        onChange={(e) => update("roadmapDesignNotes", e.target.value)}
-                        placeholder="예: 2학기에는 과학 과목에서만 새 주제를 시도할 수 있음"
-                      />
-                    </div>
-                  )}
-                </div>
+              <div className="pt-6 mt-4 border-t border-gray-100">
+                <button
+                  className="w-full py-3 rounded-xl bg-gray-900 text-white font-bold text-sm hover:bg-gray-800 transition flex items-center justify-center gap-2"
+                  onClick={() => setStep("profile")}
+                  type="button"
+                >
+                  <span>기본 정보로 시작하기</span>
+                  <span>➔</span>
+                </button>
               </div>
             </div>
-          )}
+          </div>
 
-          <div className="ob-submit-row">
-            {step === 1 ? (
+          <div className="flex items-center justify-center gap-2 text-xs text-gray-500 bg-white/80 border border-gray-200/70 px-4 py-2 rounded-full mx-auto w-fit text-center">
+            <span>🔒</span>
+            <span>업로드한 학생부는 본인 계정에만 보관되며, 다른 학생의 화면에서는 조회되지 않습니다.</span>
+          </div>
+        </div>
+      )}
+
+      {/* ───────── Step 1 — 기본 정보와 목표 ───────── */}
+      {step === "profile" && (
+        <div className="w-full max-w-3xl mx-auto space-y-6">
+          {stepper("profile")}
+
+          {/* 학생부 상태 — 분석은 이 화면을 막지 않고 뒤에서 돈다 */}
+          <div
+            className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+              onboardingRecordBusy
+                ? "bg-blue-50/60 border-brand-200"
+                : onboardingRecordFile
+                  ? "bg-emerald-50/50 border-emerald-200"
+                  : "bg-white border-gray-200/80"
+            }`}
+          >
+            <div className="flex items-start gap-3 min-w-0">
+              <span
+                className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-none ${
+                  onboardingRecordBusy ? "bg-brand-500 text-white animate-pulse" : onboardingRecordFile ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {onboardingRecordBusy ? "⚡" : onboardingRecordFile ? "✓" : "📄"}
+              </span>
+              <div className="min-w-0">
+                <strong className="block text-xs font-extrabold text-gray-900">
+                  {onboardingRecordBusy ? "학생부 분석 중" : onboardingRecordFile ? "학생부 분석 완료" : "학생부 없이 진행 중"}
+                </strong>
+                <span className="block text-[11px] text-gray-500 leading-relaxed mt-0.5">
+                  {onboardingRecordBusy
+                    ? "보통 1~2분 걸립니다. 기다리는 동안 아래 정보를 먼저 채워 주세요."
+                    : onboardingRecordFile || "지금 올려도 되고, 나중에 [활동 & 세특] 화면에서 올려도 됩니다."}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-none">
               <button
-                className="btn btn-primary"
-                disabled={!form.name || !form.grade || (!isGraduatedGrade(form.grade) && !form.semester) || !form.targetCareer || !form.careerResolution}
-                onClick={() => setStep(2)}
+                className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-[11px] font-bold transition"
+                disabled={onboardingRecordBusy}
+                onClick={() => onboardingRecordRef.current?.click()}
                 type="button"
               >
-                다음: 탐구 설계하기 →
+                {onboardingRecordBusy ? "분석 중…" : onboardingRecordFile ? "다른 PDF" : "PDF 올리기"}
               </button>
-            ) : step === 2 ? (
-              <>
+              {onboardingRecordBusy && (
                 <button
-                  className="btn btn-secondary"
-                  onClick={() => setStep(1)}
+                  aria-label="학생부 분석 취소"
+                  className="w-7 h-7 rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-gray-700 text-xs font-bold transition"
+                  onClick={cancelOnboardingRecordAnalysis}
+                  title="분석 취소"
                   type="button"
                 >
-                  ← 이전으로
+                  ×
                 </button>
-                <button
-                  className="btn btn-primary"
-                  disabled={clarificationBusy || onboardingRecordBusy}
-                  onClick={startClarification}
-                  type="button"
-                >
-                  {onboardingRecordBusy ? "학생부 분석이 끝나면 확인 가능" : clarificationBusy ? "확인 질문 만드는 중…" : "다음: 설계 방향 확인 →"}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setStep(2)}
-                  type="button"
-                >
-                  ← 이전으로
-                </button>
-                <button
-                  className="btn btn-primary"
-                  disabled={(!recordOnlyMode && clarificationBlocked) || busy || clarificationBusy || onboardingRecordBusy || !canSubmitProfile}
-                  onClick={recordOnlyMode || clarificationComplete ? confirmOnboarding : continueClarification}
-                  type="button"
-                >
-                  {recordOnlyMode ? "학생부 기록으로 시작하기 →" : clarificationBlocked ? "졸업자 학생부로 진행 불가" : onboardingRecordBusy ? "학생부 분석 대기 중…" : clarificationBusy ? "답변 반영해 다시 검토 중…" : busy ? "저장하는 중…" : clarificationComplete ? "진단 상담 시작하기 →" : "답변 반영하고 다시 검토하기 →"}
-                </button>
-              </>
-            )}
+              )}
+            </div>
           </div>
-        </main>
-      </div>
-    </div>
+
+          {onboardingRecordBusy && (
+            <div className="h-1 w-full rounded-full bg-gray-200 overflow-hidden">
+              <div className="h-1 w-1/3 rounded-full bg-brand-500 animate-pulse" />
+            </div>
+          )}
+          {onboardingRecordMessage && !onboardingRecordBusy && (
+            <div className="banner banner-success">{onboardingRecordMessage}</div>
+          )}
+
+          <div className="bg-white p-6 sm:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-6">
+            <div>
+              <h2 className="text-xl font-extrabold text-gray-950 tracking-tight">기본 정보와 목표를 확인해 주세요</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                여기 적은 내용을 바탕으로 다음 화면에서 AI가 맞춤 확인 질문을 만듭니다.
+              </p>
+            </div>
+
+            {/* 1. 인적 사항 */}
+            <div className="space-y-4 pt-2 border-t border-gray-100">
+              <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
+                <span>👤</span>
+                <span>1. 학생 기본 정보</span>
+              </h3>
+
+              <div>
+                <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-name">학생 이름</label>
+                <input
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition disabled:text-gray-400"
+                  disabled={recordLocked}
+                  id="ob-name"
+                  onChange={(e) => update("name", e.target.value)}
+                  placeholder="예: 김세특"
+                  value={form.name}
+                />
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-gray-600 block mb-1.5">현재 학년 및 학기</span>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { grade: "1", semester: "1" }, { grade: "1", semester: "2" },
+                    { grade: "2", semester: "1" }, { grade: "2", semester: "2" },
+                    { grade: "3", semester: "1" }, { grade: "3", semester: "2" },
+                  ].map((item) => {
+                    const isActive = form.grade === item.grade && form.semester === item.semester;
+                    return (
+                      <button
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition disabled:opacity-50 ${
+                          isActive ? "bg-brand-500 text-white font-bold" : "bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200"
+                        }`}
+                        disabled={recordLocked}
+                        key={`${item.grade}-${item.semester}`}
+                        onClick={() => setForm((cur) => ({ ...cur, grade: item.grade, semester: item.semester }))}
+                        type="button"
+                      >
+                        {item.grade}학년 {item.semester}학기
+                      </button>
+                    );
+                  })}
+                  <button
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition disabled:opacity-50 ${
+                      isGraduatedGrade(form.grade) ? "bg-gray-900 text-white font-bold" : "bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200"
+                    }`}
+                    disabled={recordLocked}
+                    onClick={() => updateGrade("graduated")}
+                    type="button"
+                  >
+                    졸업
+                  </button>
+                </div>
+                {recordLocked && (
+                  <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+                    업로드한 학생부에서 확인한 이름과 시점을 사용합니다. 값이 다르면 다음 확인 질문에서 바로잡습니다.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* 2. 목표와 관심 */}
+            <div className="space-y-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
+                  <span>🎯</span>
+                  <span>2. 목표 진로와 탐구 관심 축</span>
+                </h3>
+                <span className="text-[10px] text-gray-400 font-semibold">적으면 AI가 후보를 제안합니다</span>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-career">현재 가장 끌리는 분야 또는 진로</label>
+                <input
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
+                  id="ob-career"
+                  onChange={(e) => update("targetCareer", e.target.value)}
+                  placeholder="예: 인공지능 의료, 뇌과학, 교육격차, 로봇공학"
+                  value={form.targetCareer}
+                />
+              </div>
+
+              {(suggestBusy || suggestions) && (
+                <div className="p-3.5 rounded-2xl bg-gray-50/80 border border-gray-200/80 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-gray-700">AI가 찾은 연결 후보 · 누르면 아래에 담깁니다</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-500">
+                      {suggestBusy ? "생성 중…" : suggestions?.provider === "deepseek" ? "AI 추천" : "기본 추천"}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-gray-500 block">학과 후보</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggestBusy && !suggestions
+                        ? Array.from({ length: 5 }).map((_, index) => (
+                          <span className="h-6 w-20 rounded-lg bg-gray-200/70 animate-pulse" key={index} />
+                        ))
+                        : suggestions?.majors.map((major) => (
+                          <button
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-gray-700 hover:bg-brand-50 hover:text-brand-700 border border-gray-200/80 transition"
+                            key={major}
+                            onClick={() => addListValue("targetMajors", major)}
+                            type="button"
+                          >
+                            {major}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-gray-500 block">탐구 큰 축 후보</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggestBusy && !suggestions
+                        ? Array.from({ length: 6 }).map((_, index) => (
+                          <span className="h-6 w-28 rounded-lg bg-gray-200/70 animate-pulse" key={index} />
+                        ))
+                        : suggestions?.keywords.map((keyword) => (
+                          <button
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-gray-700 hover:bg-brand-50 hover:text-brand-700 border border-gray-200/80 transition"
+                            key={keyword}
+                            onClick={() => addListValue("interests", keyword)}
+                            type="button"
+                          >
+                            {keyword}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-majors">연결 가능한 학과 후보</label>
+                  <input
+                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
+                    id="ob-majors"
+                    onChange={(e) => update("targetMajors", e.target.value)}
+                    placeholder="예: 컴퓨터공학, 의공학, 심리학"
+                    value={form.targetMajors}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-interests">앞으로 다룰 큰 관심 축</label>
+                  <input
+                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
+                    id="ob-interests"
+                    onChange={(e) => update("interests", e.target.value)}
+                    placeholder="예: 데이터 편향, 의료 영상, 학습 격차"
+                    value={form.interests}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. 진로 구체도 */}
+            <div className="space-y-3 pt-4 border-t border-gray-100">
+              <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
+                <span>🧭</span>
+                <span>3. 진로가 어느 정도 정해졌나요?</span>
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {[
+                  { value: "넓은 분야만 정한 단계", label: "넓은 분야만 있음", desc: "예: 의료, AI, 교육. 추가 질문 없이 상담에서 좁혀갑니다." },
+                  { value: "구체적인 학과나 직무까지 정한 단계", label: "구체 목표가 있음", desc: "학과·직무·주제가 꽤 명확합니다." },
+                ].map((item) => {
+                  const isActive = form.careerResolution === item.value;
+                  return (
+                    <button
+                      className={`p-3.5 rounded-xl border text-left transition ${
+                        isActive ? "border-brand-500 bg-blue-50/40" : "border-gray-200 hover:border-gray-300 bg-gray-50/30"
+                      }`}
+                      key={item.value}
+                      onClick={() => updateCareerResolution(item.value)}
+                      type="button"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold flex-none ${
+                          isActive ? "bg-brand-500 text-white" : "border border-gray-300 bg-white"
+                        }`}>
+                          {isActive ? "✓" : ""}
+                        </span>
+                        <span className={`font-bold text-xs ${isActive ? "text-brand-700" : "text-gray-800"}`}>{item.label}</span>
+                      </span>
+                      <span className="text-[11px] text-gray-500 block leading-snug mt-1 pl-6">{item.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {form.careerResolution === "구체적인 학과나 직무까지 정한 단계" && (
+                <div className="p-4 rounded-2xl bg-gray-50/80 border border-gray-200/80 space-y-3.5">
+                  <div>
+                    <strong className="block text-[11px] font-extrabold text-gray-900">관련 배경지식에 맞춰 탐구 난이도를 조절합니다</strong>
+                    <span className="block text-[11px] text-gray-500 mt-0.5">배경지식이 있더라도 기초부터 쌓고 싶다면 &lsquo;하&rsquo;를 고르세요.</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {[
+                      { value: "하", desc: "기초 개념부터 차근히" },
+                      { value: "중", desc: "기본 개념은 알고 적용해보고 싶음" },
+                      { value: "상", desc: "심화·차별화 탐구부터 가능" },
+                    ].map((item) => {
+                      const isActive = form.knowledgeLevel === item.value;
+                      return (
+                        <button
+                          className={`px-3 py-2.5 rounded-xl border text-left transition ${
+                            isActive ? "border-brand-500 bg-white" : "border-gray-200 bg-white/60 hover:border-gray-300"
+                          }`}
+                          key={item.value}
+                          onClick={() => update("knowledgeLevel", item.value)}
+                          type="button"
+                        >
+                          <span className={`block text-xs font-bold ${isActive ? "text-brand-600" : "text-gray-800"}`}>{item.value}</span>
+                          <span className="block text-[11px] text-gray-500 leading-snug mt-0.5">{item.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-question">특히 궁금한 세부 키워드나 문제</label>
+                    <textarea
+                      className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-white transition min-h-20"
+                      id="ob-question"
+                      onChange={(e) => update("concreteResearchQuestion", e.target.value)}
+                      placeholder={
+                        form.knowledgeLevel === "상"
+                          ? "예: 의료 AI 진단 모델의 오류 원인을 데이터 편향 관점에서 분석하고 싶음"
+                          : form.knowledgeLevel === "중"
+                            ? "예: AI 진단 정확도, 의료 데이터, 모델 비교처럼 관심 키워드를 적어주세요"
+                            : "아직 안 적어도 됩니다. 키워드 1~2개만 적어도 괜찮아요."
+                      }
+                      value={form.concreteResearchQuestion}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 4. 고민 (자기평가 약점으로 저장된다) */}
+            <div className="space-y-3 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
+                  <span>💭</span>
+                  <span>4. 지금 가장 고민되는 부분 (복수 선택 · 선택 사항)</span>
+                </h3>
+                <span className="text-[10px] text-gray-400 font-medium">선택 {gapValues.length}건</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {ONBOARDING_CONCERNS.map((item) => {
+                  const isChecked = gapValues.includes(item.title);
+                  return (
+                    <button
+                      className={`p-3.5 rounded-xl border text-left transition flex items-start gap-2.5 ${
+                        isChecked ? "border-brand-500 bg-blue-50/40" : "border-gray-200 hover:border-gray-300 bg-gray-50/30"
+                      }`}
+                      key={item.title}
+                      onClick={() => toggleGap(item.title)}
+                      type="button"
+                    >
+                      <span className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center text-[10px] font-bold flex-none ${
+                        isChecked ? "bg-brand-500 text-white" : "border border-gray-300 bg-white"
+                      }`}>
+                        {isChecked ? "✓" : ""}
+                      </span>
+                      <span className="block">
+                        <span className={`font-bold text-xs block ${isChecked ? "text-brand-700" : "text-gray-800"}`}>{item.title}</span>
+                        <span className="text-[11px] text-gray-500 block leading-snug">{item.desc}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 5. 제약 */}
+            <div className="space-y-3 pt-4 border-t border-gray-100">
+              <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
+                <span>⚠️</span>
+                <span>5. 계획을 짤 때 반드시 피해야 할 제약 (선택 사항)</span>
+              </h3>
+              <input
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
+                id="ob-constraints"
+                onChange={(e) => update("constraints", e.target.value)}
+                placeholder="예: 코딩 불가, 실험실 사용 어려움, 교외대회 준비 시간 없음 / 없으면 비워두기"
+                value={form.constraints}
+              />
+              <p className="text-[11px] text-gray-400 leading-relaxed">
+                연결 과목·강점·활용 자원은 학생부와 이후 활동 기록을 보고 시스템이 판단합니다. 여기에는 꼭 지켜야 할 제약만 적어주세요.
+              </p>
+            </div>
+
+            {/* 하단 버튼 */}
+            <div className="pt-6 border-t border-gray-100 flex items-center justify-between gap-4">
+              <button
+                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-bold transition"
+                onClick={() => setStep("select")}
+                type="button"
+              >
+                ← 이전으로
+              </button>
+              <button
+                className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs hover:shadow transition flex items-center gap-1.5"
+                disabled={!canLeaveProfileStep || clarificationBusy || onboardingRecordBusy}
+                onClick={startClarification}
+                type="button"
+              >
+                <span>
+                  {onboardingRecordBusy
+                    ? "학생부 분석이 끝나면 진행할 수 있어요"
+                    : clarificationBusy
+                      ? "확인 질문을 만드는 중…"
+                      : "다음 단계: AI 맞춤 확인 질문 ➔"}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───────── Step 2 — AI 맞춤 확인 질문 ───────── */}
+      {step === "ai" && (
+        <div className="w-full max-w-3xl mx-auto space-y-6">
+          {stepper("ai")}
+
+          <div className="bg-white p-5 rounded-2xl border border-gray-200/90 shadow-xs space-y-2.5">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="w-5 h-5 rounded-md bg-blue-50 text-brand-600 flex items-center justify-center text-xs font-bold flex-none">💡</span>
+              <span className="text-gray-950 font-extrabold">AI 사전 확인 브리핑</span>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              {clarificationSummary || (
+                <>
+                  <strong className="text-gray-900 font-bold">{form.name || "학생"}</strong>
+                  {" "}학생이 입력한 정보
+                  {form.grade && (
+                    <span className="text-gray-800 font-semibold">
+                      ({isGraduatedGrade(form.grade) ? "졸업" : `${form.grade}학년 ${form.semester}학기`}
+                      {form.targetCareer ? ` · ${form.targetCareer}` : ""})
+                    </span>
+                  )}
+                  와 학생부 기록을 대조해, 방향이 달라질 수 있는 것만 골라 확인합니다. 답변한 뒤에도 더 물을 것이 있으면 계속 이어집니다.
+                </>
+              )}
+            </p>
+          </div>
+
+          {recordOnlyMode && onboardingRecordParse && (
+            <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
+              <div className="flex items-center justify-between gap-2 pb-3 border-b border-gray-100">
+                <div className="min-w-0">
+                  <span className="block text-[10px] font-bold text-gray-400">학생부 정리 결과</span>
+                  <strong className="block text-sm font-extrabold text-gray-900 truncate">{onboardingRecordParse.fileName}</strong>
+                </div>
+                <span className="text-[11px] font-bold text-gray-500 flex-none">
+                  활동 {onboardingRecordParse.entries.length}개 · 과목 {onboardingRecordParse.courses.length}개
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                {onboardingRecordParse.entries.slice(0, 12).map((entry) => (
+                  <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50/60 border border-gray-100" key={entry.id}>
+                    <span className="text-[10px] font-bold text-gray-400 flex-none pt-0.5">
+                      {entry.grade}학년 {entry.semester ? `${entry.semester}학기` : ""}
+                    </span>
+                    <span className="min-w-0">
+                      <strong className="block text-xs font-bold text-gray-900 truncate">{entry.title}</strong>
+                      <span className="block text-[11px] text-gray-500 truncate">{entry.subject || entry.category} · {entry.summary}</span>
+                    </span>
+                  </div>
+                ))}
+                {!onboardingRecordParse.entries.length && (
+                  <p className="text-xs text-gray-400">구조화할 활동 후보를 찾지 못했습니다. PDF 원문을 다시 확인해주세요.</p>
+                )}
+              </div>
+              {onboardingRecordParse.entries.length > 12 && (
+                <span className="block text-[11px] text-gray-400">활동 후보 {onboardingRecordParse.entries.length - 12}개가 더 있습니다.</span>
+              )}
+            </div>
+          )}
+
+          {clarificationQuestions.length > 0 && (
+            <div className="bg-white p-6 sm:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-7">
+              {clarificationQuestions.map((question, index) => {
+                const tone = AI_QUESTION_TONES[index % AI_QUESTION_TONES.length];
+                const selected = clarificationAnswers.find((answer) => answer.id === question.id)?.answer
+                  ?? readClarificationAnswer(form.roadmapDesignNotes, question.id);
+                const selectedParts = clarificationAnswerParts(selected);
+                const otherSelected = selectedParts.some((part) => part.startsWith("기타"));
+                const otherValue = selectedParts.find((part) => part.startsWith("기타:"))?.replace(/^기타:\s*/, "") ?? "";
+                return (
+                  <div className={`space-y-3 ${index > 0 ? "pt-5 border-t border-gray-100" : ""}`} key={question.id}>
+                    <div className="space-y-1">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${tone.chip}`}>
+                        AI 맞춤 질문 {String(index + 1).padStart(2, "0")} · {question.label}
+                      </span>
+                      <h3 className="text-sm font-extrabold text-gray-900">{question.question}</h3>
+                      {question.why && <p className="text-xs text-gray-500">이 답이 필요한 이유: {question.why}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                      {clarificationOptions(question).map((option) => {
+                        const isSelected = option === OTHER_CLARIFICATION_OPTION ? otherSelected : selectedParts.includes(option);
+                        return (
+                          <button
+                            className={`w-full p-3.5 rounded-xl border text-left transition flex items-center justify-between gap-3 text-xs ${
+                              isSelected ? tone.card : "border-gray-200 hover:border-gray-300 bg-gray-50/30 text-gray-700"
+                            }`}
+                            key={option}
+                            onClick={() => chooseClarificationOption(question, option)}
+                            type="button"
+                          >
+                            <span className="flex items-center gap-2.5">
+                              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] flex-none ${
+                                isSelected ? `${tone.dot} text-white font-bold` : "border border-gray-300 bg-white"
+                              }`}>
+                                {isSelected ? "✓" : ""}
+                              </span>
+                              <span>{option}</span>
+                            </span>
+                            {isSelected && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-none ${tone.badge}`}>선택됨</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {allowsMultipleClarificationAnswers(question) && (
+                      <span className="block text-[11px] text-gray-400">복수 선택 가능</span>
+                    )}
+
+                    {otherSelected && (
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor={`other-${question.id}`}>직접 입력</label>
+                        <input
+                          className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
+                          id={`other-${question.id}`}
+                          onChange={(event) => updateOtherClarificationAnswer(question, event.target.value)}
+                          placeholder="선택지에 없는 내용을 적어주세요"
+                          value={otherValue}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {clarificationBlocked && (
+            <div className="banner banner-warning">{clarificationSummary || "업로드한 학생부로는 진행할 수 없습니다."}</div>
+          )}
+
+          {!clarificationBlocked && clarificationComplete && (
+            <div className="bg-white p-6 sm:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
+              <div>
+                <strong className="block text-sm font-extrabold text-gray-900">더 확인할 것이 없습니다</strong>
+                <span className="block text-xs text-gray-500 mt-1">
+                  선택한 답변은 자동으로 반영됩니다. 선택지에 없던 학교 상황이나 꼭 지켜야 할 방향만 아래에 적어주세요.
+                </span>
+              </div>
+              <textarea
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition min-h-20"
+                id="ob-roadmap-notes"
+                onChange={(e) => update("roadmapDesignNotes", e.target.value)}
+                placeholder="예: 2학기에는 과학 과목에서만 새 주제를 시도할 수 있음"
+                value={form.roadmapDesignNotes}
+              />
+            </div>
+          )}
+
+          <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs flex items-center justify-between gap-4">
+            <button
+              className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-bold transition"
+              onClick={() => setStep("profile")}
+              type="button"
+            >
+              ← 기본 정보 수정
+            </button>
+            <button
+              className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-md hover:shadow-lg transition flex items-center gap-2"
+              disabled={(!recordOnlyMode && clarificationBlocked) || busy || clarificationBusy || onboardingRecordBusy || !canSubmitProfile}
+              onClick={recordOnlyMode || clarificationComplete ? confirmOnboarding : continueClarification}
+              type="button"
+            >
+              <span>
+                {recordOnlyMode
+                  ? "학생부 기록으로 시작하기"
+                  : clarificationBlocked
+                    ? "졸업자 학생부로는 진행 불가"
+                    : onboardingRecordBusy
+                      ? "학생부 분석 대기 중…"
+                      : clarificationBusy
+                        ? "답변 반영해 다시 검토 중…"
+                        : busy
+                          ? "저장하는 중…"
+                          : clarificationComplete
+                            ? "AI 정밀 진단 시작하기"
+                            : "답변 반영하고 다시 검토하기"}
+              </span>
+              <span>➔</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </GateFrame>
   );
 }
+
 
 /* ──────────────────────────────────────────────
    Overview
@@ -3136,7 +3522,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200/80">
               <span className="w-2 h-2 rounded-full bg-brand-500" />
-              <span className="text-[11px] font-bold text-brand-700">3개년 연동 · 학생별 데이터 격리</span>
+              <span className="text-[11px] font-bold text-brand-700">학기 계획 연동 · 학생별 데이터 격리</span>
             </span>
             <span className="h-4 w-px bg-gray-200" />
             <button
@@ -3284,6 +3670,21 @@ export function WorkspaceApp() {
     checkGate();
   }, [checkGate]);
 
+  /**
+   * 어느 화면에서든 계정을 빠져나가는 길. 온보딩과 진단·상담 관문에도 준다 —
+   * 이 두 화면은 사이드바가 없어서, 예전에는 온보딩을 끝내지 못한 계정이 화면에
+   * 갇혀 로그아웃조차 할 수 없었다.
+   */
+  const signOut = useCallback(() => {
+    void logout().finally(() => {
+      setWorkspace(null);
+      setConsultationStatus(null);
+      setSignedIn(false);
+      // 로그아웃은 대개 계정을 바꾸려는 것이므로 랜딩이 아니라 로그인 화면으로 둔다.
+      setAuthOpen(true);
+    });
+  }, []);
+
 
   const loadingCopy = useMemo(() => (loading ? "학생 작업공간을 불러오는 중…" : ""), [loading]);
 
@@ -3320,13 +3721,13 @@ export function WorkspaceApp() {
   // current_grade/semester가 있어야 판단하므로, 이 분기가 !workspace 체크보다
   // 먼저 와야 재방문 학생이 온보딩 화면으로 잘못 돌아가지 않는다.
   if (consultationStatus && !consultationStatus.satisfied) {
-    return <ConsultationGate status={consultationStatus} onSatisfied={checkGate} />;
+    return <ConsultationGate status={consultationStatus} onSatisfied={checkGate} onSignOut={signOut} />;
   }
 
   if (!workspace) {
     return (
       <>
-        <Onboarding onComplete={checkGate} />
+        <Onboarding onComplete={checkGate} onSignOut={signOut} />
         {error && <div className="floating-error">{error}</div>}
       </>
     );
@@ -3337,13 +3738,8 @@ export function WorkspaceApp() {
       workspace={workspace}
       onWorkspace={setWorkspace}
       onRefresh={() => refresh({ quiet: true })}
-      onNewStudent={() => {
-        // 학생 전환은 이제 계정 전환이다 — 토큰을 지우고 로그인 화면으로 돌아간다.
-        void logout().then(() => {
-          setWorkspace(null);
-          setSignedIn(false);
-        });
-      }}
+      // 학생 전환은 이제 계정 전환이다 — 토큰을 지우고 로그인 화면으로 돌아간다.
+      onNewStudent={signOut}
     />
   );
 }

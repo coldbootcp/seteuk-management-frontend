@@ -94,20 +94,20 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
           <div className="text-center max-w-3xl mx-auto space-y-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-50 border border-brand-200/80 text-brand-600 text-xs md:text-sm font-bold">
               <span className="flex h-2 w-2 rounded-full bg-brand-500" />
-              <span>2028 대입 개편안 대응 · 상위권 학종 1:1 마스터플랜</span>
+              <span>2028 대입 개편안 대응 · 상위권 학종 1:1 코칭</span>
             </div>
 
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-gray-950 tracking-tight leading-[1.15]">
               산발적인 세특 기록을 넘어,
               <br />
               <span className="bg-gradient-to-r from-brand-600 via-indigo-600 to-brand-500 bg-clip-text text-transparent">
-                합격을 완성하는 3개년 탐구 서사
+                합격을 완성하는 하나의 탐구 서사
               </span>
             </h1>
 
             <p className="text-base sm:text-lg md:text-xl text-gray-600 leading-relaxed max-w-2xl mx-auto">
               학생부 Fact(이수단위·성적)와 Interpretation(학업태도·탐구역량)의 2단계 정밀 진단부터, 전담 컨설턴트
-              AI와의 양방향 코칭으로 6개 학기 탐구 서사를 완성하세요.
+              AI와의 양방향 코칭으로 학기마다 이어지는 탐구 서사를 완성하세요.
             </p>
 
             <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-3.5">
@@ -426,7 +426,7 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
       <section className="py-20 bg-gradient-to-b from-white to-brand-50/40">
         <div className="max-w-3xl mx-auto px-4 text-center space-y-6">
           <h2 className="text-2xl md:text-3xl font-extrabold text-gray-950 tracking-tight leading-snug">
-            지금 쌓인 기록으로 3개년 계획을 시작하세요
+            지금 쌓인 기록으로 이번 학기 계획을 시작하세요
           </h2>
           <p className="text-sm text-gray-600">
             가입 후 진단과 상담을 마치면 이번 학기 목표와 탐구 주제가 바로 만들어집니다.
