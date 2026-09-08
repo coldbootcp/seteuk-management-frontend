@@ -50,10 +50,7 @@ type ProfileForm = {
 };
 
 
-/**
- * 온보딩 화면의 세 걸음. 예전에는 1/2/3 숫자였는데, 첫 화면(진단 방식 선택)이
- * 생기면서 숫자와 "Step N" 표기가 어긋나기 시작해 이름으로 바꿨다.
- */
+/** 온보딩은 기본 정보를 저장한 뒤 별도 사전 질문 없이 상담 관문으로 이어진다. */
 type OnboardingStep = "select" | "profile" | "ai";
 
 type ActivityDraft = {
@@ -284,10 +281,6 @@ function buildClarificationQuestions(
 
 function readClarificationAnswer(notes: string, id: string) {
   return notes.split("\n").find((line) => line.startsWith(`${id}: `))?.slice(id.length + 2) ?? "";
-}
-
-function removeClarificationAnswers(notes: string) {
-  return notes.split("\n").filter((line) => !/^[a-z][a-z0-9_]*: /i.test(line)).join("\n");
 }
 
 function toProfileInput(form: ProfileForm): ProfileInput {
@@ -716,7 +709,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     });
 
     const detectedMessage = completedGrade ? ` 학생부는 ${completedGrade}학년까지 확정된 기록으로 보았습니다.` : "";
-    const gradeMessage = expectedCurrentGrade ? ` 현재 상태 후보는 ${gradeLabel(expectedCurrentGrade)}로 보이며, 입력값과 다르면 다음 확인 단계에서 묻습니다.` : "";
+    const gradeMessage = expectedCurrentGrade ? ` 학생부 기준 현재 상태 후보는 ${gradeLabel(expectedCurrentGrade)}입니다. 입력한 학년·학기와 다르면 직접 수정해 주세요.` : "";
     setOnboardingRecordMessage(`학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 기록에 반영합니다.${detectedMessage}${gradeMessage}`);
   }, [form.grade, onboardingRecordAutoFields, onboardingRecordParse]);
 
@@ -816,13 +809,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       return;
     }
     void prepareClarification();
-  }
-
-  function startClarification() {
-    setClarificationAnswers([]);
-    setClarificationComplete(false);
-    setForm((current) => ({ ...current, roadmapDesignNotes: removeClarificationAnswers(current.roadmapDesignNotes) }));
-    void prepareClarification(true);
   }
 
   async function analyzeOnboardingRecord(file: File | undefined) {
@@ -994,52 +980,37 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     });
   }
 
-  /** 진행 표시. "지금 어느 걸음인가"만 말하고 남은 걸음 수를 지어내지 않는다. */
-  function stepper(current: "profile" | "ai") {
+  /** 기본 정보 뒤에는 별도 사전 질문 없이 상담 관문으로 이어진다. */
+  function stepper() {
     return (
       <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button
             className="text-xs text-gray-500 hover:text-gray-900 font-bold flex items-center gap-1"
-            onClick={() => setStep(current === "ai" ? "profile" : "select")}
+            onClick={() => setStep("select")}
             type="button"
           >
-            <span>←</span> {current === "ai" ? "1단계 수정" : "처음으로"}
+            <span>←</span> 처음으로
           </button>
           <span className="text-gray-300">|</span>
-          <span
-            className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              current === "ai" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-brand-600"
-            }`}
-          >
-            {current === "ai" ? "Step 2 / 2 · AI 맞춤 확인 질문" : "Step 1 / 2 · 기본 정보와 목표"}
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-brand-600">
+            기본 정보와 목표
           </span>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-gray-400 font-semibold">
-          {current === "ai" ? (
-            <>
-              <span className="text-emerald-600 font-bold">✓ 1. 기본 프로필</span>
-              <span>➔</span>
-              <span className="w-2 h-2 rounded-full bg-purple-600" />
-              <span className="text-purple-700 font-bold">2. AI 맞춤 질문</span>
-            </>
-          ) : (
-            <>
-              <span className="w-2 h-2 rounded-full bg-brand-500" />
-              <span className="text-brand-600 font-bold">1. 기본 프로필</span>
-              <span>➔</span>
-              <span>2. AI 맞춤 질문</span>
-            </>
-          )}
+          <>
+            <span className="w-2 h-2 rounded-full bg-brand-500" />
+            <span className="text-brand-600 font-bold">기본 프로필</span>
+          </>
           <span>➔</span>
-          <span>3. 정밀 진단</span>
+          <span>AI 진단 · 상담</span>
         </div>
       </div>
     );
   }
 
   return (
-    <GateFrame badge={step === "select" ? "신규 온보딩" : step === "profile" ? "Step 1 / 2" : "Step 2 / 2"} onSignOut={onSignOut}>
+    <GateFrame badge={step === "select" ? "신규 온보딩" : "기본 정보"} onSignOut={onSignOut}>
       {/* 파일 선택기는 세 화면이 함께 쓴다 — 어느 걸음에서도 학생부를 올릴 수 있다. */}
       <input
         accept="application/pdf,.pdf"
@@ -1142,8 +1113,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                 </div>
 
                 <p className="text-xs text-gray-600 leading-relaxed">
-                  과거 기록이 없어도 괜찮습니다. 관심분야와 목표를 답해주시면 AI가 그 자리에서 확인 질문을 만들고,
-                  이어지는 상담에서 이번 학기 목표와 탐구 주제를 함께 정합니다. 학생부는 나중에 [활동 &amp; 세특] 화면에서
+                  과거 기록이 없어도 괜찮습니다. 관심분야와 목표를 답해주시면,
+                  이어지는 AI 상담에서 이번 학기 목표와 탐구 주제를 함께 정합니다. 학생부는 나중에 [활동 &amp; 세특] 화면에서
                   언제든 올릴 수 있습니다.
                 </p>
 
@@ -1193,7 +1164,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       {/* ───────── Step 1 — 기본 정보와 목표 ───────── */}
       {step === "profile" && (
         <div className="w-full max-w-3xl mx-auto space-y-6">
-          {stepper("profile")}
+          {stepper()}
 
           {/* 학생부 상태 — 분석은 이 화면을 막지 않고 뒤에서 돈다 */}
           <div
@@ -1260,7 +1231,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
             <div>
               <h2 className="text-xl font-extrabold text-gray-950 tracking-tight">기본 정보와 목표를 확인해 주세요</h2>
               <p className="text-xs text-gray-500 mt-1">
-                여기 적은 내용을 바탕으로 다음 화면에서 AI가 맞춤 확인 질문을 만듭니다.
+                기본 정보를 저장하면 별도 사전 질문 없이 AI 상담에서 진단과 다음 활동을 함께 구체화합니다.
               </p>
             </div>
 
@@ -1618,16 +1589,16 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               </button>
               <button
                 className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs hover:shadow transition flex items-center gap-1.5"
-                disabled={!canLeaveProfileStep || clarificationBusy || onboardingRecordBusy}
-                onClick={startClarification}
+                disabled={!canLeaveProfileStep || busy || onboardingRecordBusy}
+                onClick={() => void confirmOnboarding()}
                 type="button"
               >
                 <span>
                   {onboardingRecordBusy
                     ? "학생부 분석이 끝나면 진행할 수 있어요"
-                    : clarificationBusy
-                      ? "확인 질문을 만드는 중…"
-                      : "다음 단계: AI 맞춤 확인 질문 ➔"}
+                    : busy
+                      ? "저장하는 중…"
+                      : "AI 상담 시작하기 ➔"}
                 </span>
               </button>
             </div>
@@ -1638,7 +1609,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       {/* ───────── Step 2 — AI 맞춤 확인 질문 ───────── */}
       {step === "ai" && (
         <div className="w-full max-w-3xl mx-auto space-y-6">
-          {stepper("ai")}
+          {stepper()}
 
           <div className="bg-white p-5 rounded-2xl border border-gray-200/90 shadow-xs space-y-2.5">
             <div className="flex items-center gap-2 text-xs">

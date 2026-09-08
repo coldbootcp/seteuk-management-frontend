@@ -35,17 +35,18 @@ test("the product exposes every primary surface", async () => {
   assert.doesNotMatch(app, /Codex is working|react-loading-skeleton|codex-preview/);
 });
 
-test("the onboarding walks select → profile → AI questions and always offers a way out", async () => {
+test("the onboarding moves from profile directly into the AI consultation and always offers a way out", async () => {
   const [app, gate] = await Promise.all([
     source("app/workspace-app.tsx"),
     source("app/gate-frame.tsx"),
   ]);
 
-  // 세 걸음이 모두 살아 있어야 한다.
-  assert.match(app, /type OnboardingStep = "select" \| "profile" \| "ai"/);
+  // 방향 맞추기 질문을 별도 관문으로 만들지 않는다. 프로필 저장 뒤 상담에서
+  // 학생이 필요한 만큼 대화하며 구체화한다.
   assert.match(app, /학생부 올리고 시작하기/);
   assert.match(app, /기본 정보로 시작하기/);
-  assert.match(app, /AI 맞춤 확인 질문/);
+  assert.match(app, /AI 상담 시작하기/);
+  assert.match(app, /onClick=\{\(\) => void confirmOnboarding\(\)\}/);
 
   // 온보딩과 관문은 사이드바가 없는 화면이다 — 나가는 길이 없으면 계정이 갇힌다.
   assert.match(gate, /로그아웃/);

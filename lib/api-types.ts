@@ -2791,6 +2791,8 @@ export interface components {
             grade?: number | null;
             /** Semester */
             semester?: number | null;
+            /** Freshman Academic Year */
+            freshman_academic_year?: number | null;
             /** Career Goal */
             career_goal?: string | null;
             /** Target Department */

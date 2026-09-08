@@ -684,6 +684,9 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
           name: form.name || null,
           grade: form.grade ? Number(form.grade) : null,
           semester: form.semester ? Number(form.semester) : null,
+          freshman_academic_year: form.freshmanAcademicYear
+            ? Number(form.freshmanAcademicYear)
+            : null,
           career_goal: form.targetCareer || null,
           target_department: (form.targetMajors ?? [])[0] || null,
           interest_keywords: form.interests ?? [],
