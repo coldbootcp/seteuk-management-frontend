@@ -118,6 +118,8 @@ test("the admissions workspace uses the catalog instead of free-text target data
   assert.match(preparation, /admission-catalog\/universities/);
   assert.match(preparation, /\/programs\?admission_year=2027/);
   assert.match(preparation, /admission-catalog\/programs\/\$\{programId\}\/tracks/);
+  assert.match(preparation, /admission-catalog\/tracks\/\$\{trackId\}\/detail/);
+  assert.match(preparation, /지원 자격·평가 방법·일정/);
   assert.match(preparation, /application-preparations/);
   assert.match(preparation, /AI가 핵심 활동 추리기/);
 });

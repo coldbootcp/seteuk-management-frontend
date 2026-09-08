@@ -24,6 +24,7 @@ type CatalogUniversity = components["schemas"]["UniversitySearchRead"];
 type CatalogProgram = components["schemas"]["AdmissionProgramRead"];
 type CatalogTrack = components["schemas"]["AdmissionTrackRead"];
 type TrackReference = components["schemas"]["AdmissionTrackReferenceRead"];
+type TrackDetail = components["schemas"]["AdmissionTrackDetailRead"];
 type AdmissionTrackResearch = components["schemas"]["AdmissionTrackResearchRead"];
 type UniversityAdmissionStatistics = components["schemas"]["UniversityAdmissionStatisticsRead"];
 type UniversityAdmissionGuide = components["schemas"]["AdmissionUniversityGuideRead"];
@@ -59,6 +60,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
   const [deleteCandidate, setDeleteCandidate] = useState<ApplicationTarget | null>(null);
   const [deletingTarget, setDeletingTarget] = useState(false);
   const [trackReference, setTrackReference] = useState<TrackReference | null>(null);
+  const [trackDetail, setTrackDetail] = useState<TrackDetail | null>(null);
   const [trackReferenceLoading, setTrackReferenceLoading] = useState(false);
   const [admissionResearch, setAdmissionResearch] = useState<AdmissionTrackResearch | null>(null);
   const [universityStatistics, setUniversityStatistics] = useState<UniversityAdmissionStatistics | null>(null);
@@ -122,23 +124,26 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
         setUniversityGuide(null);
         setPastResults(null);
         setProgramProfile(null);
+        setTrackDetail(null);
       }, 0);
       return () => window.clearTimeout(resetTimer);
     }
     let cancelled = false;
     async function loadAdmissionInformation() {
       setAdmissionInfoLoading(true);
-      const [statistics, guide, results, profile] = await Promise.allSettled([
+      const [statistics, guide, results, profile, detail] = await Promise.allSettled([
         api<UniversityAdmissionStatistics>(`/admission-catalog/universities/${universityId}/statistics?source_admission_year=2026`),
         api<UniversityAdmissionGuide>(`/admission-catalog/universities/${universityId}/admission-guide?source_admission_year=2027`),
         api<ProgramPastResults>(`/admission-catalog/tracks/${trackId}/past-results`),
         api<ProgramProfile>(`/admission-catalog/tracks/${trackId}/program-profile`),
+        api<TrackDetail>(`/admission-catalog/tracks/${trackId}/detail`),
       ]);
       if (cancelled) return;
       setUniversityStatistics(statistics.status === "fulfilled" ? statistics.value : null);
       setUniversityGuide(guide.status === "fulfilled" ? guide.value : null);
       setPastResults(results.status === "fulfilled" ? results.value : null);
       setProgramProfile(profile.status === "fulfilled" ? profile.value : null);
+      setTrackDetail(detail.status === "fulfilled" ? detail.value : null);
       setAdmissionInfoLoading(false);
     }
     void loadAdmissionInformation();
@@ -527,11 +532,24 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
         <p>대학 안내, 학과 소개, 전년도 공개 결과를 불러오는 중입니다.</p>
       </section>}
 
-      {!admissionInfoLoading && (universityGuide || programProfile || pastResults || universityStatistics) && <section className="admission-detail" aria-label="지원처 상세 정보">
+      {!admissionInfoLoading && (trackDetail || universityGuide || programProfile || pastResults || universityStatistics) && <section className="admission-detail" aria-label="지원처 상세 정보">
         <div className="admission-detail-head">
           <div><span>공개 자료 기반 상세 정보</span><h3>{activeTarget.university} · {activeTarget.department} · {activeTarget.track}</h3><p>대학·학과·전형별로 공개된 원문을 기준 연도와 함께 정리했습니다. 과거 결과는 합격선이나 지원 가능 여부를 확정하지 않습니다.</p></div>
           {universityGuide && <a href={universityGuide.source_url} target="_blank" rel="noreferrer">{universityGuide.source_admission_year}학년도 모집안내 원문 ↗</a>}
         </div>
+
+        {trackDetail && <section className="admission-data-section" aria-label="전형별 공식 상세 정보">
+          <div className="admission-data-head"><div><span>전형별 공식 상세</span><h4>지원 자격·평가 방법·일정</h4><p>{trackDetail.source_admission_year}학년도 공개 모집안내 기준입니다. 이후 학년도 자료가 나오면 해당 전형의 새 안내로 다시 대조합니다.</p></div><a href={trackDetail.source_url} target="_blank" rel="noreferrer">모집안내 원문 ↗</a></div>
+          <div className="admission-profile-sections">
+            <article><h5>지원 자격</h5><p>{trackDetail.eligibility}</p></article>
+            <article><h5>전형 방법</h5><p>{trackDetail.selection_method}</p></article>
+            <article><h5>서류 평가</h5><p>{trackDetail.document_evaluation}</p></article>
+            <article><h5>면접</h5><p>{trackDetail.interview}</p></article>
+            <article><h5>수능최저</h5><p>{trackDetail.csat_minimum}</p></article>
+          </div>
+          {trackDetail.schedule.length > 0 && <div className="admission-profile-sections mt-3"><article><h5>주요 일정</h5><ul>{trackDetail.schedule.map((item, index) => <li key={`schedule-${index}`}>{item}</li>)}</ul></article></div>}
+          {trackDetail.sections.length > 0 && <div className="admission-profile-sections mt-3">{trackDetail.sections.map((section) => <article key={section.title}><h5>{section.title}</h5><p>{section.description}</p><ul>{section.items.map((item, index) => <li key={`${section.title}-${index}`}>{item}</li>)}</ul></article>)}</div>}
+        </section>}
 
         {programProfile && <section className="admission-data-section" aria-label="학과 소개">
           <div className="admission-data-head"><div><span>학과 소개</span><h4>{programProfile.reference_program_name}</h4><p>{programProfile.source_admission_year}학년도 공개 학과 정보를 기준으로, 교육과정과 진로 방향을 살펴보세요.</p></div><a href={programProfile.source_url} target="_blank" rel="noreferrer">원문 보기 ↗</a></div>
