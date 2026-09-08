@@ -24,17 +24,34 @@ export function ChatThread({
   bubbles,
   bottomRef,
   empty,
+  intro,
 }: {
   bubbles: ChatBubble[];
   bottomRef: RefObject<HTMLDivElement | null>;
   empty: ReactNode;
+  /**
+   * 대화 맨 앞에 고정으로 놓이는 여는 말. 화면이 그리는 것이지 모델이 생성한 말이
+   * 아니므로, 사실 관계(무엇을 근거로 보는지·언제 확정되는지)만 적고 학생 상태를
+   * 해석하는 문장은 넣지 않는다.
+   */
+  intro?: ReactNode;
 }) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-3 bg-gray-50/40">
-      {bubbles.length === 0 ? (
-        <div className="h-full flex items-center justify-center">
-          <p className="max-w-sm text-center text-xs text-gray-500 leading-relaxed break-keep">{empty}</p>
+      {intro && (
+        <div className="flex flex-col gap-1 items-start">
+          <div className="bg-white border border-brand-200/70 text-gray-900 text-xs p-3.5 rounded-xl max-w-lg leading-relaxed break-keep space-y-2">
+            {intro}
+          </div>
         </div>
+      )}
+
+      {bubbles.length === 0 ? (
+        intro ? null : (
+          <div className="h-full flex items-center justify-center">
+            <p className="max-w-sm text-center text-xs text-gray-500 leading-relaxed break-keep">{empty}</p>
+          </div>
+        )
       ) : (
         bubbles.map((bubble) => (
           <div

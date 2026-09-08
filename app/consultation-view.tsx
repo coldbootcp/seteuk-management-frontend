@@ -197,6 +197,51 @@ export function ConsultationGate({
   }
 
   const kindLabel = status.requiredKind === "semester_review" ? "학기말 재평가 상담" : "최초 진단 상담";
+  const isReview = status.requiredKind === "semester_review";
+  const targetLabel =
+    status.targetGrade && status.targetSemester
+      ? `${status.targetGrade}학년 ${status.targetSemester}학기`
+      : "이번 학기";
+  /** 진단이 근거로 삼을 기록이 아직 하나도 없는 상태인지. 있으면 여는 말이 달라진다. */
+  const diagnosisIsEmpty = Boolean(
+    diagnosis &&
+      !diagnosis.headline_comment &&
+      diagnosis.strengths.length === 0 &&
+      diagnosis.weaknesses.length === 0 &&
+      diagnosis.opportunities.length === 0 &&
+      diagnosis.threats.length === 0,
+  );
+
+  /**
+   * 상담 창을 열자마자 놓이는 여는 말. 학생이 빈 입력칸 앞에서 "무슨 얘기를 하라는
+   * 거지?" 하고 멈추던 자리다. 화면이 그리는 문장이므로 사실만 적는다 — 무엇을 근거로
+   * 보는지, 무엇이 언제 확정되는지, 먼저 무슨 말을 하면 되는지.
+   */
+  const consultationIntro = (
+    <>
+      <p>
+        안녕하세요. <strong className="font-bold">세특연구소 AI 입시 컨설턴트</strong>입니다.
+        {isReview
+          ? " 지난 학기를 함께 돌아보고, 다음 학기에 무엇을 목표로 삼을지 정하는 상담이에요."
+          : " 학생의 기록을 처음 읽고, 앞으로 무엇을 목표로 삼고 어떤 탐구를 할지 함께 정하는 상담이에요."}
+      </p>
+      <p>
+        제가 보고 있는 것은 <strong className="font-bold">방금 만든 정밀 진단 리포트</strong>와, 지금까지 쌓인
+        성적·활동·독서·수상·봉사 기록, 그리고 가입할 때 답해주신 진로와 관심 축입니다.
+        {diagnosisIsEmpty && " 다만 아직 쌓인 기록이 없어 진단이 비어 있어요 — 그만큼 이 대화에서 들려주시는 이야기가 근거가 됩니다."}
+      </p>
+      <p>
+        이야기가 충분해지면 제가 <strong className="font-bold">{targetLabel} 목표와 탐구 주제 초안</strong>을 제안드릴게요.
+        마음에 들지 않으면 얼마든지 고쳐 말씀해주세요. <strong className="font-bold">대화만으로는 아무것도 확정되지 않고</strong>,
+        아래 [상담 마치고 메인 화면으로] 버튼을 누르는 순간에만 계획으로 저장됩니다.
+      </p>
+      <p className="text-gray-500">
+        {isReview
+          ? "먼저 이번 학기에 실제로 한 것과 아쉬웠던 것부터 편하게 들려주세요."
+          : "먼저 관심 있는 분야, 해보고 싶은 것, 피하고 싶은 제약을 편하게 들려주세요."}
+      </p>
+    </>
+  );
 
   return (
     <GateFrame badge={kindLabel} onSignOut={onSignOut} width="wide">
@@ -419,10 +464,11 @@ export function ConsultationGate({
               bottomRef={bottomRef}
               bubbles={bubbles}
               empty={
-                status.requiredKind === "semester_review"
+                isReview
                   ? "이번 학기가 어땠는지 편하게 이야기해주세요."
                   : "관심 분야나 앞으로의 방향에 대해 이야기해주세요."
               }
+              intro={consultationIntro}
             />
 
             <ChatComposer
