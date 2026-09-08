@@ -245,28 +245,41 @@
 .form-field { display: flex; flex-direction: column; gap: 5px; }
 
 .form-field label {
-  color: var(--text-2);
-  font-size: 12.5px;
-  font-weight: 600;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
 }
 
+/*
+  아직 Tailwind로 옮기지 않은 폼들이 전부 이 규칙을 쓴다. 목업의 입력칸 모양
+  (둥근 12px · 연회색 바탕 · 포커스에서 흰 바탕)을 여기 한 군데에 맞춰 두면
+  프로필·활동 기록의 남은 폼이 함께 목업 톤을 따른다.
+*/
 .form-field input,
 .form-field textarea,
 .form-field select {
-  background: var(--surface);
+  background: rgba(248, 249, 250, 0.5);
   border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  border-radius: 12px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
   outline: none;
-  padding: 11px 13px;
-  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  padding: 9px 14px;
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
   width: 100%;
+}
+
+.form-field input:hover,
+.form-field textarea:hover,
+.form-field select:hover {
+  border-color: var(--border-2, #DDE1E6);
 }
 
 .form-field input:focus,
 .form-field textarea:focus,
 .form-field select:focus {
+  background: var(--surface);
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(49,130,246,0.12);
 }
