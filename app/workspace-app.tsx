@@ -3574,6 +3574,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
           {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} onWorkspace={onWorkspace} />}
           {tab === "timetable"  && (
             <TimetableView
+              activities={workspace.activities}
               currentGrade={workspace.profile.grade}
               currentSemester={workspace.profile.semester}
               timetables={timetables}
