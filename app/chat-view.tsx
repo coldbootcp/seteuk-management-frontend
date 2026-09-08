@@ -4,21 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api-client";
 import {
   streamMessage,
-  TOOL_LABELS,
-  type ChatAction,
   type ChatMode,
   type Conversation,
   type StoredMessage,
 } from "../lib/chat";
-import { MarkdownText } from "./markdown-text";
-
-type Bubble = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  actions: ChatAction[];
-  streaming?: boolean;
-};
+import { ChatComposer, ChatThread, type ChatBubble } from "./chat-thread";
 
 /**
  * 챗봇 화면.
@@ -30,7 +20,7 @@ type Bubble = {
 export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  const [bubbles, setBubbles] = useState<ChatBubble[]>([]);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<ChatMode>("normal");
   const [streaming, setStreaming] = useState(false);
@@ -152,131 +142,117 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
     }
   }
 
+  const activeTitle = conversations.find((c) => c.id === activeId)?.title ?? "새 대화";
+
   return (
-    <div className="chat-layout">
-      <aside className="chat-list">
-        <div className="chat-list-head">
-          <span>대화</span>
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-[640px]">
+      {/* 대화 목록 */}
+      <aside className="bg-white p-4 rounded-xl border border-gray-200/80 flex flex-col gap-3 min-h-0">
+        <div className="flex items-center justify-between flex-none">
+          <span className="text-xs font-semibold text-gray-400">대화 목록</span>
           <button
-            type="button"
+            className="text-xs text-brand-600 font-bold hover:text-brand-700 transition"
             onClick={async () => {
               const created = await api<Conversation>("/conversations", { method: "POST" });
               await loadConversations();
               setActiveId(created.id);
               setBubbles([]);
             }}
+            type="button"
           >
             + 새 대화
           </button>
         </div>
-        {conversations.length === 0 ? (
-          <p className="chat-empty-list">아직 대화가 없습니다.</p>
-        ) : (
-          <ul>
-            {conversations.map((conversation) => (
-              <li key={conversation.id}>
-                <button
-                  type="button"
-                  className={conversation.id === activeId ? "active" : ""}
-                  onClick={() => void open(conversation.id)}
-                >
-                  {conversation.title ?? "새 대화"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
+          {conversations.length === 0 ? (
+            <p className="text-xs text-gray-400 py-2">아직 대화가 없습니다.</p>
+          ) : (
+            conversations.map((conversation) => (
+              <button
+                className={`w-full text-left p-2 rounded-lg text-xs transition truncate ${
+                  conversation.id === activeId
+                    ? "bg-gray-100 text-gray-950 font-bold"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+                key={conversation.id}
+                onClick={() => void open(conversation.id)}
+                type="button"
+              >
+                {conversation.title ?? "새 대화"}
+              </button>
+            ))
+          )}
+        </div>
       </aside>
 
-      <section className="chat-main">
-        <header className="chat-head">
-          <div>
-            <h2>{conversations.find((c) => c.id === activeId)?.title ?? "새 대화"}</h2>
-            <p>기록된 내 자료를 근거로 답합니다.</p>
+      {/* 대화 창 */}
+      <section className="md:col-span-3 bg-white rounded-xl border border-gray-200/80 flex flex-col overflow-hidden min-h-0">
+        <header className="p-3.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-none">
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold text-gray-950 truncate">{activeTitle}</h4>
+            <p className="text-[11px] text-gray-400 mt-0.5">기록된 내 자료를 근거로 답합니다</p>
           </div>
-          <label className="chat-toggle">
-            <span className={mode === "edit" ? "on" : ""}>수정 모드</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={mode === "edit"}
-              className={mode === "edit" ? "switch on" : "switch"}
-              onClick={() => setMode(mode === "edit" ? "normal" : "edit")}
+          {/* 이 토글이 곧 동의다 — 켜면 확인 단계 없이 도구가 바로 실행된다. */}
+          <button
+            aria-checked={mode === "edit"}
+            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition flex-none ${
+              mode === "edit"
+                ? "bg-brand-50 border-brand-200 text-brand-700"
+                : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+            }`}
+            onClick={() => setMode(mode === "edit" ? "normal" : "edit")}
+            role="switch"
+            type="button"
+          >
+            <span
+              className={`w-7 h-4 rounded-full flex items-center px-0.5 transition ${
+                mode === "edit" ? "bg-brand-500 justify-end" : "bg-gray-300 justify-start"
+              }`}
             >
-              <span />
-            </button>
-          </label>
+              <span className="w-3 h-3 rounded-full bg-white block" />
+            </span>
+            수정 모드
+          </button>
         </header>
 
         {mode === "edit" && (
-          <p className="chat-notice">
+          <p className="px-4 py-2.5 bg-amber-50/70 border-b border-amber-200/70 text-[11px] text-amber-900 leading-relaxed flex-none">
             수정 모드에서는 확인 단계 없이 도구가 바로 실행됩니다(토글이 곧 동의입니다).
-            대화로는 어떤 기록도 <strong>삭제되지 않습니다</strong> — 삭제는 각 탭에서만 됩니다.
+            대화로는 어떤 기록도 <strong className="font-bold">삭제되지 않습니다</strong> — 삭제는 각 탭에서만 됩니다.
           </p>
         )}
 
-        <div className="chat-scroll">
-          {bubbles.length === 0 ? (
-            <p className="chat-empty">
-              무엇이든 물어보세요. 예를 들어 “지금까지 활동 중 뭐가 제일 약해?” 또는
-              수정 모드에서 “어제 이기적 유전자 다 읽었어”처럼요.
-            </p>
-          ) : (
-            bubbles.map((bubble) => (
-              <div key={bubble.id} className={`chat-row ${bubble.role}`}>
-                <div className="chat-bubble">
-                  {bubble.role === "assistant" ? <MarkdownText text={bubble.content} /> : bubble.content}
-                  {bubble.streaming && !bubble.content && <em>생각하는 중…</em>}
-                </div>
-                {bubble.actions.length > 0 && (
-                  <div className="chat-actions">
-                    {bubble.actions.map((action, index) => (
-                      <span
-                        key={index}
-                        className={
-                          action.result && "error" in action.result ? "chip failed" : "chip"
-                        }
-                      >
-                        {action.result && "error" in action.result ? "✕" : "✓"}{" "}
-                        {TOOL_LABELS[action.tool] ?? action.tool}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-          <div ref={bottomRef} />
-        </div>
+        <ChatThread
+          bottomRef={bottomRef}
+          bubbles={bubbles}
+          empty={
+            <>
+              무엇이든 물어보세요. 예를 들어 &ldquo;지금까지 활동 중 뭐가 제일 약해?&rdquo; 또는
+              수정 모드에서 &ldquo;어제 이기적 유전자 다 읽었어&rdquo;처럼요.
+            </>
+          }
+        />
 
-        {error && <p className="chat-error">{error}</p>}
+        {error && (
+          <p className="px-4 py-2 bg-red-50 border-t border-red-200/70 text-[11px] font-semibold text-red-700 flex-none">
+            {error}
+          </p>
+        )}
 
-        <div className="chat-input">
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              // 한글(IME) 입력 중 마지막 글자를 조합 확정하는 Enter는 보내기가
-              // 아니다 — isComposing을 안 보면 조합 확정용 Enter와 그 직후의
-              // 실제 Enter가 keydown 두 번으로 잡혀 메시지가 두 번 나간다.
-              if (event.nativeEvent.isComposing) return;
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void send();
-              }
-            }}
-            rows={2}
-            placeholder={
-              mode === "edit"
-                ? "예: 어제 이기적 유전자 다 읽었어 (독서 기록에 추가됩니다)"
-                : "예: 2학년 활동 중에 진로랑 가장 안 맞는 게 뭐야?"
-            }
-          />
-          <button type="button" onClick={() => void send()} disabled={streaming || !input.trim()}>
-            {streaming ? "…" : "보내기"}
-          </button>
-        </div>
-        <p className="chat-hint">Enter로 전송, Shift+Enter로 줄바꿈</p>
+        <ChatComposer
+          disabled={streaming || !input.trim()}
+          hint="Enter로 전송, Shift+Enter로 줄바꿈"
+          onChange={setInput}
+          onSend={() => void send()}
+          placeholder={
+            mode === "edit"
+              ? "예: 어제 이기적 유전자 다 읽었어 (독서 기록에 추가됩니다)"
+              : "예: 2학년 활동 중에 진로랑 가장 안 맞는 게 뭐야?"
+          }
+          streaming={streaming}
+          value={input}
+        />
       </section>
     </div>
   );

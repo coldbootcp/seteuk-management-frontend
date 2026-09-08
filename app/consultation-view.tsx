@@ -7,14 +7,10 @@ import {
   confirmFullReplan,
   createOrResumeConsultationSession,
 } from "../lib/workspace-adapter";
-import {
-  streamConsultationMessage,
-  TOOL_LABELS,
-  type ChatAction,
-} from "../lib/chat";
+import { streamConsultationMessage } from "../lib/chat";
 import type { ConsultationSession, ConsultationStatus } from "../lib/product-harness";
-import { MarkdownText } from "./markdown-text";
 import { GateFrame } from "./gate-frame";
+import { ChatComposer, ChatThread, type ChatBubble } from "./chat-thread";
 
 type DiagnosisPreQuestion = { key: string; prompt: string; options: string[]; allow_custom: boolean };
 
@@ -25,14 +21,6 @@ type DiagnosisResult = {
   opportunities: string[];
   threats: string[];
   headline_comment: string | null;
-};
-
-type Bubble = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  actions: ChatAction[];
-  streaming?: boolean;
 };
 
 /**
@@ -57,7 +45,7 @@ export function ConsultationGate({
   const [preAnswers, setPreAnswers] = useState<Record<string, string>>({});
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
   const [session, setSession] = useState<ConsultationSession | null>(null);
-  const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  const [bubbles, setBubbles] = useState<ChatBubble[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [ready, setReady] = useState(false);
@@ -427,57 +415,24 @@ export function ConsultationGate({
               </span>
             </div>
 
-            <div className="chat-scroll">
-              {bubbles.length === 0 ? (
-                <p className="chat-empty">
-                  {status.requiredKind === "semester_review"
-                    ? "이번 학기가 어땠는지 편하게 이야기해주세요."
-                    : "관심 분야나 앞으로의 방향에 대해 이야기해주세요."}
-                </p>
-              ) : (
-                bubbles.map((bubble) => (
-                  <div key={bubble.id} className={`chat-row ${bubble.role}`}>
-                    <div className="chat-bubble">
-                      {bubble.role === "assistant" ? <MarkdownText text={bubble.content} /> : bubble.content}
-                      {bubble.streaming && !bubble.content && <em>생각하는 중…</em>}
-                    </div>
-                    {bubble.actions.length > 0 && (
-                      <div className="chat-actions">
-                        {bubble.actions.map((action, index) => (
-                          <span
-                            key={index}
-                            className={action.result && "error" in action.result ? "chip failed" : "chip"}
-                          >
-                            {action.result && "error" in action.result ? "✕" : "✓"}{" "}
-                            {TOOL_LABELS[action.tool] ?? action.tool}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-              <div ref={bottomRef} />
-            </div>
+            <ChatThread
+              bottomRef={bottomRef}
+              bubbles={bubbles}
+              empty={
+                status.requiredKind === "semester_review"
+                  ? "이번 학기가 어땠는지 편하게 이야기해주세요."
+                  : "관심 분야나 앞으로의 방향에 대해 이야기해주세요."
+              }
+            />
 
-            <div className="chat-input flex-none">
-              <textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.nativeEvent.isComposing) return;
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void send();
-                  }
-                }}
-                rows={2}
-                placeholder="메시지를 입력하세요"
-              />
-              <button type="button" onClick={() => void send()} disabled={streaming || !input.trim()}>
-                {streaming ? "…" : "보내기"}
-              </button>
-            </div>
+            <ChatComposer
+              disabled={streaming || !input.trim()}
+              onChange={setInput}
+              onSend={() => void send()}
+              placeholder="메시지를 입력하세요"
+              streaming={streaming}
+              value={input}
+            />
 
             <div className="px-5 py-3.5 border-t border-gray-100 bg-gray-50/60 flex-none">
               <button

@@ -2817,127 +2817,137 @@ function PortfolioView({ workspace }: { workspace: ProductWorkspace }) {
   };
 
   return (
-    <div className="portfolio-page">
-      <div className="portfolio-header">
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-gray-200/80">
         <div>
-          <span className="kicker">ADMISSIONS PORTFOLIO</span>
-          <h1>수시 학생부종합 준비</h1>
-          <p>3년간 축적한 실제 활동의 사실과 증거를 바탕으로 자소서 서사 흐름과 심층 면접 질문을 정리합니다.</p>
+          <h2 className="text-xl font-bold text-gray-950 tracking-tight">수시 학생부종합전형 준비 자료</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            실제로 기록한 활동만 근거로 씁니다 — 자소서 서사 흐름과 면접 검증 질문을 정리합니다.
+          </p>
         </div>
-        <div className="portfolio-stat-pill">
-          <span className="stat-label">누적 검증 활동</span>
-          <strong className="stat-num">{records.length}건</strong>
+        <div className="text-left md:text-right flex-none">
+          <span className="text-[11px] text-gray-400 block font-medium">누적 검증 활동</span>
+          <strong className="text-lg font-bold text-gray-950 tabular-nums">{records.length}건</strong>
         </div>
       </div>
 
-      {/* Target & Keywords Overview Card */}
-      <div className="portfolio-hero-card">
-        <div className="portfolio-hero-meta">
-          <span className="hero-badge">목표 진로 및 학과</span>
-          <h2 className="hero-title">{workspace.profile.targetCareer} <span className="hero-sub">({workspace.profile.targetMajors.join(", ") || "전공 미정"})</span></h2>
-          <p className="hero-desc">
+      {/* 목표와 핵심 키워드 */}
+      <div className="bg-white p-6 rounded-xl border border-gray-200/80 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="min-w-0">
+          <span className="inline-block px-2 py-0.5 rounded bg-blue-50 text-brand-600 text-[10px] font-bold">
+            목표 진로 및 학과
+          </span>
+          <h3 className="text-lg font-extrabold text-gray-950 tracking-tight mt-1.5">
+            {workspace.profile.targetCareer || "진로 미입력"}{" "}
+            <span className="text-sm font-bold text-gray-400">
+              ({workspace.profile.targetMajors.join(", ") || "전공 미정"})
+            </span>
+          </h3>
+          <p className="text-xs text-gray-600 leading-relaxed mt-1.5 break-keep">
             {records.length > 0
-              ? `${workspace.profile.targetCareer} 전공 적합성을 중심으로 ${records.length}개의 탐구·수행 기록이 유기적으로 연계되어 있습니다.`
+              ? `${workspace.profile.targetCareer} 전공 적합성을 중심으로 ${records.length}개의 탐구·수행 기록이 이어져 있습니다.`
               : "활동을 기록하면 진로 관심과 연결된 자소서 핵심 서사가 자동으로 구조화됩니다."}
           </p>
         </div>
         {themes.length > 0 && (
-          <div className="portfolio-keywords-box">
-            <span className="keywords-title">핵심 역량 키워드</span>
-            <div className="keywords-wrap">
+          <div className="lg:max-w-sm w-full flex-none p-3.5 rounded-xl bg-gray-50/70 border border-gray-200/60">
+            <span className="text-[10px] font-bold text-gray-400 block mb-1.5">핵심 역량 키워드</span>
+            <div className="flex flex-wrap gap-1.5">
               {themes.map((theme) => (
-                <span className="portfolio-keyword-chip" key={theme}>#{theme}</span>
+                <span
+                  className="px-2 py-0.5 rounded-lg bg-white border border-gray-200/80 text-[11px] font-semibold text-gray-700"
+                  key={theme}
+                >
+                  #{theme}
+                </span>
               ))}
             </div>
           </div>
         )}
       </div>
 
-      {/* Two Column Layout: 자소서 서사 vs 면접 대비 */}
-      <div className="portfolio-grid">
-        {/* Left: Narrative Timeline */}
-        <section className="portfolio-section-card">
-          <div className="section-head">
-            <div>
-              <span className="kicker">NARRATIVE TIMELINE</span>
-              <h2>자소서 서사 흐름</h2>
-            </div>
-            <span className="section-badge">{records.length}개 탐구 연계</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* 자소서 서사 흐름 */}
+        <section className="bg-white p-6 rounded-xl border border-gray-200/80 space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <h3 className="text-sm font-bold text-gray-950">자소서 서사 흐름</h3>
+            <span className="text-xs text-gray-400 font-medium">{records.length}개 탐구 연계</span>
           </div>
 
           {records.length === 0 ? (
-            <div className="portfolio-empty-box">
-              <p>아직 기록된 활동이 없습니다. [활동 기록] 탭에서 이번 학기 수행평가와 탐구 활동을 남겨보세요.</p>
-            </div>
+            <p className="text-xs text-gray-400 leading-relaxed py-6 text-center break-keep">
+              아직 기록된 활동이 없습니다. [활동 &amp; 세특] 화면에서 이번 학기 수행평가와 탐구 활동을 남겨보세요.
+            </p>
           ) : (
-            <div className="narrative-timeline">
-              {records.map((record, index) => (
-                <article className="narrative-item" key={record.id}>
-                  <div className="narrative-marker">
-                    <span className="marker-dot" />
-                    {index < records.length - 1 && <span className="marker-line" />}
-                  </div>
-                  <div className="narrative-content">
-                    <div className="narrative-top">
-                      <span className="narrative-period">{record.completedAt || record.periodLabel}</span>
-                      <span className="narrative-subject">{record.subject}</span>
-                    </div>
-                    <h3 className="narrative-title">{record.title}</h3>
-                    <p className="narrative-summary">{record.summary}</p>
-                    {record.reflection && (
-                      <blockquote className="narrative-reflection">
-                        <strong>배운 점 · 느낀 점</strong>
-                        <span>{record.reflection}</span>
-                      </blockquote>
+            <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
+              {records.map((record) => (
+                <article className="p-3.5 rounded-lg bg-gray-50/70 border border-gray-200/60" key={record.id}>
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-xs font-bold text-brand-600">{record.completedAt || record.periodLabel}</span>
+                    {record.subject && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-500">
+                        {record.subject}
+                      </span>
                     )}
                   </div>
+                  <h4 className="text-xs font-bold text-gray-900 leading-snug break-keep">{record.title}</h4>
+                  {record.summary && (
+                    <p className="text-xs text-gray-600 leading-relaxed mt-1 break-keep">{record.summary}</p>
+                  )}
+                  {record.reflection && (
+                    <div className="text-xs text-gray-600 bg-white p-2.5 rounded border-l-2 border-brand-500 mt-2">
+                      <strong className="block text-[10px] text-gray-400 font-semibold mb-0.5">배운 점 · 느낀 점</strong>
+                      <span className="break-keep">{record.reflection}</span>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
           )}
         </section>
 
-        {/* Right: Interview Preparation */}
-        <section className="portfolio-section-card">
-          <div className="section-head">
-            <div>
-              <span className="kicker">INTERVIEW PREP</span>
-              <h2>면접 대비 예상 질문</h2>
-            </div>
-            <span className="section-badge">심층 압박 대비</span>
+        {/* 면접 대비 */}
+        <section className="bg-white p-6 rounded-xl border border-gray-200/80 space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <h3 className="text-sm font-bold text-gray-950">면접 대비 예상 질문 &amp; 답변 포인트</h3>
+            <span className="text-xs text-gray-400 font-medium">심층 검증</span>
           </div>
 
           {records.length === 0 ? (
-            <div className="portfolio-empty-box">
-              <p>활동을 저장하면 입학사정관 및 교수 관점의 면접 검증 질문이 자동으로 생성됩니다.</p>
-            </div>
+            <p className="text-xs text-gray-400 leading-relaxed py-6 text-center break-keep">
+              활동을 저장하면 그 기록을 근거로 면접 검증 질문이 만들어집니다.
+            </p>
           ) : (
-            <div className="interview-list">
+            <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
               {records.slice(-6).reverse().map((record, index) => {
                 const questionText = `“${record.title}”에서 본인이 주도적으로 탐구한 핵심 원리는 무엇이며, 이 과정이 ${workspace.profile.targetCareer} 진로에 미친 영향은?`;
                 const isCopied = copiedQuestionId === record.id;
                 return (
-                  <div className="interview-card" key={record.id}>
-                    <div className="interview-header">
-                      <span className="interview-num">Q{index + 1}</span>
-                      <span className="interview-subject">{record.subject}</span>
+                  <div className="p-3.5 rounded-lg border border-gray-200/70 bg-white space-y-2" key={record.id}>
+                    <div className="flex items-start justify-between gap-2">
+                      <h5 className="text-xs font-bold text-gray-900 leading-snug break-keep">
+                        Q{index + 1}. {questionText}
+                      </h5>
                       <button
-                        className={`btn-copy-q${isCopied ? " copied" : ""}`}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition flex-none ${
+                          isCopied
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                            : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+                        }`}
                         onClick={() => copyToClipboard(questionText, record.id)}
                         type="button"
                       >
-                        {isCopied ? "복사됨 ✓" : "질문 복사"}
+                        {isCopied ? "복사됨 ✓" : "복사"}
                       </button>
                     </div>
-                    <p className="interview-question">{questionText}</p>
-                    <div className="interview-tips">
-                      <div className="tip-row">
-                        <strong>검증 포인트</strong>
-                        <span>단순 참여가 아닌 본인의 구체적 문제해결 과정 설명</span>
+                    <div className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded border-l-2 border-brand-500 space-y-1">
+                      <div>
+                        <strong className="block text-[10px] text-gray-400 font-semibold mb-0.5">검증 포인트</strong>
+                        <span className="break-keep">단순 참여가 아니라 본인이 무엇을 어떻게 해결했는지 설명해야 합니다.</span>
                       </div>
-                      <div className="tip-row">
-                        <strong>근거 기록</strong>
-                        <span>{record.title} ({record.completedAt || record.periodLabel})</span>
+                      <div>
+                        <strong className="block text-[10px] text-gray-400 font-semibold mb-0.5">근거 기록</strong>
+                        <span className="break-keep">{record.title} ({record.completedAt || record.periodLabel})</span>
                       </div>
                     </div>
                   </div>
@@ -2950,6 +2960,7 @@ function PortfolioView({ workspace }: { workspace: ProductWorkspace }) {
     </div>
   );
 }
+
 function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void }) {
   const [form, setForm] = useState<ProfileForm>({
     name: workspace.profile.name,
