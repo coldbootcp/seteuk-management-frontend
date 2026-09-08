@@ -396,6 +396,16 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
       <p>이 작업실은 학생이 저장한 활동과 느낀 점만 근거로 씁니다. 기록에 없는 역할·성과·수치를 새로 만들지 않습니다.</p>
     </div>
 
+    {targets.length === 0 && <section className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-xs" aria-label="수시 준비 시작 방법">
+      <span className="text-[10px] font-extrabold tracking-wider text-brand-600">START HERE</span>
+      <h2 className="mt-1 text-base font-extrabold text-gray-950">첫 지원처를 정하면 준비 작업실이 열립니다</h2>
+      <ol className="mt-4 grid gap-3 sm:grid-cols-3">
+        <li className="rounded-xl bg-gray-50 p-3 text-xs text-gray-600"><b className="block text-brand-700">1. 대학 찾기</b><span className="mt-1 block">예: 서울대학교처럼 공식 대학명을 입력합니다.</span></li>
+        <li className="rounded-xl bg-gray-50 p-3 text-xs text-gray-600"><b className="block text-brand-700">2. 학과·전형 고르기</b><span className="mt-1 block">선택한 대학의 실제 모집단위와 전형만 표시됩니다.</span></li>
+        <li className="rounded-xl bg-gray-50 p-3 text-xs text-gray-600"><b className="block text-brand-700">3. 활동 근거 정리</b><span className="mt-1 block">카드가 만들어지면 내 기록 중 설명할 활동을 고릅니다.</span></li>
+      </ol>
+    </section>}
+
     <section className="portfolio-targets" aria-label="지원 대학과 학과">
       <div className="portfolio-section-head">
         <div><span className="portfolio-step">01</span><h2>지원 카드</h2><p>공식 모집 정보에서 대학·모집단위·전형을 고르면, 해당 지원처만을 위한 준비 작업실이 만들어집니다.</p></div>
