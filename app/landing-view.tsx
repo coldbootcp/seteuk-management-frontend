@@ -15,27 +15,13 @@ import { useState } from "react";
 import {
   FAQS,
   FEATURE_ENGINES,
-  HERO_STATS,
-  IS_PLACEHOLDER,
-  PRICING_PLANS,
-  SUCCESS_CASES,
+  HERO_PRINCIPLES,
 } from "./landing-content";
 
 const NAV_LINKS = [
   { href: "#features", label: "핵심 기능" },
-  { href: "#cases", label: "합격 사례" },
-  { href: "#pricing", label: "플랜 안내" },
   { href: "#faq", label: "자주 묻는 질문" },
 ];
-
-function PlaceholderTag({ text = "예시" }: { text?: string }) {
-  if (!IS_PLACEHOLDER) return null;
-  return (
-    <span className="text-[10px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded align-middle">
-      {text}
-    </span>
-  );
-}
 
 export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -94,20 +80,20 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
           <div className="text-center max-w-3xl mx-auto space-y-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-50 border border-brand-200/80 text-brand-600 text-xs md:text-sm font-bold">
               <span className="flex h-2 w-2 rounded-full bg-brand-500" />
-              <span>2028 대입 개편안 대응 · 상위권 학종 1:1 코칭</span>
+              <span>고교 활동 기록부터 수시 준비까지</span>
             </div>
 
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-gray-950 tracking-tight leading-[1.15]">
               산발적인 세특 기록을 넘어,
               <br />
               <span className="bg-gradient-to-r from-brand-600 via-indigo-600 to-brand-500 bg-clip-text text-transparent">
-                합격을 완성하는 하나의 탐구 서사
+                나만의 탐구 흐름을 차분히 쌓아가세요
               </span>
             </h1>
 
             <p className="text-base sm:text-lg md:text-xl text-gray-600 leading-relaxed max-w-2xl mx-auto">
-              학생부 Fact(이수단위·성적)와 Interpretation(학업태도·탐구역량)의 2단계 정밀 진단부터, 전담 컨설턴트
-              AI와의 양방향 코칭으로 학기마다 이어지는 탐구 서사를 완성하세요.
+              학생부와 활동 기록을 정리하고, 이번 학기 계획을 실제 학교 기회와 연결해 보세요.
+              기록이 아직 없다면 과거를 지어내지 않고, 현재 관심사부터 함께 시작합니다.
             </p>
 
             <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-3.5">
@@ -119,17 +105,16 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
                 <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
                   <path d="M12 3c-4.97 0-9 3.185-9 7.115 0 2.557 1.708 4.8 4.27 6.054-.187.707-.677 2.56-.775 2.964-.122.506.186.499.392.363.162-.107 2.573-1.748 3.612-2.456.491.07 1.002.107 1.521.107 4.97 0 9-3.185 9-7.115S16.97 3 12 3z" />
                 </svg>
-                <span>1초로 무료 시작하기</span>
+                <span>무료로 시작하기</span>
               </button>
             </div>
 
             <div className="pt-6 flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs md:text-sm text-gray-500 font-medium">
-              {HERO_STATS.map((stat, index) => (
+              {HERO_PRINCIPLES.map((stat, index) => (
                 <div className="flex items-center gap-2" key={stat.label}>
                   {index > 0 && <span className="h-3 w-px bg-gray-300 hidden sm:block -ml-4 mr-2" />}
-                  <span className={`font-extrabold text-base md:text-lg ${stat.tone}`}>{stat.value}</span>
+                  <span className="font-extrabold text-base md:text-lg text-gray-900">{stat.value}</span>
                   <span>{stat.label}</span>
-                  {index === HERO_STATS.length - 1 && <PlaceholderTag text="예시 수치" />}
                 </div>
               ))}
             </div>
@@ -148,7 +133,7 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
                 <span className="text-xs font-bold text-gray-400 font-mono">SETEUK PRO WORKSPACE · PREVIEW</span>
               </div>
               <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                ● 진단 결과와 실시간 연동
+                ● 화면 예시
               </span>
             </div>
 
@@ -289,105 +274,6 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
                   <h3 className="text-xl font-extrabold text-gray-950 leading-snug">{engine.title}</h3>
                 </div>
                 <p className="text-sm text-gray-600 leading-relaxed">{engine.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 합격 사례 */}
-      <section className="py-20 bg-white border-y border-gray-200/70" id="cases">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <div className="text-center max-w-2xl mx-auto space-y-3">
-            <h2 className="text-2xl md:text-4xl font-extrabold text-gray-950 tracking-tight leading-snug">
-              선배들이 증명한 합격 서사 <PlaceholderTag text="예시 사례" />
-            </h2>
-            {IS_PLACEHOLDER && (
-              <p className="text-xs text-gray-400">
-                아래 후기는 디자인 확인용 예시입니다. 실제 사례로 교체하기 전까지는 표시만 해 둡니다.
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {SUCCESS_CASES.map((item) => (
-              <div
-                className="p-7 rounded-3xl bg-surface-bg border border-gray-200/90 flex flex-col justify-between gap-6"
-                key={item.univ}
-              >
-                <div className="space-y-4">
-                  <div className="text-amber-400 text-sm">★★★★★</div>
-                  <p className="text-sm text-gray-700 leading-relaxed">“{item.quote}”</p>
-                </div>
-                <div className="pt-4 border-t border-gray-200/80">
-                  <div className="font-extrabold text-sm text-gray-950">{item.univ}</div>
-                  <div className="text-xs text-brand-600 font-semibold mt-0.5">{item.track}</div>
-                  <div className="text-[11px] text-gray-400 mt-1">{item.student}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 플랜 */}
-      <section className="py-20" id="pricing">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <div className="text-center max-w-2xl mx-auto space-y-3">
-            <h2 className="text-2xl md:text-4xl font-extrabold text-gray-950 tracking-tight leading-snug">
-              학원 컨설팅 비용의 일부로 누리는
-              <br />
-              <span className="text-brand-600">전담 관리 플랜</span> <PlaceholderTag text="예시 요금" />
-            </h2>
-            <p className="text-sm text-gray-600">모든 플랜에서 2단계 정밀 진단을 무료로 시작할 수 있습니다.</p>
-            {IS_PLACEHOLDER && (
-              <p className="text-xs text-gray-400">결제 기능은 아직 준비 중이라 모든 버튼은 무료 가입으로 이어집니다.</p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-            {PRICING_PLANS.map((plan) => (
-              <div
-                className={`p-7 rounded-3xl border space-y-5 ${
-                  plan.highlight
-                    ? "bg-white border-brand-300 ring-2 ring-brand-100 shadow-card"
-                    : "bg-white border-gray-200/90"
-                }`}
-                key={plan.name}
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-extrabold text-xl text-gray-950">{plan.name}</h4>
-                    {plan.badge && (
-                      <span className="text-[11px] font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded">
-                        {plan.badge}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-3xl font-extrabold text-gray-950 pt-2">{plan.price}</div>
-                  <p className="text-[11px] text-gray-400 font-semibold">{plan.priceNote}</p>
-                </div>
-
-                <ul className="space-y-2 text-xs text-gray-600">
-                  {plan.features.map((feature) => (
-                    <li className="flex items-start gap-2" key={feature}>
-                      <span className="text-brand-500 font-bold">✓</span>
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <button
-                  className={`w-full py-3 rounded-xl font-bold text-xs transition ${
-                    plan.highlight
-                      ? "bg-brand-600 hover:bg-brand-700 text-white"
-                      : "border border-gray-200 hover:border-brand-300 hover:text-brand-600 text-gray-700"
-                  }`}
-                  onClick={onGoToLogin}
-                  type="button"
-                >
-                  {plan.cta} →
-                </button>
               </div>
             ))}
           </div>

@@ -86,6 +86,17 @@ const INITIAL_SEMESTERS_DATA: SemesterGradeData[] = [
   { grade: 3, semester: 2, items: [] },
 ];
 
+// 성적이 없는 학생에게 목업 점수·등급을 본인 성적처럼 보이면 안 된다. 모든 학기는
+// 빈 상태에서 시작하고, 학생부·직접 입력·시간표에서 확인된 과목만 채운다.
+const EMPTY_SEMESTERS_DATA: SemesterGradeData[] = Array.from(
+  { length: 6 },
+  (_, index) => ({
+    grade: Math.floor(index / 2) + 1,
+    semester: (index % 2) + 1,
+    items: [],
+  }),
+);
+
 // 시간표 과목을 성적표 데이터에 병합하는 순수 헬퍼 (기존 입력 성적 보존)
 function syncTimetableWithSemesters(
   data: SemesterGradeData[],
@@ -133,8 +144,10 @@ function syncTimetableWithSemesters(
           category: tc.category,
           group: tc.group,
           units: tc.units,
-          rank: tc.category === "진로선택" ? null : 2,
-          achievement: tc.category === "진로선택" ? "A" : null,
+          // 시간표는 '수강 예정/중' 과목만 알려준다. 성적·성취도를 임의로 채우지
+          // 않고 학생이 실제 결과를 입력할 때까지 빈 값으로 둔다.
+          rank: null,
+          achievement: null,
           rawScore: null,
           subjectAverage: null,
           stdDev: null,
@@ -167,7 +180,7 @@ export function GradesView({
   onRecordsChanged,
 }: GradesViewProps) {
   const [semestersData, setSemestersData] = useState<SemesterGradeData[]>(() =>
-    syncTimetableWithSemesters(INITIAL_SEMESTERS_DATA, defaultTimetable).updatedData
+    syncTimetableWithSemesters(EMPTY_SEMESTERS_DATA, defaultTimetable).updatedData
   );
   const [educationPolicy, setEducationPolicy] = useState<EducationPolicyResolution | null>(null);
   const [educationPolicyLoaded, setEducationPolicyLoaded] = useState(false);

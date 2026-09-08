@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, downloadFile, logout, tokens } from "../lib/api-client";
+import { api, ApiError, downloadFile, logout, tokens } from "../lib/api-client";
+import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
 import { SignIn } from "./sign-in";
 import { LandingView } from "./landing-view";
@@ -125,17 +126,6 @@ const EMPTY_PROFILE: ProfileForm = {
   collaborationStyle: "",
   roadmapDesignNotes: "",
 };
-
-/**
- * 온보딩에서 학생이 직접 고르는 고민. 백엔드의 `self_assessed_weaknesses`로 그대로
- * 저장되므로 장식이 아니다 — 진단과 상담 프롬프트가 이 값을 읽는다.
- */
-const ONBOARDING_CONCERNS = [
-  { title: "세특의 학술적 깊이", desc: "교과서 개념 요약을 넘어서는 심화 탐구가 부족합니다" },
-  { title: "활동 사이의 연계성", desc: "과목·동아리 활동이 하나의 서사로 이어지지 않습니다" },
-  { title: "성적과 세특의 균형", desc: "내신 관리와 탐구 보고서 작성 시간이 서로 부딪힙니다" },
-  { title: "차별화된 주제 찾기", desc: "같은 학과를 지망하는 학생들과 겹치지 않는 주제가 필요합니다" },
-];
 
 /** AI 확인 질문 카드의 색. 질문 순서대로 돌려 쓴다(목업의 파랑·보라·초록). */
 const AI_QUESTION_TONES = [
@@ -941,9 +931,13 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   }
 
   const hasValidFreshmanYear = /^(19|20)\d{2}$/.test(form.freshmanAcademicYear);
-  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && !!form.targetCareer.trim() && hasValidFreshmanYear;
+  // 진로가 아직 비어 있어도 상담에서 탐색할 수 있다. 가입 단계에서 억지로 분야를
+  // 정하게 하면 이후 모든 추천의 출발점이 부정확해진다.
+  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && hasValidFreshmanYear;
   const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution;
-  const recordLocked = Boolean(onboardingRecordFile || onboardingRecordBusy);
+  // 파서가 읽은 학년·학기는 제안값일 뿐이다. 학생이 언제든 직접 고칠 수 있고,
+  // 불일치는 안내로만 다룬다.
+  const recordLocked = false;
   /**
    * 이름은 학생부를 올려도 잠그지 않는다. 파서가 읽은 이름이 틀리거나(붙어 나온 글자,
    * 옛 이름) 학생이 다르게 쓰고 싶을 때 고칠 길이 아예 없었다. 대신 학생부와 다르면
@@ -955,21 +949,11 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   const freshmanYearMismatch = Boolean(
     recordFreshmanYear && form.freshmanAcademicYear && Number(form.freshmanAcademicYear) !== recordFreshmanYear
   );
-  const gapValues = splitList(form.gaps);
-
   /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
   function startWithRecord(file: File | undefined) {
     if (!file) return;
     setStep("profile");
     void analyzeOnboardingRecord(file);
-  }
-
-  function toggleGap(value: string) {
-    setForm((cur) => {
-      const values = splitList(cur.gaps);
-      const next = values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
-      return { ...cur, gaps: next.join(", ") };
-    });
   }
 
   /** 기본 정보 뒤에는 별도 사전 질문 없이 상담 관문으로 이어진다. */
@@ -1348,7 +1332,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-career">현재 가장 끌리는 분야 또는 진로</label>
+                <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-career">현재 가장 끌리는 분야 또는 진로 <span className="font-medium text-gray-400">(아직 모르겠다면 비워도 됩니다)</span></label>
                 <input
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
                   id="ob-career"
@@ -1439,7 +1423,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {[
+                  {[
+                  { value: "아직 잘 모르겠음", label: "아직 잘 모르겠음", desc: "상담에서 관심사와 학교 상황을 함께 살펴봅니다." },
                   { value: "넓은 분야만 정한 단계", label: "넓은 분야만 있음", desc: "예: 의료, AI, 교육. 추가 질문 없이 상담에서 좁혀갑니다." },
                   { value: "구체적인 학과나 직무까지 정한 단계", label: "구체 목표가 있음", desc: "학과·직무·주제가 꽤 명확합니다." },
                 ].map((item) => {
@@ -1468,95 +1453,17 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               </div>
 
               {form.careerResolution === "구체적인 학과나 직무까지 정한 단계" && (
-                <div className="p-4 rounded-2xl bg-gray-50/80 border border-gray-200/80 space-y-3.5">
-                  <div>
-                    <strong className="block text-[11px] font-extrabold text-gray-900">관련 배경지식에 맞춰 탐구 난이도를 조절합니다</strong>
-                    <span className="block text-[11px] text-gray-500 mt-0.5">배경지식이 있더라도 기초부터 쌓고 싶다면 &lsquo;하&rsquo;를 고르세요.</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[
-                      { value: "하", desc: "기초 개념부터 차근히" },
-                      { value: "중", desc: "기본 개념은 알고 적용해보고 싶음" },
-                      { value: "상", desc: "심화·차별화 탐구부터 가능" },
-                    ].map((item) => {
-                      const isActive = form.knowledgeLevel === item.value;
-                      return (
-                        <button
-                          className={`px-3 py-2.5 rounded-xl border text-left transition ${
-                            isActive ? "border-brand-500 bg-white" : "border-gray-200 bg-white/60 hover:border-gray-300"
-                          }`}
-                          key={item.value}
-                          onClick={() => update("knowledgeLevel", item.value)}
-                          type="button"
-                        >
-                          <span className={`block text-xs font-bold ${isActive ? "text-brand-600" : "text-gray-800"}`}>{item.value}</span>
-                          <span className="block text-[11px] text-gray-500 leading-snug mt-0.5">{item.desc}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-question">특히 궁금한 세부 키워드나 문제</label>
-                    <textarea
-                      className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-white transition min-h-20"
-                      id="ob-question"
-                      onChange={(e) => update("concreteResearchQuestion", e.target.value)}
-                      placeholder={
-                        form.knowledgeLevel === "상"
-                          ? "예: 의료 AI 진단 모델의 오류 원인을 데이터 편향 관점에서 분석하고 싶음"
-                          : form.knowledgeLevel === "중"
-                            ? "예: AI 진단 정확도, 의료 데이터, 모델 비교처럼 관심 키워드를 적어주세요"
-                            : "아직 안 적어도 됩니다. 키워드 1~2개만 적어도 괜찮아요."
-                      }
-                      value={form.concreteResearchQuestion}
-                    />
-                  </div>
-                </div>
+                <p className="text-[11px] text-gray-500 leading-relaxed rounded-xl bg-gray-50/80 border border-gray-200/80 px-3.5 py-3">
+                  세부 관심사와 현재 이해도는 지금 확정하지 않아도 됩니다. 상담에서 실제 기록과 학교 상황을 보며 필요한 경우에만 함께 좁혀갈게요.
+                </p>
               )}
             </div>
 
-            {/* 4. 고민 (자기평가 약점으로 저장된다) */}
-            <div className="space-y-3 pt-4 border-t border-gray-100">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
-                  <span>💭</span>
-                  <span>4. 지금 가장 고민되는 부분 (복수 선택 · 선택 사항)</span>
-                </h3>
-                <span className="text-[10px] text-gray-400 font-medium">선택 {gapValues.length}건</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {ONBOARDING_CONCERNS.map((item) => {
-                  const isChecked = gapValues.includes(item.title);
-                  return (
-                    <button
-                      className={`p-3.5 rounded-xl border text-left transition flex items-start gap-2.5 ${
-                        isChecked ? "border-brand-500 bg-blue-50/40" : "border-gray-200 hover:border-gray-300 bg-gray-50/30"
-                      }`}
-                      key={item.title}
-                      onClick={() => toggleGap(item.title)}
-                      type="button"
-                    >
-                      <span className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center text-[10px] font-bold flex-none ${
-                        isChecked ? "bg-brand-500 text-white" : "border border-gray-300 bg-white"
-                      }`}>
-                        {isChecked ? "✓" : ""}
-                      </span>
-                      <span className="block">
-                        <span className={`font-bold text-xs block ${isChecked ? "text-brand-700" : "text-gray-800"}`}>{item.title}</span>
-                        <span className="text-[11px] text-gray-500 block leading-snug">{item.desc}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 5. 제약 */}
+            {/* 4. 제약 */}
             <div className="space-y-3 pt-4 border-t border-gray-100">
               <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
                 <span>⚠️</span>
-                <span>5. 계획을 짤 때 반드시 피해야 할 제약 (선택 사항)</span>
+                <span>4. 계획을 짤 때 반드시 피해야 할 제약 (선택 사항)</span>
               </h3>
               <input
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
@@ -2272,6 +2179,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   const [adoptBusyIndex, setAdoptBusyIndex] = useState<number | null>(null);
   const [adoptedIndexes, setAdoptedIndexes] = useState<Set<number>>(new Set());
   const [rejectedIndexes, setRejectedIndexes] = useState<Set<number>>(new Set());
+  const [savedPlans, setSavedPlans] = useState<components["schemas"]["PlanItemRead"][]>([]);
   const allSelectablePlans = workspace.roadmap.nodes.flatMap((node) => (node.planEvents ?? []).map((event) => ({
     ...event,
     nodeId: node.id,
@@ -2286,6 +2194,22 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   const selectedPlanIsOutsideCurrentSemester = !!planEventId && !currentSemesterPlans.some((plan) => plan.id === planEventId);
   const [showAllPlanOptions, setShowAllPlanOptions] = useState(selectedPlanIsOutsideCurrentSemester);
   const selectablePlans = showAllPlanOptions ? allSelectablePlans : currentSemesterPlans;
+
+  const loadSavedPlans = useCallback(async () => {
+    try {
+      const result = await api<components["schemas"]["ListResponse_PlanItemRead_"]>(
+        `/plans?target_grade=${workspace.profile.grade}&target_semester=${workspace.profile.semester}&status=planned`,
+      );
+      setSavedPlans(result.items);
+    } catch {
+      // 기록 입력은 계획 목록 요청이 실패해도 계속할 수 있어야 한다.
+      setSavedPlans([]);
+    }
+  }, [workspace.profile.grade, workspace.profile.semester]);
+
+  useEffect(() => {
+    void loadSavedPlans();
+  }, [loadSavedPlans]);
 
   function recordQualityPrompts() {
     const prompts: string[] = [];
@@ -2403,6 +2327,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
         }),
       });
       setAdoptedIndexes((cur) => new Set(cur).add(optionIndex));
+      await loadSavedPlans();
       await jsonRequest(`/api/recommendations/${recommendation.id}/feedback`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -2448,6 +2373,20 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       {/* Form */}
       <div className="activity-form-card md:col-span-1">
         <h2>활동 간편 등록</h2>
+        {savedPlans.length > 0 && (
+          <section className="mb-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3" aria-label="이번 학기에 저장한 계획">
+            <p className="text-[10px] font-extrabold tracking-wider text-brand-700">SAVED PLANS · 이번 학기</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-gray-600">학교에서 실제 기회가 생겨 진행한 뒤, 아래에서 활동으로 직접 기록하세요.</p>
+            <ul className="mt-2 space-y-1.5">
+              {savedPlans.map((plan) => (
+                <li className="text-[11px] font-semibold text-gray-800" key={plan.id}>
+                  <span className="mr-1 text-brand-600">•</span>{plan.title}
+                  {plan.subject ? <span className="ml-1 font-medium text-gray-400">· {plan.subject}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <div className="form-field" style={{ marginBottom: "14px" }}>
           <label htmlFor="act-plan">연결할 이번 학기 주제 (선택 · 변경 가능)</label>
           <select id="act-plan" value={planEventId} onChange={(e) => setPlanEventId(e.target.value)}>
@@ -2709,7 +2648,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
               })}
               {adoptedIndexes.size > 0 && (
                 <p className="onboarding-record-note">
-                  계획으로 담은 주제는 완료하면 이 활동의 후속 기록으로 이어집니다. 계획 목록 화면은 아직 준비 중이라, 지금은 챗봇에게 &ldquo;내 계획 보여줘&rdquo;라고 물어보면 확인할 수 있습니다.
+                  선택한 주제는 이번 학기 &lsquo;저장한 계획&rsquo;에 남았습니다. 학교에서 실제로 진행한 뒤 활동 기록으로 직접 남기면 됩니다.
                 </p>
               )}
             </div>
