@@ -91,14 +91,6 @@ type OnboardingRecordContext = {
   studentName?: string;
 };
 
-/** 진단 실행 전 생기부-답변 갭을 메우는 사전질문 하나. 최초 진단에만 나온다. */
-type DiagnosisPreQuestion = {
-  key: string;
-  prompt: string;
-  options: string[];
-  allow_custom: boolean;
-};
-
 /** 활동 하나를 근거로 만든 후속 탐구 선택지 하나(기능2). */
 type RecommendationOption = {
   topic: string;
@@ -1810,8 +1802,6 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
 
   const [diagnosisBusy, setDiagnosisBusy] = useState(false);
   const [diagnosisError, setDiagnosisError] = useState("");
-  const [preQuestions, setPreQuestions] = useState<DiagnosisPreQuestion[] | null>(null);
-  const [preAnswerDrafts, setPreAnswerDrafts] = useState<Record<string, string>>({});
   const [diagnosisDetailOpen, setDiagnosisDetailOpen] = useState(false);
   const hasDiagnosis = Boolean(workspace.dna.narrative);
   const activityTitleById = new Map(workspace.activities.map((a) => [a.id, a.title]));
@@ -1848,46 +1838,8 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
     }
   }
 
-  /** 진단 버튼을 누르면 사전질문부터 확인한다 — 최초 진단에만 나오고, 재진단은 빈
-   *  배열을 받아 바로 진단으로 넘어간다. */
+  /** 기록 기반 진단을 먼저 실행한다. 사전 설문은 상담 대화로 통합했다. */
   async function beginDiagnosis() {
-    setDiagnosisError("");
-    setDiagnosisBusy(true);
-    try {
-      const pre = await jsonRequest<{ questions: DiagnosisPreQuestion[] }>("/api/diagnosis/pre-questions");
-      if (pre.questions.length > 0) {
-        setPreAnswerDrafts({});
-        setPreQuestions(pre.questions);
-        setDiagnosisBusy(false);
-        return;
-      }
-    } catch (error) {
-      setDiagnosisError(error instanceof Error ? error.message : "사전 질문을 불러오지 못했습니다.");
-      setDiagnosisBusy(false);
-      return;
-    }
-    await startDiagnosisJob();
-  }
-
-  async function submitPreQuestions(questions: DiagnosisPreQuestion[], skip: boolean) {
-    const answers = questions.map((question) => ({
-      key: question.key,
-      prompt: question.prompt,
-      answer: skip ? null : preAnswerDrafts[question.key]?.trim() || null,
-    }));
-    setPreQuestions(null);
-    setDiagnosisBusy(true);
-    try {
-      await jsonRequest("/api/diagnosis/pre-questions/answers", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ answers }),
-      });
-    } catch (error) {
-      setDiagnosisError(error instanceof Error ? error.message : "답변을 저장하지 못했습니다.");
-      setDiagnosisBusy(false);
-      return;
-    }
     await startDiagnosisJob();
   }
 
@@ -2279,61 +2231,6 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
         )}
       </section>
       {selectedPlan && active && <PlanDetailModal plan={selectedPlan} node={active} courseSubjects={workspace.semesterCourses.filter((course) => course.roadmapNodeId === active.id).map((course) => course.subject)} onClose={() => setSelectedPlan(null)} onConvertPlan={onConvertPlan} />}
-      {preQuestions && (
-        <div className="modal-overlay" onClick={() => setPreQuestions(null)} role="presentation">
-          <section aria-label="진단 전 확인 질문" aria-modal="true" className="modal-panel diagnosis-prequestion-panel" onClick={(event) => event.stopPropagation()} role="dialog">
-            <div className="modal-head">
-              <h3>진단하기 전에 몇 가지만 확인할게요</h3>
-              <button className="btn btn-ghost btn-sm" onClick={() => setPreQuestions(null)} type="button">닫기</button>
-            </div>
-            <div className="modal-body">
-              <p className="onboarding-record-note">
-                생기부만으로는 알 수 없는 부분이에요. 답하지 않고 넘어가도 진단은 실행됩니다.
-              </p>
-              {preQuestions.map((question) => (
-                <div className="branch-question-card" key={question.key}>
-                  <div className="branch-question-head">
-                    <strong>{question.prompt}</strong>
-                  </div>
-                  {question.options.length > 0 && (
-                    <div className="clarity-choice-row">
-                      {question.options.map((option) => (
-                        <button
-                          className={`clarity-choice${preAnswerDrafts[question.key] === option ? " is-active" : ""}`}
-                          key={option}
-                          onClick={() => setPreAnswerDrafts((cur) => ({ ...cur, [question.key]: option }))}
-                          type="button"
-                        >
-                          <strong>{option}</strong>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {question.allow_custom && (
-                    <div className="form-field" style={{ marginTop: 10 }}>
-                      <label htmlFor={`pre-question-${question.key}`}>직접 입력</label>
-                      <input
-                        id={`pre-question-${question.key}`}
-                        onChange={(event) => setPreAnswerDrafts((cur) => ({ ...cur, [question.key]: event.target.value }))}
-                        placeholder="답변을 입력해주세요 (선택)"
-                        value={preAnswerDrafts[question.key] ?? ""}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="modal-foot">
-              <button className="btn btn-ghost" onClick={() => void submitPreQuestions(preQuestions, true)} type="button">
-                건너뛰고 진단하기
-              </button>
-              <button className="btn btn-primary" onClick={() => void submitPreQuestions(preQuestions, false)} type="button">
-                답변 제출하고 진단하기
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
     </div>
   );
 }

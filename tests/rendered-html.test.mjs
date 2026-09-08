@@ -54,13 +54,12 @@ test("the onboarding moves from profile directly into the AI consultation and al
   assert.match(app, /onSignOut=\{signOut\}/);
 });
 
-test("the consultation gate renders the diagnosis pre-questions' own options", async () => {
+test("the consultation gate starts with record-based diagnosis, not a generated questionnaire", async () => {
   const gate = await source("app/consultation-view.tsx");
 
-  // 백엔드가 선택지를 주는데 화면이 빈 입력칸만 그리면 그 선택지는 버려진다.
-  assert.match(gate, /question\.options\.map/);
-  assert.match(gate, /question\.allow_custom/);
-  assert.match(gate, /건너뛰고 진단하기/);
+  assert.match(gate, /const created = await api<\{ diagnosis_id: string \}>\("\/diagnosis"/);
+  assert.doesNotMatch(gate, /\/diagnosis\/pre-questions/);
+  assert.doesNotMatch(gate, /진단 전 확인/);
 });
 
 test("the onboarding clarification adapter preserves answer keys", async () => {

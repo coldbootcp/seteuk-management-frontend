@@ -12,8 +12,6 @@ import type { ConsultationSession, ConsultationStatus } from "../lib/product-har
 import { GateFrame } from "./gate-frame";
 import { ChatComposer, ChatThread, type ChatBubble } from "./chat-thread";
 
-type DiagnosisPreQuestion = { key: string; prompt: string; options: string[]; allow_custom: boolean };
-
 type DiagnosisResult = {
   status: "processing" | "done" | "failed";
   strengths: string[];
@@ -41,8 +39,6 @@ export function ConsultationGate({
 }) {
   const [phase, setPhase] = useState<"diagnosing" | "ready">("diagnosing");
   const [diagnosisError, setDiagnosisError] = useState("");
-  const [preQuestions, setPreQuestions] = useState<DiagnosisPreQuestion[] | null>(null);
-  const [preAnswers, setPreAnswers] = useState<Record<string, string>>({});
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
   const [session, setSession] = useState<ConsultationSession | null>(null);
   const [bubbles, setBubbles] = useState<ChatBubble[]>([]);
@@ -68,12 +64,9 @@ export function ConsultationGate({
     throw new Error("진단이 예상보다 오래 걸리고 있습니다. 잠시 후 다시 시도해주세요.");
   }
 
-  const runDiagnosis = useCallback(async (answers?: { key: string; prompt: string; answer: string | null }[]) => {
+  const runDiagnosis = useCallback(async () => {
     setDiagnosisError("");
     try {
-      if (answers) {
-        await api("/diagnosis/pre-questions/answers", { method: "POST", body: { answers } });
-      }
       const created = await api<{ diagnosis_id: string }>("/diagnosis", { method: "POST" });
       await pollDiagnosis(created.diagnosis_id);
     } catch (caught) {
@@ -90,11 +83,8 @@ export function ConsultationGate({
           if (!cancelled) setDiagnosis(latest);
           return;
         }
-        const pre = await api<{ questions: DiagnosisPreQuestion[] }>("/diagnosis/pre-questions");
-        if (pre.questions.length > 0) {
-          if (!cancelled) setPreQuestions(pre.questions);
-          return;
-        }
+        // 진단 전 설문은 없다. 기록으로 진단을 먼저 만든 뒤, 필요한 확인만
+        // 학사 시점을 아는 상담 대화에서 한 번에 하나씩 다룬다.
         await runDiagnosis();
       } catch (caught) {
         if (!cancelled) {
@@ -274,102 +264,8 @@ export function ConsultationGate({
         {diagnosisError && <div className="banner banner-error">{diagnosisError}</div>}
         {error && <div className="banner banner-error">{error}</div>}
 
-        {/* 진단 전 확인 질문 — 선택지가 있는데 예전에는 빈 입력칸만 그려서 그냥 버려졌다. */}
-        {phase === "diagnosing" && !diagnosisError && preQuestions && (
-          <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-6 max-w-3xl mx-auto">
-            <div className="space-y-1">
-              <span className="inline-block px-2 py-0.5 rounded bg-blue-50 text-brand-600 text-[10px] font-bold">
-                진단 전 확인 · {preQuestions.length}문항
-              </span>
-              <h2 className="text-lg font-extrabold text-gray-950 tracking-tight">
-                진단을 시작하기 전에 몇 가지만 확인할게요
-              </h2>
-              <p className="text-xs text-gray-500">
-                기록만으로는 알 수 없는 것만 물어봅니다. 답하지 않고 넘어가도 진단은 진행됩니다.
-              </p>
-            </div>
-
-            {preQuestions.map((question, index) => {
-              const answer = preAnswers[question.key] ?? "";
-              const custom = question.options.length > 0 && answer !== "" && !question.options.includes(answer);
-              return (
-                <div className={`space-y-2.5 ${index > 0 ? "pt-5 border-t border-gray-100" : ""}`} key={question.key}>
-                  <h3 className="text-sm font-extrabold text-gray-900">
-                    <span className="text-brand-500 mr-1.5">{String(index + 1).padStart(2, "0")}</span>
-                    {question.prompt}
-                  </h3>
-
-                  {question.options.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {question.options.map((option) => {
-                        const isSelected = answer === option;
-                        return (
-                          <button
-                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                              isSelected
-                                ? "bg-brand-500 text-white font-bold"
-                                : "bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200"
-                            }`}
-                            key={option}
-                            onClick={() =>
-                              setPreAnswers((prev) => ({ ...prev, [question.key]: isSelected ? "" : option }))
-                            }
-                            type="button"
-                          >
-                            {option}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {(question.allow_custom || question.options.length === 0) && (
-                    <input
-                      className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
-                      onChange={(event) =>
-                        setPreAnswers((prev) => ({ ...prev, [question.key]: event.target.value }))
-                      }
-                      placeholder={question.options.length ? "선택지에 없다면 직접 적어주세요" : "자유롭게 적어주세요"}
-                      value={custom || question.options.length === 0 ? answer : ""}
-                    />
-                  )}
-                </div>
-              );
-            })}
-
-            <div className="pt-5 border-t border-gray-100 flex items-center justify-between gap-4">
-              <button
-                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-bold transition"
-                onClick={() => {
-                  setPreQuestions(null);
-                  void runDiagnosis(preQuestions.map((q) => ({ key: q.key, prompt: q.prompt, answer: null })));
-                }}
-                type="button"
-              >
-                건너뛰고 진단하기
-              </button>
-              <button
-                className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-md hover:shadow-lg transition flex items-center gap-2"
-                onClick={() => {
-                  const answers = preQuestions.map((q) => ({
-                    key: q.key,
-                    prompt: q.prompt,
-                    answer: preAnswers[q.key]?.trim() || null,
-                  }));
-                  setPreQuestions(null);
-                  void runDiagnosis(answers);
-                }}
-                type="button"
-              >
-                <span>답변 반영해 정밀 진단 시작하기</span>
-                <span>➔</span>
-              </button>
-            </div>
-          </section>
-        )}
-
         {/* 진단 대기 — 몇 분 걸리므로 진행을 지어내지 않고 무엇을 하는 중인지만 말한다. */}
-        {phase === "diagnosing" && !diagnosisError && !preQuestions && (
+        {phase === "diagnosing" && !diagnosisError && (
           <section className="bg-white p-8 rounded-2xl border border-gray-200/80 shadow-xs max-w-lg mx-auto text-center space-y-5">
             <span className="w-16 h-16 rounded-2xl bg-blue-50 text-brand-600 text-2xl flex items-center justify-center mx-auto animate-pulse">
               ⚡
