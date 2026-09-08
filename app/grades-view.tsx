@@ -570,11 +570,11 @@ export function GradesView({
   };
 
   return (
-    <div className="grades-container">
+    <div className="space-y-6">
       {/* ──────────────────────────────────────────
           상단 학점계산기 대시보드 카드 (에타 스타일)
           ────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs">
           <div className="flex items-center justify-between text-gray-500 text-xs font-semibold mb-2">
             <span>전체 누적 평점</span>
@@ -640,18 +640,24 @@ export function GradesView({
         </div>
       </div>
 
-      <section className="grades-kpi-card">
-
-        {/* 꺾은선 추이 그래프 & 성적 분포 막대 */}
-        <div className="grades-charts-row">
-          {/* SVG 꺾은선 추이 */}
-          <div className="grades-trend-chart-box">
-            <div className="chart-legend">
-              <span className="legend-dot overall" /> 전체
-              <span className="legend-dot core" /> 국수영
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 학기별 추이 */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-gray-900">학기별 성적 추이</h3>
+            <div className="flex items-center gap-4 text-xs font-medium text-gray-500">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-brand-500" /> 전체 평점
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-gray-300" /> 국수영 평점
+              </span>
             </div>
-            <div className="svg-chart-container">
-              <svg viewBox="0 0 400 120" className="trend-svg">
+          </div>
+
+          <div className="h-44 w-full">
+            {stats.trendData.length > 1 ? (
+              <svg viewBox="0 0 400 120" className="w-full h-full overflow-visible">
                 {/* Y축 그리드선 (1등급, 2등급, 3등급) */}
                 <line x1="30" y1="20" x2="380" y2="20" stroke="#f0f0f0" />
                 <text x="8" y="24" fontSize="10" fill="#a6a6a6">1.0</text>
@@ -712,91 +718,94 @@ export function GradesView({
                   </>
                 )}
               </svg>
-            </div>
-          </div>
-
-          {/* 성적 분포 가로 막대 그래프 */}
-          <div className="grades-distribution-box">
-            <div className="dist-bars">
-              {stats.distribution.map((item) => (
-                <div key={item.label} className="dist-bar-row">
-                  <span className="dist-label">{item.label}</span>
-                  <div className="dist-track">
-                    <div className="dist-fill" style={{ width: `${item.pct}%`, backgroundColor: item.color }} />
-                  </div>
-                  <span className="dist-pct" style={{ color: item.color }}>{item.pct}%</span>
-                </div>
-              ))}
-            </div>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-xs text-gray-400 text-center break-keep">
+                  학기가 두 개 이상 기록되면 추이가 그려집니다.
+                </p>
+              </div>
+            )}
           </div>
         </div>
-      </section>
+
+        {/* 석차등급 분포 */}
+        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col">
+          <h3 className="text-base font-bold text-gray-900 mb-4">석차등급 분포</h3>
+          <div className="space-y-3.5 my-auto">
+            {stats.distribution.map((item) => (
+              <div className="flex items-center gap-3 text-xs" key={item.label}>
+                <span className="w-10 font-medium text-gray-600 flex-none">{item.label}</span>
+                <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ backgroundColor: item.color, width: `${item.pct}%` }}
+                  />
+                </div>
+                <span className="w-10 text-right font-bold tabular-nums" style={{ color: item.color }}>
+                  {item.pct}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* ──────────────────────────────────────────
           6개 학기 탭 네비게이션 (에타 스타일: 플랫 텍스트 + 블랙 언더라인)
           ────────────────────────────────────────── */}
-      <nav className="semester-tabs-nav">
-        {[
-          { key: "1-1", label: "1학년 1학기" },
-          { key: "1-2", label: "1학년 2학기" },
-          { key: "2-1", label: "2학년 1학기" },
-          { key: "2-2", label: "2학년 2학기" },
-          { key: "3-1", label: "3학년 1학기" },
-          { key: "3-2", label: "3학년 2학기" },
-        ].map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            className={`semester-tab-btn ${activePeriod === key ? "active" : ""}`}
-            onClick={() => setActivePeriod(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+
 
       {/* ──────────────────────────────────────────
           선택 학기 상세 & 과목 성적 테이블 (에타 스타일)
           ────────────────────────────────────────── */}
-      <section className="semester-detail-card">
-        <div className="semester-detail-header">
-          <div className="sem-summary">
-            <h3>{activeGrade}학년 {activeSem}학기</h3>
-            <div className="sem-metrics-line">
-              <span>평점 <strong>{currentSemStats.semOverall}</strong></span>
-              <span>국수영 <strong>{currentSemStats.semCore}</strong></span>
-            </div>
+      {/* 학기별 성적표 */}
+      <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
+        <div className="px-5 md:px-6 py-4 border-b border-gray-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl self-start">
+            {["1-1", "1-2", "2-1", "2-2", "3-1", "3-2"].map((key) => (
+              <button
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
+                  activePeriod === key ? "bg-brand-500 text-white" : "text-gray-500 hover:text-gray-900"
+                }`}
+                key={key}
+                onClick={() => setActivePeriod(key)}
+                type="button"
+              >
+                {key}
+              </button>
+            ))}
           </div>
 
-          <div className="sem-header-right">
-            {syncStatus === "saving" && (
-              <span style={{ fontSize: "11px", color: "var(--et-gray-text)", display: "inline-flex", alignItems: "center", gap: "3px" }}>
-                <span>☁️</span> 저장 중…
-              </span>
-            )}
-            {syncStatus === "synced" && (
-              <span style={{ fontSize: "11px", color: "#16a34a", display: "inline-flex", alignItems: "center", gap: "3px" }}>
-                <span>✓</span> 동기화 완료
-              </span>
-            )}
-            {importNotice && (
-              <span className="grade-import-notice">{importNotice}</span>
-            )}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {syncStatus === "saving" && <span className="text-[11px] text-gray-400 font-semibold">☁️ 저장 중…</span>}
+            {syncStatus === "synced" && <span className="text-[11px] text-emerald-600 font-semibold">✓ 동기화 완료</span>}
+            {importNotice && <span className="text-[11px] text-brand-600 font-semibold">{importNotice}</span>}
             <button
-              type="button"
-              className="btn-import-timetable"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-50 text-brand-600 hover:bg-brand-100 border border-brand-200/80 rounded-lg text-xs font-bold transition"
               onClick={handleImportFromTimetable}
+              type="button"
             >
-              시간표 불러오기
+              <span>📅</span> 시간표에서 불러오기
             </button>
             <button
-              type="button"
-              className="btn-add-subject-top"
+              className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-xs font-bold transition"
               onClick={handleAddItem}
+              type="button"
             >
-              + 과목 추가
+              <span>+</span> 과목 추가
             </button>
           </div>
+        </div>
+
+        <div className="px-5 md:px-6 py-3 border-b border-gray-100 flex items-center gap-4 flex-wrap">
+          <h3 className="text-sm font-extrabold text-gray-950">{activeGrade}학년 {activeSem}학기</h3>
+          <span className="text-xs text-gray-500">
+            평점 <strong className="text-gray-900 font-bold tabular-nums">{currentSemStats.semOverall}</strong>
+          </span>
+          <span className="text-gray-200">·</span>
+          <span className="text-xs text-gray-500">
+            국수영 <strong className="text-gray-900 font-bold tabular-nums">{currentSemStats.semCore}</strong>
+          </span>
         </div>
 
         {/* 과목 테이블 */}
@@ -1006,20 +1015,23 @@ export function GradesView({
           </table>
         </div>
 
-        {/* 테이블 하단 액션 바 */}
-        <div className="grade-table-footer">
-          <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddItem}>
+        <div className="px-5 md:px-6 py-3.5 bg-gray-50/70 border-t border-gray-200/80 flex items-center gap-2.5">
+          <button
+            className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 text-xs font-semibold transition"
+            onClick={handleAddItem}
+            type="button"
+          >
             + 과목 추가
           </button>
           <button
-            type="button"
-            className="btn btn-secondary btn-sm"
+            className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 text-xs font-semibold transition"
             onClick={onNavigateToTimetable}
+            type="button"
           >
             시간표로 돌아가기
           </button>
         </div>
-      </section>
+      </div>
 
       {/* ──────────────────────────────────────────
           시간표 선택 모달 (에브리타임 스타일)
