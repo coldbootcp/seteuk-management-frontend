@@ -62,6 +62,15 @@ test("the consultation gate renders the diagnosis pre-questions' own options", a
   assert.match(gate, /건너뛰고 진단하기/);
 });
 
+test("the onboarding clarification adapter preserves answer keys", async () => {
+  const adapter = await source("lib/workspace-adapter.ts");
+
+  assert.match(adapter, /case path === "\/api\/onboarding\/clarify"/);
+  assert.match(adapter, /"\/profile\/clarify"/);
+  assert.match(adapter, /key: entry\.key \?\? entry\.id/);
+  assert.match(adapter, /id: question\.key/);
+});
+
 test("the school record review stays client-side and states the real storage policy", async () => {
   const [app, parser] = await Promise.all([
     source("app/workspace-app.tsx"),
@@ -97,6 +106,20 @@ test("the deleted 3-year roadmap screen does not come back", async () => {
   // 화면에 보이는 문구에는 로드맵이 남지 않는다(주석은 백엔드 동작 설명이라 허용).
   const visible = app.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
   assert.doesNotMatch(visible, /로드맵/);
+});
+
+test("the admissions workspace uses the catalog instead of free-text target data", async () => {
+  const [app, preparation] = await Promise.all([
+    source("app/workspace-app.tsx"),
+    source("app/application-preparation-view.tsx"),
+  ]);
+
+  assert.match(app, /ApplicationPreparationView/);
+  assert.match(preparation, /admission-catalog\/universities/);
+  assert.match(preparation, /\/programs\?admission_year=2027/);
+  assert.match(preparation, /admission-catalog\/programs\/\$\{programId\}\/tracks/);
+  assert.match(preparation, /application-preparations/);
+  assert.match(preparation, /AI가 핵심 활동 추리기/);
 });
 
 test("no server-side or Workers code is left in the frontend", async () => {

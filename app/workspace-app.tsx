@@ -11,6 +11,7 @@ import { ChatView } from "./chat-view";
 import { TimetableView } from "./timetable-view";
 import { GradesView } from "./grades-view";
 import { DashboardView } from "./dashboard-view";
+import { ApplicationPreparationView } from "./application-preparation-view";
 import { createEmptyTimetable, type TimetableConfig } from "./types/academic";
 import type {
   ActivityAttachment,
@@ -2803,164 +2804,6 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   );
 }
 
-function PortfolioView({ workspace }: { workspace: ProductWorkspace }) {
-  const records = [...workspace.activities].sort((a, b) => (a.completedAt || "").localeCompare(b.completedAt || ""));
-  const themes = [...new Set(records.flatMap((record) => record.concepts))].slice(0, 8);
-  const [copiedQuestionId, setCopiedQuestionId] = useState<string | null>(null);
-
-  const copyToClipboard = (text: string, id: string) => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      void navigator.clipboard.writeText(text);
-      setCopiedQuestionId(id);
-      setTimeout(() => setCopiedQuestionId(null), 2000);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-gray-200/80">
-        <div>
-          <h2 className="text-xl font-bold text-gray-950 tracking-tight">수시 학생부종합전형 준비 자료</h2>
-          <p className="text-xs text-gray-500 mt-1">
-            실제로 기록한 활동만 근거로 씁니다 — 자소서 서사 흐름과 면접 검증 질문을 정리합니다.
-          </p>
-        </div>
-        <div className="text-left md:text-right flex-none">
-          <span className="text-[11px] text-gray-400 block font-medium">누적 검증 활동</span>
-          <strong className="text-lg font-bold text-gray-950 tabular-nums">{records.length}건</strong>
-        </div>
-      </div>
-
-      {/* 목표와 핵심 키워드 */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200/80 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-        <div className="min-w-0">
-          <span className="inline-block px-2 py-0.5 rounded bg-blue-50 text-brand-600 text-[10px] font-bold">
-            목표 진로 및 학과
-          </span>
-          <h3 className="text-lg font-extrabold text-gray-950 tracking-tight mt-1.5">
-            {workspace.profile.targetCareer || "진로 미입력"}{" "}
-            <span className="text-sm font-bold text-gray-400">
-              ({workspace.profile.targetMajors.join(", ") || "전공 미정"})
-            </span>
-          </h3>
-          <p className="text-xs text-gray-600 leading-relaxed mt-1.5 break-keep">
-            {records.length > 0
-              ? `${workspace.profile.targetCareer} 전공 적합성을 중심으로 ${records.length}개의 탐구·수행 기록이 이어져 있습니다.`
-              : "활동을 기록하면 진로 관심과 연결된 자소서 핵심 서사가 자동으로 구조화됩니다."}
-          </p>
-        </div>
-        {themes.length > 0 && (
-          <div className="lg:max-w-sm w-full flex-none p-3.5 rounded-xl bg-gray-50/70 border border-gray-200/60">
-            <span className="text-[10px] font-bold text-gray-400 block mb-1.5">핵심 역량 키워드</span>
-            <div className="flex flex-wrap gap-1.5">
-              {themes.map((theme) => (
-                <span
-                  className="px-2 py-0.5 rounded-lg bg-white border border-gray-200/80 text-[11px] font-semibold text-gray-700"
-                  key={theme}
-                >
-                  #{theme}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* 자소서 서사 흐름 */}
-        <section className="bg-white p-6 rounded-xl border border-gray-200/80 space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="text-sm font-bold text-gray-950">자소서 서사 흐름</h3>
-            <span className="text-xs text-gray-400 font-medium">{records.length}개 탐구 연계</span>
-          </div>
-
-          {records.length === 0 ? (
-            <p className="text-xs text-gray-400 leading-relaxed py-6 text-center break-keep">
-              아직 기록된 활동이 없습니다. [활동 &amp; 세특] 화면에서 이번 학기 수행평가와 탐구 활동을 남겨보세요.
-            </p>
-          ) : (
-            <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
-              {records.map((record) => (
-                <article className="p-3.5 rounded-lg bg-gray-50/70 border border-gray-200/60" key={record.id}>
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-xs font-bold text-brand-600">{record.completedAt || record.periodLabel}</span>
-                    {record.subject && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-500">
-                        {record.subject}
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-xs font-bold text-gray-900 leading-snug break-keep">{record.title}</h4>
-                  {record.summary && (
-                    <p className="text-xs text-gray-600 leading-relaxed mt-1 break-keep">{record.summary}</p>
-                  )}
-                  {record.reflection && (
-                    <div className="text-xs text-gray-600 bg-white p-2.5 rounded border-l-2 border-brand-500 mt-2">
-                      <strong className="block text-[10px] text-gray-400 font-semibold mb-0.5">배운 점 · 느낀 점</strong>
-                      <span className="break-keep">{record.reflection}</span>
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 면접 대비 */}
-        <section className="bg-white p-6 rounded-xl border border-gray-200/80 space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="text-sm font-bold text-gray-950">면접 대비 예상 질문 &amp; 답변 포인트</h3>
-            <span className="text-xs text-gray-400 font-medium">심층 검증</span>
-          </div>
-
-          {records.length === 0 ? (
-            <p className="text-xs text-gray-400 leading-relaxed py-6 text-center break-keep">
-              활동을 저장하면 그 기록을 근거로 면접 검증 질문이 만들어집니다.
-            </p>
-          ) : (
-            <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
-              {records.slice(-6).reverse().map((record, index) => {
-                const questionText = `“${record.title}”에서 본인이 주도적으로 탐구한 핵심 원리는 무엇이며, 이 과정이 ${workspace.profile.targetCareer} 진로에 미친 영향은?`;
-                const isCopied = copiedQuestionId === record.id;
-                return (
-                  <div className="p-3.5 rounded-lg border border-gray-200/70 bg-white space-y-2" key={record.id}>
-                    <div className="flex items-start justify-between gap-2">
-                      <h5 className="text-xs font-bold text-gray-900 leading-snug break-keep">
-                        Q{index + 1}. {questionText}
-                      </h5>
-                      <button
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition flex-none ${
-                          isCopied
-                            ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                            : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
-                        }`}
-                        onClick={() => copyToClipboard(questionText, record.id)}
-                        type="button"
-                      >
-                        {isCopied ? "복사됨 ✓" : "복사"}
-                      </button>
-                    </div>
-                    <div className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded border-l-2 border-brand-500 space-y-1">
-                      <div>
-                        <strong className="block text-[10px] text-gray-400 font-semibold mb-0.5">검증 포인트</strong>
-                        <span className="break-keep">단순 참여가 아니라 본인이 무엇을 어떻게 해결했는지 설명해야 합니다.</span>
-                      </div>
-                      <div>
-                        <strong className="block text-[10px] text-gray-400 font-semibold mb-0.5">근거 기록</strong>
-                        <span className="break-keep">{record.title} ({record.completedAt || record.periodLabel})</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
-}
-
 function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void }) {
   const [form, setForm] = useState<ProfileForm>({
     name: workspace.profile.name,
@@ -3622,7 +3465,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               onRecordsChanged={onRefresh}
             />
           )}
-          {tab === "portfolio" && <PortfolioView workspace={workspace} />}
+          {tab === "portfolio" && <ApplicationPreparationView workspace={workspace} />}
           {tab === "chat"       && <ChatView onRecordsChanged={onRefresh} />}
           {tab === "profile"    && <ProfileView workspace={workspace} onWorkspace={onWorkspace} />}
         </div>

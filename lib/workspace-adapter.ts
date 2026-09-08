@@ -676,8 +676,6 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
     }
     case path === "/api/onboarding/clarify": {
       const form = body.form ?? {};
-      // answers를 빼면 학생이 방금 답한 것을 백엔드가 모른 채 같은 질문을 다시 내서
-      // 온보딩이 끝나지 않는다.
       const answers = (body.answers ?? []) as { id?: string; key?: string; question?: string; answer?: unknown }[];
       const result = await api<{ questions: Json[]; complete: boolean }>("/profile/clarify", {
         method: "POST",
@@ -697,9 +695,6 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
             })),
         },
       });
-      // 화면은 질문을 `id`로 구분해 답을 쌓는데 백엔드는 `key`를 준다. 옮겨 주지
-      // 않으면 모든 답의 id가 undefined가 되어 서로를 덮어써 한 개만 남고, 그러면
-      // 확인 질문이 영영 끝나지 않는다.
       return {
         ...result,
         questions: (result.questions ?? []).map((question) => ({
