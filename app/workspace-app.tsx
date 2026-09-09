@@ -38,7 +38,7 @@ import {
 /* ──────────────────────────────────────────────
    Types
    ────────────────────────────────────────────── */
-type TabId = "overview" | "dashboard" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
+type TabId = "overview" | "journey" | "dashboard" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
@@ -440,7 +440,8 @@ function PlanDetailModal({ plan, node, courseSubjects, onClose, onConvertPlan }:
   node: RoadmapNode;
   courseSubjects?: string[];
   onClose: () => void;
-  onConvertPlan: (draft: ActivityDraft) => void;
+  /** 미래 학기 흐름에서는 후보의 상세 안내만 열고, 실제 활동 연결은 이번 학기에서만 한다. */
+  onConvertPlan?: (draft: ActivityDraft) => void;
 }) {
   const guide = planDetailGuide(plan, node, courseSubjects);
   const [selectedSubject, setSelectedSubject] = useState(plan.subject);
@@ -494,7 +495,7 @@ function PlanDetailModal({ plan, node, courseSubjects, onClose, onConvertPlan }:
         </div>
         <div className="modal-foot">
           <button className="btn btn-secondary" onClick={onClose} type="button">닫기</button>
-          <button className="btn btn-primary" onClick={() => onConvertPlan({ title: plan.title, subject: plan.subject, planEventId: plan.id, roadmapNodeId: node.id })} type="button">이 주제를 실제 활동에 연결</button>
+          {onConvertPlan && <button className="btn btn-primary" onClick={() => onConvertPlan({ title: plan.title, subject: plan.subject, planEventId: plan.id, roadmapNodeId: node.id })} type="button">이 주제를 실제 활동에 연결</button>}
         </div>
       </section>
     </div>
@@ -1698,6 +1699,170 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
 /* ──────────────────────────────────────────────
    Overview
    ────────────────────────────────────────────── */
+function ThreeYearJourney({ workspace, onNavigate }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void }) {
+  const orderedNodes = [...workspace.roadmap.nodes].sort((a, b) => a.orderIndex - b.orderIndex);
+  const currentNode = orderedNodes.find((node) => node.isCurrent)
+    ?? orderedNodes.find((node) => node.status === "active")
+    ?? orderedNodes.at(-1);
+  const [selectedNodeId, setSelectedNodeId] = useState(currentNode?.id ?? "");
+  const [selectedPlan, setSelectedPlan] = useState<RoadmapPlanEvent | null>(null);
+  const selectedNode = orderedNodes.find((node) => node.id === selectedNodeId) ?? currentNode;
+  const currentIndex = currentNode ? orderedNodes.findIndex((node) => node.id === currentNode.id) : -1;
+
+  const nodeActivities = selectedNode
+    ? workspace.activities.filter((activity) => activity.roadmapNodeId === selectedNode.id)
+    : [];
+  const linkedTopics = selectedNode?.planEvents ?? [];
+  const isCurrent = selectedNode?.id === currentNode?.id;
+  const isFuture = selectedNode ? orderedNodes.findIndex((node) => node.id === selectedNode.id) > currentIndex : false;
+
+  return (
+    <div className="space-y-6">
+      <section className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200/80 shadow-xs">
+        <div className="flex items-start justify-between gap-5 flex-wrap">
+          <div className="max-w-2xl">
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-brand-600">3-YEAR JOURNEY</span>
+            <h2 className="text-xl md:text-2xl font-extrabold text-gray-950 tracking-tight mt-1">고교 3개년 흐름</h2>
+            <p className="text-sm text-gray-500 leading-relaxed mt-2">
+              지나온 학기는 실제로 남긴 기록으로, 이번 학기는 실행할 주제로, 이후 학기는 방향으로 봅니다.
+              미래 학기의 활동은 아직 확정된 계획이 아닙니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
+            <span className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">과거 · 실제 기록</span>
+            <span className="px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-100">현재 · 실행 주제</span>
+            <span className="px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-100">미래 · 방향</span>
+          </div>
+        </div>
+
+        {orderedNodes.length ? (
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
+            {orderedNodes.map((node, index) => {
+              const isPast = currentIndex >= 0 && index < currentIndex;
+              const nodeRecordCount = workspace.activities.filter((activity) => activity.roadmapNodeId === node.id).length;
+              const selected = node.id === selectedNode?.id;
+              const tone = node.isCurrent || node.status === "active"
+                ? "border-brand-400 bg-brand-50/70 ring-2 ring-brand-100"
+                : isPast
+                  ? "border-gray-200 bg-white hover:border-gray-300"
+                  : "border-violet-100 bg-violet-50/40 hover:border-violet-300";
+              return (
+                <button
+                  aria-pressed={selected}
+                  className={`text-left min-h-44 p-4 rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-brand-300 ${tone} ${selected ? "shadow-sm" : ""}`}
+                  key={node.id}
+                  onClick={() => setSelectedNodeId(node.id)}
+                  type="button"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-extrabold text-gray-500">{node.grade}학년 {node.semester}학기</span>
+                    {node.isCurrent || node.status === "active" ? (
+                      <span className="text-[10px] font-extrabold text-brand-700">지금</span>
+                    ) : isPast ? (
+                      <span className="text-[10px] font-bold text-gray-400">기록</span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-violet-600">방향</span>
+                    )}
+                  </div>
+                  <div className={`w-2 h-2 rounded-full mt-4 mb-3 ${node.isCurrent || node.status === "active" ? "bg-brand-500" : isPast ? "bg-gray-400" : "bg-violet-400"}`} />
+                  <strong className="block text-xs font-extrabold text-gray-900 leading-snug line-clamp-3">{node.title}</strong>
+                  <p className="mt-2 text-[11px] leading-relaxed text-gray-500 line-clamp-3">{node.objective || "학기 방향을 준비 중입니다."}</p>
+                  <span className="block mt-3 text-[10px] font-semibold text-gray-400">
+                    {isPast ? `연결 기록 ${nodeRecordCount}건` : `후보 주제 ${node.planEvents?.length ?? 0}개`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-gray-400">상담을 마치면 3개년 흐름이 만들어집니다.</p>
+        )}
+      </section>
+
+      {selectedNode && (
+        <section className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
+          <div className="p-6 md:p-7 border-b border-gray-100 flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-brand-600">{selectedNode.grade}학년 {selectedNode.semester}학기 · {isCurrent ? "CURRENT FOCUS" : isFuture ? "FUTURE DIRECTION" : "PAST RECORD"}</span>
+              <h3 className="text-lg font-extrabold text-gray-950 mt-1">{selectedNode.title}</h3>
+              <p className="text-sm text-gray-600 leading-relaxed mt-2 max-w-3xl">{selectedNode.objective || "이 학기의 방향이 아직 정리되지 않았습니다."}</p>
+            </div>
+            <StatusBadge status={selectedNode.status} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-gray-100">
+            <div className="bg-white p-6 space-y-3">
+              <h4 className="text-sm font-extrabold text-gray-900">{isFuture ? "이 학기에 이어갈 방향" : isCurrent ? "이번 학기에 실행할 주제" : "이 학기에 남긴 기록"}</h4>
+              {isFuture ? (
+                <>
+                  <p className="text-xs text-gray-500 leading-relaxed">아래는 미리 살펴볼 후보입니다. 학교 과목·수행평가·대회 등 실제 기회가 생긴 뒤에 골라 활동으로 연결합니다.</p>
+                  {linkedTopics.length ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {linkedTopics.map((topic) => (
+                        <button
+                          className="text-left rounded-xl border border-violet-100 bg-violet-50/30 p-3 hover:border-violet-300 hover:bg-violet-50 transition focus:outline-none focus:ring-2 focus:ring-violet-300"
+                          key={topic.id}
+                          onClick={() => setSelectedPlan(topic)}
+                          type="button"
+                        >
+                          <span className={`text-[10px] font-extrabold ${topic.priority === "core" ? "text-amber-800" : "text-violet-700"}`}>{topic.priority === "core" ? "★ 우선 추천" : "여유가 있으면"}{topic.subject ? ` · ${topic.subject}` : ""}</span>
+                          <strong className="block text-xs text-gray-900 mt-1 leading-snug">{topic.title}</strong>
+                          <span className="block text-[10px] text-gray-400 mt-2">상세 가이드 보기 →</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : selectedNode.candidateSubjects.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedNode.candidateSubjects.map((subject) => <span className="px-2.5 py-1 rounded-lg bg-violet-50 border border-violet-100 text-xs font-semibold text-violet-700" key={subject}>{subject}</span>)}
+                    </div>
+                  ) : <p className="text-xs text-gray-400">아직 이 학기의 후보 주제를 만들지 않았습니다.</p>}
+                </>
+              ) : isCurrent ? (
+                linkedTopics.length ? (
+                  <div className="space-y-2">
+                    {linkedTopics.slice(0, 4).map((topic) => (
+                      <div className="rounded-xl border border-gray-200 p-3" key={topic.id}>
+                        <span className="text-[10px] font-bold text-brand-600">{topic.priority === "core" ? "★ 최우선" : "선택 심화"}{topic.subject ? ` · ${topic.subject}` : ""}</span>
+                        <strong className="block text-xs text-gray-900 mt-1 leading-snug">{topic.title}</strong>
+                      </div>
+                    ))}
+                    <button className="text-xs font-bold text-brand-600 hover:text-brand-700" onClick={() => onNavigate("overview")} type="button">이번 학기 주제 전체 보기 →</button>
+                  </div>
+                ) : <p className="text-xs text-gray-400">아직 제안된 주제가 없습니다.</p>
+              ) : nodeActivities.length ? (
+                <div className="space-y-2">
+                  {nodeActivities.slice(0, 5).map((activity) => (
+                    <div className="rounded-xl bg-gray-50 border border-gray-200/80 p-3" key={activity.id}>
+                      <span className="text-[10px] font-bold text-gray-500">{activity.subject || activity.activityCategory || "활동"}</span>
+                      <strong className="block text-xs text-gray-900 mt-1 leading-snug">{activity.title}</strong>
+                    </div>
+                  ))}
+                  {nodeActivities.length > 5 && <p className="text-[11px] text-gray-400">외 {nodeActivities.length - 5}건</p>}
+                </div>
+              ) : <p className="text-xs text-gray-400">이 학기에 서비스로 연결된 기록이 아직 없습니다.</p>}
+            </div>
+
+            <div className="bg-gray-50/60 p-6 space-y-3">
+              <h4 className="text-sm font-extrabold text-gray-900">이 단계의 역할</h4>
+              <p className="text-xs text-gray-600 leading-relaxed">{selectedNode.narrativeStage || "학기 흐름을 연결하는 단계"}</p>
+              {selectedNode.competencyGoals.length > 0 && (
+                <>
+                  <h4 className="text-sm font-extrabold text-gray-900 pt-2">쌓아갈 역량</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedNode.competencyGoals.map((goal) => <span className="px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-xs font-semibold text-gray-700" key={goal}>{goal}</span>)}
+                  </div>
+                </>
+              )}
+              {!isCurrent && !isFuture && <p className="pt-2 text-[11px] text-gray-400">과거 학기는 새 계획을 덧붙이지 않고 실제 기록 중심으로 보여줍니다.</p>}
+            </div>
+          </div>
+        </section>
+      )}
+      {selectedPlan && selectedNode && <PlanDetailModal plan={selectedPlan} node={selectedNode} onClose={() => setSelectedPlan(null)} />}
+    </div>
+  );
+}
+
 function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void; onConvertPlan: (draft: ActivityDraft) => void; onWorkspace: (workspace: ProductWorkspace) => void }) {
   const active = workspace.roadmap.nodes.find((n) => n.isCurrent)
     ?? workspace.roadmap.nodes.find((n) => n.status === "active");
@@ -3034,6 +3199,18 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       ),
     },
     {
+      id: "journey",
+      label: "3개년 흐름",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 18c3-6 5-8 8-8s5 2 8-4" />
+          <circle cx="4" cy="18" r="1.5" />
+          <circle cx="12" cy="10" r="1.5" />
+          <circle cx="20" cy="6" r="1.5" />
+        </svg>
+      ),
+    },
+    {
       id: "dashboard",
       label: "대시보드",
       icon: (
@@ -3272,6 +3449,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
         <div className="product-content">
           {tab === "dashboard" && <DashboardView workspace={workspace} onNavigate={setTab} />}
           {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} onWorkspace={onWorkspace} />}
+          {tab === "journey"    && <ThreeYearJourney workspace={workspace} onNavigate={setTab} />}
           {tab === "timetable"  && (
             <TimetableView
               activities={workspace.activities}

@@ -23,7 +23,7 @@ test("the product exposes every primary surface", async () => {
 
   // 탭 구성. 기본 탭은 이번 학기다.
   assert.match(app, /useState<TabId>\("overview"\)/);
-  for (const tab of ["overview", "dashboard", "timetable", "activities", "grades", "portfolio", "chat", "profile"]) {
+  for (const tab of ["overview", "journey", "dashboard", "timetable", "activities", "grades", "portfolio", "chat", "profile"]) {
     assert.match(app, new RegExp(`id: "${tab}"`), `${tab} 탭이 사라졌다`);
   }
 
@@ -98,14 +98,27 @@ test("the school record review stays client-side and states the real storage pol
   assert.doesNotMatch(parser, /export function parseSchoolRecordText/);
 });
 
-test("the deleted 3-year roadmap screen does not come back", async () => {
+test("the 3-year journey distinguishes records, current execution, and future direction", async () => {
   const app = await source("app/workspace-app.tsx");
 
+  // 과거·현재·미래를 같은 밀도의 확정 계획으로 다루지 않는다. 장기 흐름은
+  // 보여주되, 미래는 방향만 제시하고 현재 학기에서만 실행 주제를 보여 준다.
+  assert.match(app, /function ThreeYearJourney/);
+  assert.match(app, /id: "journey"/);
+  assert.match(app, /고교 3개년 흐름/);
+  assert.match(app, /과거 · 실제 기록/);
+  assert.match(app, /현재 · 실행 주제/);
+  assert.match(app, /미래 · 방향/);
+  assert.match(app, /후보 주제/);
+  assert.match(app, /★ 우선 추천/);
+  assert.match(app, /여유가 있으면/);
+  assert.match(app, /상세 가이드 보기/);
+  assert.match(app, /이번 학기 주제 전체 보기/);
+
+  // 옛 화면처럼 전 학기 계획을 한꺼번에 실제 활동으로 전환하는 UI는 되살리지
+  // 않는다. 실행으로 넘어가는 버튼은 이번 학기 화면이 소유한다.
   assert.doesNotMatch(app, /function RoadmapView/);
   assert.doesNotMatch(app, /id: "roadmap"/);
-  // 화면에 보이는 문구에는 로드맵이 남지 않는다(주석은 백엔드 동작 설명이라 허용).
-  const visible = app.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  assert.doesNotMatch(visible, /로드맵/);
 });
 
 test("the admissions workspace uses the catalog instead of free-text target data", async () => {
