@@ -1,79 +1,268 @@
-# 세특연구소 Personalized School Coach
+<div align="center">
 
-`seteuk-ai-harness-v0.2.md`의 Planning, Execution, Reconciliation 루프를 신규 가입부터 실제 활동 기록까지 연결한 전체 제품 프로토타입입니다. 첫 지원 진로군은 반도체공학입니다.
+<img src="public/logo.png" width="72" alt="세특연구소" />
 
-## 작동하는 사용자 흐름
+# 세특연구소 · Seteuk Lab
 
-1. 신규 학생 온보딩 인터뷰
-2. 잠정 Student DNA와 3개년 로드맵 생성
-3. 학생이 로드맵 노드 검토·수정 후 v1 저장
-4. 오늘의 미션과 활성 로드맵 노드 확인
-5. 수행평가 안내문 조건 분석
-6. 학생 기억·로드맵·보완 역량을 반영한 후보 3개 생성
-7. 추천 저장·거절 또는 실제 활동으로 전환
-8. 완료 활동을 사건 메모리로 저장
-9. 활성 노드와 `MATCH / PARTIAL_MATCH / DIVERGE` 정합 판정
-10. 노드 완료와 다음 노드 활성화
-11. 활동 이력, 정합 로그, Student DNA 자동 갱신
-12. 학생 프로필 수정과 로드맵 새 버전 생성
+**An AI coach that turns three years of scattered high‑school activity notes
+into one coherent research narrative.**
 
-## 3개년 기록 메인 화면
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.2-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-4D6BFE?style=flat-square)](https://deepseek.com)
 
-- 앱 진입 시 1·2·3학년이 카드로 끊기지 않고 하나의 3개년 시간축으로 연결됩니다.
-- 각 학년은 3월부터 다음 해 2월까지 한 줄로 표시되며, 가운데에서 1학기와 2학기가 자연스럽게 이어집니다.
-- 활동은 실제 날짜 비율에 맞춰 선 위·아래에 놓이고, 연결 과목의 색을 가진 선과 카테고리 아이콘을 사용합니다.
-- 앞으로의 활동은 하드코딩된 샘플이 아니라 DeepSeek가 학기별 날짜·카테고리·과목·제목을 생성하고 `roadmap_plan_events`에 저장합니다.
-- 카테고리는 상장, 대회, 수행평가, 보고서(세특용), 독서, 시험의 여섯 가지입니다.
-- 학기 영역을 누르면 6개월을 월별로 펼친 확대 화면에서 활동, 과목, 학기 목표를 구체적으로 확인할 수 있습니다.
-- 실제 활동은 채워진 아이콘, 앞으로의 계획은 테두리 아이콘과 점선으로 구분됩니다.
-- 학년별 시간축의 세로 공간을 넓혀 실제 기록이 많아도 위·아래 여러 층으로 읽을 수 있습니다.
-- 로드맵 보드는 짙은 상단 시간축 헤더, 학년별 은은한 배경 밴드, 과목 색상 이벤트 카드로 시각적 우선순위와 가독성을 강화했습니다.
-- 텍스트형 생활기록부 PDF를 실제로 분석해 학년·학기·과목·활동·날짜를 추출합니다.
-- 추출 결과는 검토 화면에서 포함 여부, 학년, 학기, 카테고리, 날짜, 과목, 제목을 수정한 뒤 반영합니다.
-- 원본 PDF는 저장하지 않고, 확인한 과목·활동과 가져오기 이력만 D1에 저장합니다.
-- 정확한 날짜가 없는 항목은 학기 안의 임시 날짜로 표시하며 사용자가 확인해야 합니다.
-- 스캔 이미지형 PDF와 HWP/HWPX의 OCR·문서 추출은 아직 지원하지 않습니다.
+<sub>The product UI is in Korean — it is built for Korean high‑school students.<br/>
+This repository is the **web frontend**. The API lives in a separate backend repository.</sub>
 
-## 데이터 구조
+<img src="docs/screenshots/landing.png" width="880" alt="Landing page" />
 
-- `student_workspaces`: 학생이 직접 입력한 사실과 제약
-- `roadmaps`, `roadmap_nodes`: 버전 관리되는 계획 메모리
-- `roadmap_plan_events`: DeepSeek가 노드별로 생성한 미래 활동 날짜·카테고리·과목·제목
-- `student_activities_v2`: 사건 단위 활동 메모리
-- `school_record_imports`: 생활기록부 가져오기 이력과 처리 결과
-- `school_record_courses`: 학년·학기별 실제 이수 과목
-- `school_record_import_items`: 가져온 활동의 날짜 근거와 인식 신뢰도
-- `reconciliation_logs`: 계획과 실제 활동의 판정 근거
-- `assignment_analyses`: 수행평가 분석과 추천 실행 결과
-- `recommendation_feedback_v2`: 저장·거절 신호
+</div>
 
-D1을 권위 데이터로 사용하고 브라우저에는 현재 학생 ID만 보관합니다. 개발 환경에서는 API가 필요한 테이블을 안전하게 생성하며, 배포용 Drizzle 마이그레이션도 함께 유지합니다.
+---
 
-## 현재 모델 상태
+## What problem is this solving?
 
-Planning, DNA, Assignment, Reviewer, Reconciler는 구조화된 provider 계약 뒤에서 동작합니다. `DEEPSEEK_API_KEY`를 `.dev.vars`에 넣으면 온보딩 로드맵·Student DNA·수행평가 분석이 DeepSeek JSON API를 사용하고, 키가 없거나 응답 검증에 실패하면 기존 결정론적 mock provider로 자동 복귀합니다. 기본 모델은 `deepseek-v4-flash`이며 `DEEPSEEK_MODEL`로 바꿀 수 있습니다.
+Korean university admissions lean heavily on the **학교생활기록부** (*school record*) — and
+inside it, the **세부능력 및 특기사항** (*"se‑teuk"*: the teacher‑written remarks about what a
+student actually did in each subject).
 
-DeepSeek 설정 예시는 `.dev.vars.example`에 있습니다. API 키는 저장소에 커밋하지 않습니다.
+Over three years a student accumulates dozens of these entries: reports, experiments,
+club projects, reading logs, competitions. Individually each one is fine. The problem is
+that **admissions officers read them as a story**, and most students have no story —
+just a pile of disconnected activities, because nobody is tracking how last semester's
+report should have led to this semester's project.
 
-## 실행과 검증
+Keeping that thread is genuinely hard for a 16‑year‑old. That is the job this app does.
+
+## The loop
+
+The product is not a chatbot with a school theme. It is one closed loop, and every
+screen is a step in it.
+
+```mermaid
+flowchart LR
+    D["🔬 Diagnose<br/>read what already exists"]
+    P["🎯 Plan<br/>agree on this semester"]
+    E["📝 Execute<br/>the student does the work"]
+    R["📚 Record<br/>save it with its lineage"]
+
+    D --> P --> E --> R --> D
+
+    style D fill:#EFF6FF,stroke:#3182F6,stroke-width:2px,color:#0f172a
+    style P fill:#F0FDF4,stroke:#10B981,stroke-width:2px,color:#0f172a
+    style E fill:#FEF9C3,stroke:#F59E0B,stroke-width:2px,color:#0f172a
+    style R fill:#F5F3FF,stroke:#8B5CF6,stroke-width:2px,color:#0f172a
+```
+
+What makes the loop hold together is **activity lineage**. Every record can point at the
+activity it grew out of (`parent_activity_id`), and every plan remembers which record it
+came from. So the system can answer the question a general‑purpose chatbot cannot:
+
+> *"You hit the limits of an exponential model last semester. Do you want to take that
+> further with a logistic one, or widen it instead?"*
+
+## Screens
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### This Semester
+The goal agreed on during the consultation, plus the research topics that follow from
+it. Each card converts into a real activity record in one click.
+
+<img src="docs/screenshots/overview.png" alt="This semester" />
+
+</td>
+<td width="50%" valign="top">
+
+### Activities & Se‑teuk
+Every activity with what the student learned, its keywords, and how well it matches the
+semester plan. **Follow‑up research is proposed from the activity's own lineage**, not
+from a blank prompt.
+
+<img src="docs/screenshots/activities.png" alt="Activities" />
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Grades
+Weighted GPA, per‑semester trend, and rank distribution — all computed from records the
+student actually entered. Nothing is filled in on their behalf.
+
+<img src="docs/screenshots/grades.png" alt="Grades" />
+
+</td>
+<td width="50%" valign="top">
+
+### Timetable
+The weekly schedule doubles as the course list: pick a subject and you see the records
+filed under it, then jump straight to writing the next one.
+
+<img src="docs/screenshots/timetable.png" alt="Timetable" />
+
+</td>
+</tr>
+</table>
+
+Also in the app: an **onboarding flow** that reads an uploaded school‑record PDF, a
+**diagnosis + consultation gate** that must be cleared before the main app unlocks, a
+**portfolio view** for admissions season, and a **chatbot with an edit mode** that can
+write records straight from conversation.
+
+## How a student moves through it
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Student
+    participant W as Web app
+    participant A as API
+    participant L as DeepSeek
+
+    S->>W: Sign up
+    W->>S: Onboarding — upload school record PDF (optional)
+    W->>A: Parse the PDF
+    A->>L: Extract subjects, activities, awards, reading
+    A-->>W: Structured records
+    W->>S: AI asks only what the records cannot answer
+    A->>L: Run the precision diagnosis
+    A-->>W: Strengths · weaknesses · opportunities · patterns
+    S->>W: Consultation chat about where to go next
+    W->>A: Confirm the plan (button, never a side effect)
+    A-->>W: Semester goal + research topics
+    Note over S,W: Main app unlocks
+```
+
+The gate is deliberate. A student who has not been diagnosed has no basis for a plan, so
+`/roadmaps`, `/plans`, `/recommendations` and general chat stay locked until the
+consultation is concluded — **by an explicit button press, never by the chatbot deciding
+on its own.**
+
+## Design principles
+
+These are enforced in code, not just aspirations.
+
+| | |
+|---|---|
+| 🚫 **Never invent data** | If a number cannot be computed from real records, the space stays empty and says why. No fabricated percentiles, no placeholder grades, no "D‑42". |
+| 🔓 **Never lock an input** | When a parsed value disagrees with what the student typed, both stay visible and the app points out the difference. It does not silently overwrite or freeze the field. |
+| ✋ **Suggest, then confirm** | AI output is a draft. Nothing enters the record until the student presses a button. |
+| 🗑️ **No deletion by conversation** | The chatbot's edit mode can create and update, never delete. Records are only removed from their own screen. |
+| 📤 **No dead UI** | A button either works, or is visibly disabled as "coming soon", or is not there. |
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph FE["🖥️  Frontend — this repository"]
+        UI["Screens<br/>Next.js App Router · React 19"]
+        AD["workspace-adapter<br/>the single gateway to the API"]
+        UI --> AD
+    end
+
+    subgraph BE["⚙️  Backend — separate repository"]
+        API["FastAPI<br/>JWT · SSE streaming"]
+        SVC["Services<br/>parser · diagnosis · plans · chat"]
+        DB[("PostgreSQL")]
+        API --> SVC --> DB
+    end
+
+    LLM["DeepSeek"]
+
+    AD -->|"REST + SSE"| API
+    SVC -->|"every LLM call"| LLM
+
+    style FE fill:#F8FAFC,stroke:#CBD5E1,color:#0f172a
+    style BE fill:#F8FAFC,stroke:#CBD5E1,color:#0f172a
+    style LLM fill:#EFF6FF,stroke:#3182F6,color:#0f172a
+```
+
+Two rules keep the split clean:
+
+- **The frontend never calls DeepSeek.** Every LLM call goes through the backend, because
+  that is where per‑user daily quotas live.
+- **API types are generated, not written.** `lib/api-types.ts` comes from the backend's
+  `/openapi.json` via `openapi-typescript`, so a backend change surfaces as a compile
+  error instead of a runtime surprise.
+
+### Stack
+
+| Layer | Choice |
+|---|---|
+| Framework | Next.js 16 (App Router), React 19, TypeScript 5.9 |
+| Styling | Tailwind CSS v4 utilities over a hand‑written design system (Pretendard, Toss‑inspired tokens) |
+| API | FastAPI · Python 3.12 · SQLAlchemy 2.0 (async) · Alembic |
+| Database | PostgreSQL |
+| Auth | JWT access + refresh, Kakao social login |
+| Streaming | Server‑Sent Events for the chatbot (parsed from `fetch`, so the request can carry an auth header) |
+| LLM | DeepSeek for every generation path — parsing, diagnosis, planning, recommendations, chat |
+
+## Getting started
+
+Requires **Node ≥ 22.13** and a running backend.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-브라우저에서 `http://localhost:3000`을 엽니다.
+Create `.env.local` if your backend is not on the default origin:
 
 ```bash
-npm run lint
-npm test
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_KAKAO_JS_KEY=          # optional — no key means no Kakao button
 ```
 
-데이터 모델 변경 후에는 `npm run db:generate`를 실행합니다.
+Then:
 
-## 문서
+```bash
+npm run typecheck   # tsc --noEmit
+npm test            # screen contract tests
+npm run lint
+```
 
-- `docs/harness-architecture.md`: 하네스 경계와 기본 구조
-- `docs/full-product-prototype.md`: v0.2 기능과 구현 화면·데이터 매핑
-- `docs/semiconductor-pilot-v0.3.md`: 반도체 도메인 구현 계약
-- `docs/semiconductor-evaluation-set-v0.1.md`: 이후 사용할 평가셋 초안
+Regenerate API types after a backend change:
+
+```bash
+npx openapi-typescript http://127.0.0.1:8000/openapi.json -o lib/api-types.ts
+```
+
+## Project layout
+
+```
+app/
+  workspace-app.tsx      # shell, this-semester, activities, portfolio, profile
+  gate-frame.tsx         # full-screen frame for onboarding and the gate
+  consultation-view.tsx  # diagnosis report + consultation chat
+  grades-view.tsx        # GPA, trend, rank distribution, grade table
+  timetable-view.tsx     # weekly grid + course drawer
+  chat-view.tsx          # chatbot with edit mode
+  chat-thread.tsx        # shared bubbles + composer
+  landing-view.tsx       # signed-out marketing page
+  globals.css            # design tokens + component styles
+lib/
+  workspace-adapter.ts   # the only place that talks to the backend
+  api-client.ts          # auth, refresh, binary downloads
+  api-types.ts           # generated from the backend's OpenAPI schema
+docs/
+  DESIGN_MIGRATION.md    # design decisions and what is deliberately not built
+```
+
+## Status
+
+Working prototype, verified end‑to‑end against a real backend and a real DeepSeek key —
+sign‑up through onboarding, school‑record parsing, diagnosis, consultation, records,
+follow‑up recommendations and the chatbot. Not deployed publicly yet.
+
+Known gaps are tracked honestly in [`docs/DESIGN_MIGRATION.md`](docs/DESIGN_MIGRATION.md).
+The most visible one: the figures on the signed‑out landing page are placeholders, kept
+in a single file (`app/landing-content.ts`) behind an `IS_PLACEHOLDER` flag so they
+cannot ship by accident.
+
+Payments and subscriptions are intentionally out of scope.
