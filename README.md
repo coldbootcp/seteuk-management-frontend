@@ -12,7 +12,7 @@ into one coherent research narrative.**
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.2-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-4D6BFE?style=flat-square)](https://deepseek.com)
+![LLM](https://img.shields.io/badge/LLM-provider--agnostic-6366F1?style=flat-square)
 
 <sub>The product UI is in Korean — it is built for Korean high‑school students.<br/>
 This repository is the **web frontend**. The API lives in a separate backend repository.</sub>
@@ -123,7 +123,7 @@ sequenceDiagram
     participant S as Student
     participant W as Web app
     participant A as API
-    participant L as DeepSeek
+    participant L as LLM
 
     S->>W: Sign up
     W->>S: Onboarding — upload school record PDF (optional)
@@ -144,18 +144,6 @@ The gate is deliberate. A student who has not been diagnosed has no basis for a 
 consultation is concluded — **by an explicit button press, never by the chatbot deciding
 on its own.**
 
-## Design principles
-
-These are enforced in code, not just aspirations.
-
-| | |
-|---|---|
-| 🚫 **Never invent data** | If a number cannot be computed from real records, the space stays empty and says why. No fabricated percentiles, no placeholder grades, no "D‑42". |
-| 🔓 **Never lock an input** | When a parsed value disagrees with what the student typed, both stay visible and the app points out the difference. It does not silently overwrite or freeze the field. |
-| ✋ **Suggest, then confirm** | AI output is a draft. Nothing enters the record until the student presses a button. |
-| 🗑️ **No deletion by conversation** | The chatbot's edit mode can create and update, never delete. Records are only removed from their own screen. |
-| 📤 **No dead UI** | A button either works, or is visibly disabled as "coming soon", or is not there. |
-
 ## Architecture
 
 ```mermaid
@@ -173,7 +161,7 @@ flowchart TB
         API --> SVC --> DB
     end
 
-    LLM["DeepSeek"]
+    LLM["LLM provider<br/>behind a harness boundary"]
 
     AD -->|"REST + SSE"| API
     SVC -->|"every LLM call"| LLM
@@ -185,8 +173,8 @@ flowchart TB
 
 Two rules keep the split clean:
 
-- **The frontend never calls DeepSeek.** Every LLM call goes through the backend, because
-  that is where per‑user daily quotas live.
+- **The frontend never calls a model directly.** Every LLM call goes through the backend,
+  because that is where the provider boundary and the per‑user daily quotas live.
 - **API types are generated, not written.** `lib/api-types.ts` comes from the backend's
   `/openapi.json` via `openapi-typescript`, so a backend change surfaces as a compile
   error instead of a runtime surprise.
@@ -201,7 +189,7 @@ Two rules keep the split clean:
 | Database | PostgreSQL |
 | Auth | JWT access + refresh, Kakao social login |
 | Streaming | Server‑Sent Events for the chatbot (parsed from `fetch`, so the request can carry an auth header) |
-| LLM | DeepSeek for every generation path — parsing, diagnosis, planning, recommendations, chat |
+| LLM | Chosen per environment behind a provider boundary in the backend — the same call sites serve parsing, diagnosis, planning, recommendations and chat |
 
 ## Getting started
 
@@ -256,7 +244,7 @@ docs/
 
 ## Status
 
-Working prototype, verified end‑to‑end against a real backend and a real DeepSeek key —
+Working prototype, verified end‑to‑end against a real backend and a real model key —
 sign‑up through onboarding, school‑record parsing, diagnosis, consultation, records,
 follow‑up recommendations and the chatbot. Not deployed publicly yet.
 
