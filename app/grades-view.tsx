@@ -23,64 +23,20 @@ interface GradesViewProps {
   onRecordsChanged?: () => void;
 }
 
-// 6개 학기 기본 목업 데이터 (석차등급 과목과 성취도 과목 분리: 둘 중 하나만 가짐)
-const INITIAL_SEMESTERS_DATA: SemesterGradeData[] = [
-  {
-    grade: 1,
-    semester: 1,
-    items: [
-      { id: "g-1-1", courseName: "공통국어", category: "공통", group: "국어", units: 4, rank: 2, achievement: null, rawScore: 89, subjectAverage: 71.5, stdDev: 14.2, isCareerRelated: false, seteukCount: 1 },
-      { id: "g-1-2", courseName: "공통수학", category: "공통", group: "수학", units: 4, rank: 1, achievement: null, rawScore: 98, subjectAverage: 65.4, stdDev: 18.0, isCareerRelated: true, seteukCount: 2 },
-      { id: "g-1-3", courseName: "공통영어", category: "공통", group: "영어", units: 4, rank: 2, achievement: null, rawScore: 91, subjectAverage: 68.2, stdDev: 16.5, isCareerRelated: false, seteukCount: 1 },
-      { id: "g-1-4", courseName: "통합사회", category: "공통", group: "사회", units: 4, rank: 2, achievement: null, rawScore: 90, subjectAverage: 74.0, stdDev: 13.1, isCareerRelated: false, seteukCount: 1 },
-      { id: "g-1-5", courseName: "통합과학", category: "공통", group: "과학", units: 4, rank: 1, achievement: null, rawScore: 96, subjectAverage: 62.8, stdDev: 19.3, isCareerRelated: true, seteukCount: 3 },
-      { id: "g-1-6", courseName: "과학탐구실험", category: "공통", group: "과학", units: 2, rank: null, achievement: "A", rawScore: 99, subjectAverage: 82.0, stdDev: 11.2, isCareerRelated: true, seteukCount: 2 },
-      { id: "g-1-7", courseName: "한국사", category: "공통", group: "사회", units: 3, rank: 3, achievement: null, rawScore: 84, subjectAverage: 72.0, stdDev: 15.0, isCareerRelated: false, seteukCount: 0 },
-      { id: "g-1-8", courseName: "정보", category: "일반선택", group: "기술가정/정보", units: 4, rank: 1, achievement: null, rawScore: 97, subjectAverage: 69.5, stdDev: 17.1, isCareerRelated: true, seteukCount: 2 },
-    ],
-  },
-  {
-    grade: 1,
-    semester: 2,
-    items: [
-      { id: "g-2-1", courseName: "공통국어", category: "공통", group: "국어", units: 4, rank: 2, achievement: null, rawScore: 90, subjectAverage: 70.2, stdDev: 14.8, isCareerRelated: false, seteukCount: 1 },
-      { id: "g-2-2", courseName: "공통수학", category: "공통", group: "수학", units: 4, rank: 1, achievement: null, rawScore: 96, subjectAverage: 63.8, stdDev: 19.2, isCareerRelated: true, seteukCount: 2 },
-      { id: "g-2-3", courseName: "공통영어", category: "공통", group: "영어", units: 4, rank: 2, achievement: null, rawScore: 88, subjectAverage: 67.5, stdDev: 16.0, isCareerRelated: false, seteukCount: 1 },
-      { id: "g-2-4", courseName: "통합사회", category: "공통", group: "사회", units: 4, rank: 2, achievement: null, rawScore: 89, subjectAverage: 73.1, stdDev: 12.8, isCareerRelated: false, seteukCount: 0 },
-      { id: "g-2-5", courseName: "통합과학", category: "공통", group: "과학", units: 4, rank: 1, achievement: null, rawScore: 97, subjectAverage: 61.4, stdDev: 20.1, isCareerRelated: true, seteukCount: 3 },
-      { id: "g-2-6", courseName: "과학탐구실험", category: "공통", group: "과학", units: 2, rank: null, achievement: "A", rawScore: 100, subjectAverage: 83.5, stdDev: 10.5, isCareerRelated: true, seteukCount: 2 },
-      { id: "g-2-7", courseName: "한국사", category: "공통", group: "사회", units: 3, rank: 2, achievement: null, rawScore: 91, subjectAverage: 71.0, stdDev: 14.5, isCareerRelated: false, seteukCount: 1 },
-    ],
-  },
-  {
-    grade: 2,
-    semester: 1,
-    items: [
-      { id: "g-3-1", courseName: "문학", category: "일반선택", group: "국어", units: 4, rank: 2, achievement: null, rawScore: 92, subjectAverage: 72.0, stdDev: 13.9, isCareerRelated: false, seteukCount: 1 },
-      { id: "g-3-2", courseName: "수학Ⅰ", category: "일반선택", group: "수학", units: 4, rank: 1, achievement: null, rawScore: 97, subjectAverage: 60.2, stdDev: 21.0, isCareerRelated: true, seteukCount: 3 },
-      { id: "g-3-3", courseName: "영어Ⅰ", category: "일반선택", group: "영어", units: 4, rank: 2, achievement: null, rawScore: 89, subjectAverage: 66.8, stdDev: 17.5, isCareerRelated: false, seteukCount: 1 },
-      { id: "g-3-4", courseName: "물리학Ⅰ", category: "일반선택", group: "과학", units: 4, rank: 1, achievement: null, rawScore: 99, subjectAverage: 58.4, stdDev: 22.3, isCareerRelated: true, seteukCount: 4 },
-      { id: "g-3-5", courseName: "화학Ⅰ", category: "일반선택", group: "과학", units: 4, rank: 2, achievement: null, rawScore: 93, subjectAverage: 62.0, stdDev: 19.8, isCareerRelated: true, seteukCount: 2 },
-      { id: "g-3-6", courseName: "기하", category: "진로선택", group: "수학", units: 4, rank: null, achievement: "A", rawScore: 95, subjectAverage: 68.0, stdDev: 18.0, isCareerRelated: true, seteukCount: 2 },
-      { id: "g-3-7", courseName: "프로그래밍", category: "진로선택", group: "기술가정/정보", units: 4, rank: null, achievement: "A", rawScore: 98, subjectAverage: 71.0, stdDev: 16.2, isCareerRelated: true, seteukCount: 3 },
-    ],
-  },
-  {
-    grade: 2,
-    semester: 2,
-    items: [
-      { id: "g-4-1", courseName: "독서", category: "일반선택", group: "국어", units: 4, rank: 2, achievement: null, rawScore: 91, subjectAverage: 71.0, stdDev: 14.0, isCareerRelated: false, seteukCount: 1 },
-      { id: "g-4-2", courseName: "수학Ⅱ", category: "일반선택", group: "수학", units: 4, rank: 1, achievement: null, rawScore: 96, subjectAverage: 59.5, stdDev: 21.5, isCareerRelated: true, seteukCount: 2 },
-      { id: "g-4-3", courseName: "영어Ⅱ", category: "일반선택", group: "영어", units: 4, rank: 2, achievement: null, rawScore: 90, subjectAverage: 65.0, stdDev: 17.0, isCareerRelated: false, seteukCount: 1 },
-      { id: "g-4-4", courseName: "물리학Ⅰ", category: "일반선택", group: "과학", units: 4, rank: 1, achievement: null, rawScore: 98, subjectAverage: 57.2, stdDev: 23.0, isCareerRelated: true, seteukCount: 3 },
-      { id: "g-4-5", courseName: "화학Ⅰ", category: "일반선택", group: "과학", units: 4, rank: 1, achievement: null, rawScore: 96, subjectAverage: 61.8, stdDev: 20.0, isCareerRelated: true, seteukCount: 2 },
-      { id: "g-4-6", courseName: "기하", category: "진로선택", group: "수학", units: 4, rank: null, achievement: "A", rawScore: 94, subjectAverage: 67.5, stdDev: 18.5, isCareerRelated: true, seteukCount: 2 },
-      { id: "g-4-7", courseName: "정보", category: "일반선택", group: "기술가정/정보", units: 4, rank: 1, achievement: null, rawScore: 99, subjectAverage: 68.0, stdDev: 17.8, isCareerRelated: true, seteukCount: 3 },
-    ],
-  },
-  { grade: 3, semester: 1, items: [] },
-  { grade: 3, semester: 2, items: [] },
-];
+/**
+ * 6개 학기의 빈 뼈대. 예전에는 이 자리에 목업 성적 40여 과목이 하드코딩돼 있어서,
+ * 기록이 하나도 없는 학생에게도 1~2학년 성적표가 본인 것처럼 채워져 보였다.
+ * 대시보드는 같은 상황에서 정직하게 빈 상태를 보여주므로 두 화면이 서로 어긋났다.
+ */
+function emptySemesters(): SemesterGradeData[] {
+  const data: SemesterGradeData[] = [];
+  for (let grade = 1; grade <= 3; grade += 1) {
+    for (let semester = 1; semester <= 2; semester += 1) {
+      data.push({ grade, semester, items: [] });
+    }
+  }
+  return data;
+}
 
 // 시간표 과목을 성적표 데이터에 병합하는 순수 헬퍼 (기존 입력 성적 보존)
 function syncTimetableWithSemesters(
@@ -129,8 +85,11 @@ function syncTimetableWithSemesters(
           category: tc.category,
           group: tc.group,
           units: tc.units,
-          rank: tc.category === "진로선택" ? null : 2,
-          achievement: tc.category === "진로선택" ? "A" : null,
+          // 시간표에서 가져오는 것은 "무슨 과목을 듣는가"이지 성적이 아니다. 예전에는
+          // 일반선택이면 2등급, 진로선택이면 A를 넣어 두어, 학생이 입력한 적 없는
+          // 성적이 평점 계산에까지 들어갔다. 성적은 비운 채로 가져온다.
+          rank: null,
+          achievement: null,
           rawScore: null,
           subjectAverage: null,
           stdDev: null,
@@ -163,8 +122,10 @@ export function GradesView({
   onRecordsChanged,
 }: GradesViewProps) {
   const [semestersData, setSemestersData] = useState<SemesterGradeData[]>(() =>
-    syncTimetableWithSemesters(INITIAL_SEMESTERS_DATA, defaultTimetable).updatedData
+    syncTimetableWithSemesters(emptySemesters(), defaultTimetable).updatedData
   );
+  /** 백엔드 조회가 끝나기 전에는 "성적이 없다"고 단정하지 않는다. */
+  const [recordsLoaded, setRecordsLoaded] = useState(false);
   const [prevDefaultTimetable, setPrevDefaultTimetable] = useState(defaultTimetable);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<"synced" | "saving" | "error" | null>(null);
@@ -172,7 +133,8 @@ export function GradesView({
   const isUUID = (id: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-  // 백엔드 academic-performance 조회 및 초기 연동
+  // 화면에 보이는 성적의 정본은 백엔드다. 조회가 끝나면 결과가 없더라도 그대로
+  // 반영한다 — 예전에는 결과가 비면 하드코딩 목업이 그대로 남아 있었다.
   useEffect(() => {
     let isMounted = true;
     async function loadRecordsFromBackend() {
@@ -180,38 +142,27 @@ export function GradesView({
         const records = await fetchAcademicRecords({ limit: 200 });
         if (!isMounted) return;
 
-        if (records && records.length > 0) {
-          const semMap = new Map<string, HighSchoolGradeItem[]>();
-          for (let g = 1; g <= 3; g++) {
-            for (let s = 1; s <= 2; s++) {
-              semMap.set(`${g}-${s}`, []);
-            }
-          }
+        const loadedData = emptySemesters();
+        (records ?? []).forEach((rec) => {
+          const target = loadedData.find((sem) => sem.grade === rec.grade && sem.semester === rec.semester);
+          if (target) target.items.push(backendRecordToGradeItem(rec));
+        });
 
-          records.forEach((rec) => {
-            const key = `${rec.grade}-${rec.semester}`;
-            const targetList = semMap.get(key);
-            if (targetList) {
-              targetList.push(backendRecordToGradeItem(rec));
-            }
-          });
-
-          const loadedData: SemesterGradeData[] = [];
-          for (let g = 1; g <= 3; g++) {
-            for (let s = 1; s <= 2; s++) {
-              loadedData.push({
-                grade: g,
-                semester: s,
-                items: semMap.get(`${g}-${s}`) || [],
-              });
-            }
-          }
-
-          setSemestersData(loadedData);
-          setSyncStatus("synced");
-        }
+        // 아직 저장되지 않은 행(시간표에서 끌어온 과목 등)은 남겨 둔다 — 학생이 직접
+        // 넣은 값이라 지어낸 데이터가 아니고, 백엔드에 같은 과목이 있으면 그쪽을 쓴다.
+        setSemestersData((prev) =>
+          loadedData.map((sem) => {
+            const saved = new Set(sem.items.map((item) => item.courseName));
+            const unsaved = (prev.find((p) => p.grade === sem.grade && p.semester === sem.semester)?.items ?? [])
+              .filter((item) => !isUUID(item.id) && !saved.has(item.courseName));
+            return { ...sem, items: [...sem.items, ...unsaved] };
+          }),
+        );
+        if (records && records.length > 0) setSyncStatus("synced");
       } catch (err) {
         console.warn("백엔드 성적 로드 실패 (로컬 상태 유지):", err);
+      } finally {
+        if (isMounted) setRecordsLoaded(true);
       }
     }
 
@@ -325,10 +276,14 @@ export function GradesView({
     // 지어낸 값이 아니라 각 과목 행의 seteukCount를 실제로 센 것이다.
     let linkedCourses = 0;
     let totalCourses = 0;
+    // 성적이 실제로 입력된 과목 수. 시간표에서 가져온 행은 성적이 비어 있어서
+    // 전체 과목 수와 다르다 — 평점 옆에 그 수를 적으므로 따로 센다.
+    let gradedCourses = 0;
     let currentSemesterSeteuk = 0;
     semestersData.forEach((sem) => {
       sem.items.forEach((item) => {
         totalCourses += 1;
+        if (item.rank !== null || item.achievement !== null) gradedCourses += 1;
         if (item.seteukCount > 0) linkedCourses += 1;
         if (sem.grade === currentGrade && sem.semester === currentSemester) {
           currentSemesterSeteuk += item.seteukCount;
@@ -343,6 +298,7 @@ export function GradesView({
       trendData,
       linkedCourses,
       totalCourses,
+      gradedCourses,
       linkRate: totalCourses ? Math.round((linkedCourses / totalCourses) * 100) : 0,
       currentSemesterSeteuk,
     };
@@ -465,11 +421,13 @@ export function GradesView({
       category: "일반선택",
       group: "기타",
       units: 4,
-      rank: 2,
+      // 새 행은 비워 둔다. 예전에는 2등급·원점수 90·평균 70을 미리 채워 넣고 그대로
+      // 백엔드에 저장까지 해서, 학생이 손대지 않은 값이 평점에 섞였다.
+      rank: null,
       achievement: null,
-      rawScore: 90,
-      subjectAverage: 70,
-      stdDev: 15,
+      rawScore: null,
+      subjectAverage: null,
+      stdDev: null,
       isCareerRelated: false,
       seteukCount: 0,
     };
@@ -585,8 +543,8 @@ export function GradesView({
             <span className="text-sm text-gray-400 font-medium">/ 9.00</span>
           </div>
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px]">
-            <span className="text-gray-500">등급이 있는 과목</span>
-            <span className="font-bold text-gray-800">{stats.totalCourses}과목</span>
+            <span className="text-gray-500">성적이 입력된 과목</span>
+            <span className="font-bold text-gray-800">{stats.gradedCourses}과목</span>
           </div>
         </div>
 
@@ -721,7 +679,9 @@ export function GradesView({
             ) : (
               <div className="h-full flex items-center justify-center">
                 <p className="text-xs text-gray-400 text-center break-keep">
-                  학기가 두 개 이상 기록되면 추이가 그려집니다.
+                  {recordsLoaded
+                    ? "성적이 입력된 학기가 두 개 이상이면 추이가 그려집니다."
+                    : "성적을 불러오는 중입니다…"}
                 </p>
               </div>
             )}
@@ -731,6 +691,13 @@ export function GradesView({
         {/* 석차등급 분포 */}
         <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col">
           <h3 className="text-base font-bold text-gray-900 mb-4">석차등급 분포</h3>
+          {stats.distribution.length === 0 && (
+            <p className="text-xs text-gray-400 my-auto text-center leading-relaxed break-keep">
+              {recordsLoaded
+                ? "석차등급이 입력된 과목이 아직 없습니다."
+                : "성적을 불러오는 중입니다…"}
+            </p>
+          )}
           <div className="space-y-3.5 my-auto">
             {stats.distribution.map((item) => (
               <div className="flex items-center gap-3 text-xs" key={item.label}>
@@ -828,7 +795,11 @@ export function GradesView({
                 <tr>
                   <td colSpan={8} className="empty-table-cell">
                     <div className="empty-box">
-                      <p>등록된 과목 성적이 없습니다.</p>
+                      <p>
+                        {recordsLoaded
+                          ? `${activeGrade}학년 ${activeSem}학기에 등록된 과목 성적이 없습니다.`
+                          : "성적을 불러오는 중입니다…"}
+                      </p>
                       <div className="empty-actions">
                         <button
                           type="button"
@@ -868,11 +839,13 @@ export function GradesView({
                         value={item.category}
                         onChange={(e) => {
                           const newCat = e.target.value as HighSchoolGradeItem["category"];
-                          // 진로선택이면 성취도 A로, 공통/일반선택이면 등급(2등급)으로 자동 전환
+                          // 진로선택은 성취도, 공통·일반선택은 석차등급을 쓴다. 둘 중
+                          // 쓰지 않는 쪽만 비우고, 값을 지어내지는 않는다 — 학생이 바꾼
+                          // 것은 교과 구분이지 성적이 아니다.
                           if (newCat === "진로선택") {
-                            handleUpdateItem(item.id, { category: newCat, rank: null, achievement: item.achievement || "A" });
+                            handleUpdateItem(item.id, { category: newCat, rank: null, achievement: item.achievement });
                           } else if (newCat === "공통" || newCat === "일반선택") {
-                            handleUpdateItem(item.id, { category: newCat, rank: item.rank || 2, achievement: null });
+                            handleUpdateItem(item.id, { category: newCat, rank: item.rank, achievement: null });
                           } else {
                             handleUpdateItem(item.id, { category: newCat });
                           }
