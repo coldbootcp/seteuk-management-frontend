@@ -2891,6 +2891,8 @@ export interface components {
             id: string;
             /** Title */
             title: string | null;
+            /** Purpose */
+            purpose: string;
             /**
              * Created At
              * Format: date-time

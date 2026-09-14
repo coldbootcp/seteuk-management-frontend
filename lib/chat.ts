@@ -10,7 +10,16 @@ export type ChatAction = {
   result?: Record<string, unknown>;
 };
 
-export type Conversation = { id: string; title: string | null; updated_at: string };
+/**
+ * 백엔드는 일반 잡담(general)과 진단+상담 대화(initial_consultation /
+ * semester_review_consultation)를 같은 conversations 테이블에 purpose로만
+ * 구분해 담는다. 챗봇 탭의 대화 목록은 일반 잡담만 보여줘야 한다 — 상담 대화는
+ * 진단·상담 관문 화면이 따로 열고 닫는 것이라 여기 섞이면 같은 대화가 두 자리에서
+ * 보이는 것처럼 헷갈린다.
+ */
+export const GENERAL_CONVERSATION_PURPOSE = "general";
+
+export type Conversation = { id: string; title: string | null; purpose: string; updated_at: string };
 
 export type StoredMessage = {
   id: string;

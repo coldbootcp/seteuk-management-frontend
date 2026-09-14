@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api-client";
 import {
+  GENERAL_CONVERSATION_PURPOSE,
   streamMessage,
   type ChatMode,
   type Conversation,
@@ -36,8 +37,12 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
   const loadConversations = useCallback(async () => {
     try {
       const result = await api<{ items: Conversation[] }>("/conversations?limit=50");
-      setConversations(result.items);
-      return result.items;
+      // 상담 대화(initial_consultation/semester_review_consultation)는 진단·상담
+      // 관문 화면이 따로 열고 닫는다. 여기 같이 보이면 같은 대화가 두 군데서 도는
+      // 것처럼 보여 헷갈린다.
+      const general = result.items.filter((conversation) => conversation.purpose === GENERAL_CONVERSATION_PURPOSE);
+      setConversations(general);
+      return general;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "대화를 불러오지 못했습니다.");
       return [];
