@@ -52,7 +52,7 @@ type ProfileForm = {
 
 
 /** 온보딩은 기본 정보를 저장한 뒤 별도 사전 질문 없이 상담 관문으로 이어진다. */
-type OnboardingStep = "select" | "profile" | "ai";
+type OnboardingStep = "select" | "profile";
 
 type ActivityDraft = {
   title: string;
@@ -65,25 +65,6 @@ type ActivityDraft = {
 type OnboardingSuggestions = {
   majors: string[];
   keywords: string[];
-  provider?: "deepseek" | "fallback";
-};
-
-type ClarificationQuestion = {
-  id: string;
-  label: string;
-  question: string;
-  why?: string;
-  selectionMode?: "single" | "multiple";
-  options: string[];
-};
-
-type ClarificationResponse = {
-  summary?: string;
-  questions?: ClarificationQuestion[];
-  blocked?: boolean;
-  complete?: boolean;
-  draftChangeSummary?: string;
-  reason?: string;
   provider?: "deepseek" | "fallback";
 };
 
@@ -127,38 +108,13 @@ const EMPTY_PROFILE: ProfileForm = {
   roadmapDesignNotes: "",
 };
 
-/** AI 확인 질문 카드의 색. 질문 순서대로 돌려 쓴다(목업의 파랑·보라·초록). */
-const AI_QUESTION_TONES = [
-  { chip: "bg-blue-50 text-brand-600", card: "border-brand-500 bg-blue-50/50 font-bold text-brand-800", dot: "bg-brand-500", badge: "bg-brand-100 text-brand-800" },
-  { chip: "bg-purple-50 text-purple-700", card: "border-purple-500 bg-purple-50/50 font-bold text-purple-900", dot: "bg-purple-600", badge: "bg-purple-100 text-purple-800" },
-  { chip: "bg-emerald-50 text-emerald-700", card: "border-emerald-500 bg-emerald-50/50 font-bold text-emerald-900", dot: "bg-emerald-600", badge: "bg-emerald-100 text-emerald-800" },
-];
-
 const APP_VERSION = "0.7.0";
-const AI_JUDGEMENT_OPTION = "잘 모르겠음 — AI 판단에 맡길게요";
-const OTHER_CLARIFICATION_OPTION = "기타 직접 입력";
 
 /* ──────────────────────────────────────────────
    Utilities
    ────────────────────────────────────────────── */
 function splitList(value: string) {
   return value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
-}
-
-function clarificationOptions(question: ClarificationQuestion) {
-  const options = question.options.some((option) => option.includes("잘 모르겠") || option.includes("AI 판단"))
-    ? question.options
-    : [...question.options.slice(0, 3), AI_JUDGEMENT_OPTION];
-  return options.some((option) => option === OTHER_CLARIFICATION_OPTION) ? options : [...options, OTHER_CLARIFICATION_OPTION];
-}
-
-function clarificationAnswerParts(answer: string) {
-  return answer.split(" | ").map((part) => part.trim()).filter(Boolean);
-}
-
-function allowsMultipleClarificationAnswers(question: ClarificationQuestion) {
-  if (question.selectionMode) return question.selectionMode === "multiple";
-  return !/(identity_conflict|grade_conflict|이름 확인|학년 확인)/.test(`${question.id} ${question.label}`);
 }
 
 function isGraduatedGrade(value: string) {
@@ -194,75 +150,9 @@ function expectedCurrentPeriodFromRecord(period: SchoolRecordPeriod | null): { g
   return { grade: String(period.grade + 1), semester: "1" };
 }
 
-function recordIsFinalizedForClarification(parsed: SchoolRecordParseResult | null, form: ProfileForm) {
-  const latestGrade = parsed ? getLatestSchoolRecordPeriod(parsed)?.grade ?? 0 : 0;
-  return isGraduatedGrade(form.grade) || latestGrade >= 3;
-}
-
 function gradeLabel(value: string) {
   if (isGraduatedGrade(value)) return "졸업";
   return value ? `${value}학년` : "선택";
-}
-
-function buildClarificationQuestions(
-  form: ProfileForm,
-  parsed: SchoolRecordParseResult | null,
-  recordContext: OnboardingRecordContext,
-): ClarificationQuestion[] {
-  const career = form.targetCareer.trim() || "희망 진로";
-  const hasRecords = !!parsed?.entries.length;
-  const recordSubjects = parsed
-    ? [...new Set(parsed.entries.map((entry) => entry.subject).filter(Boolean))].filter((subject) => subject !== "교과 외 활동").slice(0, 5)
-    : [];
-  const recordSubjectContext = recordSubjects.length ? recordSubjects.join(", ") : "기존 학생부 기록";
-  const recordCategories = parsed
-    ? [...new Set(parsed.entries.map((entry) => entry.category))].slice(0, 4).join(", ")
-    : "";
-  const questions: ClarificationQuestion[] = [];
-  const expectedGrade = recordContext.expectedGrade;
-  const finalized = recordIsFinalizedForClarification(parsed, form);
-
-  if (recordContext.studentName?.trim() && form.name.trim() && recordContext.studentName.trim() !== form.name.trim()) {
-    questions.push({
-      id: "identity_conflict",
-      label: "학생부 이름 확인",
-      question: `업로드한 학생부의 이름은 ${recordContext.studentName.trim()}이고 입력한 이름은 ${form.name.trim()}입니다. 동일 학생의 자료인지 먼저 확인해주세요.`,
-      options: [`${recordContext.studentName.trim()}이 맞습니다`, `${form.name.trim()}이 맞습니다`, "이름을 확인한 뒤 다시 업로드할게요"],
-    });
-  }
-
-  if (finalized) return questions;
-
-  if (!finalized && expectedGrade && form.grade && expectedGrade !== form.grade) {
-    questions.push({
-      id: "grade_conflict",
-      label: "학년 확인",
-      question: `학생부 기준 현재 상태 후보는 ${gradeLabel(expectedGrade)}인데, 입력값은 ${gradeLabel(form.grade)}입니다. 어느 쪽이 맞나요?`,
-      options: [`${gradeLabel(expectedGrade)} 기준으로 계획 세우기`, `${gradeLabel(form.grade)} 기준 유지`, "학년은 유지하되 학생부는 확정 기록으로만 반영"],
-    });
-  }
-
-  if (!finalized && hasRecords) {
-    questions.push({
-      id: "narrative",
-      label: "기존 기록 연결",
-      question: `학생부에는 ${recordSubjectContext} 중심의 ${recordCategories || "활동"} 기록이 보입니다. ${career}와 어떤 방식으로 이어갈까요?`,
-      options: ["기존 기록을 자연스럽게 이어 진로 전환 부담 줄이기", "기존 기록은 근거로 쓰고 새 진로축을 강하게 만들기", "기존 기록과 새 진로를 융합 주제로 연결하기"],
-    });
-  } else if (!finalized) {
-    questions.push({
-      id: "narrative",
-      label: "서사 방향",
-      question: `${career} 탐구의 전체 서사를 어떤 방향으로 잡을까요?`,
-      options: ["넓게 탐색하며 진로를 좁히기", "초반부터 희망 진로 중심으로 강하게 밀기", "교과 성취와 독서 기반을 먼저 쌓기"],
-    });
-  }
-
-  return questions;
-}
-
-function readClarificationAnswer(notes: string, id: string) {
-  return notes.split("\n").find((line) => line.startsWith(`${id}: `))?.slice(id.length + 2) ?? "";
 }
 
 function toProfileInput(form: ProfileForm): ProfileInput {
@@ -555,13 +445,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   const [onboardingRecordContext, setOnboardingRecordContext] = useState<OnboardingRecordContext>({});
   const [suggestions, setSuggestions] = useState<OnboardingSuggestions | null>(null);
   const [suggestBusy, setSuggestBusy] = useState(false);
-  const [clarificationQuestions, setClarificationQuestions] = useState<ClarificationQuestion[]>([]);
-  const [clarificationSummary, setClarificationSummary] = useState("");
-  const [clarificationBusy, setClarificationBusy] = useState(false);
-  const [clarificationBlocked, setClarificationBlocked] = useState(false);
-  const [clarificationComplete, setClarificationComplete] = useState(false);
-  const [clarificationAnswers, setClarificationAnswers] = useState<Array<{ id: string; question: string; answer: string }>>([]);
-  const [recordOnlyMode, setRecordOnlyMode] = useState(false);
   const onboardingRecordRef = useRef<HTMLInputElement>(null);
   const onboardingRecordAbortRef = useRef<AbortController | null>(null);
 
@@ -589,48 +472,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       if (values.includes(value)) return cur;
       return { ...cur, [key]: [...values, value].join(", ") };
     });
-  }
-
-  function answerClarification(question: ClarificationQuestion, answer: string) {
-    setClarificationAnswers((current) => [
-      ...current.filter((item) => item.id !== question.id),
-      { id: question.id, question: question.question, answer },
-    ]);
-    setForm((cur) => {
-      const next = { ...cur };
-      if (question.id === "identity_conflict" && onboardingRecordContext.studentName && answer.startsWith(onboardingRecordContext.studentName)) {
-        next.name = onboardingRecordContext.studentName;
-      }
-      if (question.id === "grade_conflict" && onboardingRecordContext.expectedGrade && answer.startsWith(gradeLabel(onboardingRecordContext.expectedGrade))) {
-        next.grade = onboardingRecordContext.expectedGrade;
-        if (isGraduatedGrade(next.grade)) next.semester = "";
-      }
-      return next;
-    });
-  }
-
-  function chooseClarificationOption(question: ClarificationQuestion, option: string) {
-    const current = clarificationAnswers.find((answer) => answer.id === question.id)?.answer ?? "";
-    if (!allowsMultipleClarificationAnswers(question)) {
-      answerClarification(question, option);
-      return;
-    }
-    const parts = clarificationAnswerParts(current);
-    const hasOption = option === OTHER_CLARIFICATION_OPTION ? parts.some((part) => part.startsWith("기타")) : parts.includes(option);
-    const next = hasOption
-      ? parts.filter((part) => option === OTHER_CLARIFICATION_OPTION ? !part.startsWith("기타") : part !== option)
-      : [...parts, option];
-    answerClarification(question, next.join(" | "));
-  }
-
-  function updateOtherClarificationAnswer(question: ClarificationQuestion, value: string) {
-    const current = clarificationAnswers.find((answer) => answer.id === question.id)?.answer ?? "";
-    const parts = clarificationAnswerParts(current);
-    const nextOther = value.trim() ? `기타: ${value}` : OTHER_CLARIFICATION_OPTION;
-    const next = parts.some((part) => part.startsWith("기타"))
-      ? parts.map((part) => part.startsWith("기타") ? nextOther : part)
-      : [...parts, nextOther];
-    answerClarification(question, allowsMultipleClarificationAnswers(question) ? next.join(" | ") : nextOther);
   }
 
   useEffect(() => {
@@ -696,104 +537,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     setOnboardingRecordMessage(`학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 기록에 반영합니다.${detectedMessage}${gradeMessage}`);
   }, [form.grade, onboardingRecordAutoFields, onboardingRecordParse]);
 
-  async function prepareClarification(restart = false) {
-    if (onboardingRecordBusy) {
-      setError("학생부 분석이 아직 진행 중입니다. 분석이 끝나면 Step1·2와 학생부를 함께 읽고 필요한 확인 질문을 만들게요.");
-      return;
-    }
-    setClarificationBusy(true);
-    setError("");
-    setClarificationBlocked(false);
-    if (recordOnlyMode) {
-      setClarificationQuestions([]);
-      setClarificationSummary("졸업자 학생부로 확인되어 계획은 만들지 않고, 분석·정리한 학생부 기록만 보여드립니다.");
-      setClarificationBlocked(true);
-      setClarificationComplete(false);
-      setStep("ai");
-      setClarificationBusy(false);
-      return;
-    }
-    const latestPeriod = onboardingRecordParse ? getLatestSchoolRecordPeriod(onboardingRecordParse) : null;
-    const subjects = onboardingRecordParse
-      ? [...new Set(onboardingRecordParse.entries.map((entry) => entry.subject).filter(Boolean))].filter((subject) => subject !== "교과 외 활동")
-      : [];
-    const fallbackQuestions = buildClarificationQuestions(form, onboardingRecordParse, onboardingRecordContext);
-
-    try {
-      const result = await jsonRequest<ClarificationResponse>("/api/onboarding/clarify", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          form: {
-            name: form.name.trim(),
-            grade: form.grade,
-            semester: form.semester,
-            targetCareer: form.targetCareer.trim(),
-            targetMajors: splitList(form.targetMajors),
-            interests: splitList(form.interests),
-            careerResolution: form.careerResolution,
-            concreteResearchQuestion: hasSpecificCareerGoal(form) ? form.concreteResearchQuestion : "",
-            knowledgeLevel: hasSpecificCareerGoal(form) ? form.knowledgeLevel : "",
-            currentEngagement: splitList(form.currentEngagement),
-            outputPreference: splitList(form.outputPreference),
-            collaborationStyle: splitList(form.collaborationStyle),
-            constraints: splitList(form.constraints),
-          },
-          schoolRecord: onboardingRecordParse
-            ? {
-                fileName: onboardingRecordParse.fileName,
-                completedGrade: latestPeriod?.grade ?? null,
-                subjects: subjects.slice(0, 10),
-                entries: onboardingRecordParse.entries.slice(0, 30).map((entry) => ({
-                  grade: entry.grade,
-                  semester: entry.semester,
-                  category: entry.category,
-                  subject: entry.subject,
-                  title: entry.title,
-                  summary: entry.summary,
-                })),
-              }
-            : null,
-          recordContext: onboardingRecordContext,
-          answers: restart ? [] : clarificationAnswers,
-        }),
-      });
-      if (result.blocked) {
-        setClarificationQuestions([]);
-        setClarificationBlocked(true);
-        setClarificationComplete(false);
-        setClarificationSummary(result.summary || "업로드한 학생부가 졸업자 학생부로 확인되어 진행할 수 없습니다.");
-        setStep("ai");
-        return;
-      }
-      const questions = Array.isArray(result.questions) ? result.questions : fallbackQuestions;
-      setClarificationQuestions(questions);
-      setClarificationComplete(Boolean(result.complete) && questions.length === 0);
-      setClarificationSummary(result.draftChangeSummary
-        ? `${result.summary || ""} ${result.draftChangeSummary}`.trim()
-        : result.summary || "");
-      setStep("ai");
-    } catch {
-      setClarificationQuestions(fallbackQuestions);
-      setClarificationComplete(false);
-      setClarificationSummary(onboardingRecordParse
-        ? "학생부의 기존 기록과 Step1·2 입력을 기준으로 확인 질문을 만들었습니다."
-        : "Step1·2 입력을 기준으로 확인 질문을 만들었습니다.");
-      setStep("ai");
-    } finally {
-      setClarificationBusy(false);
-    }
-  }
-
-  function continueClarification() {
-    const unanswered = clarificationQuestions.some((question) => !clarificationAnswers.some((answer) => answer.id === question.id && answer.answer));
-    if (unanswered) {
-      setError("이번 확인 질문에 모두 답해주시면 답변을 반영해 다시 검토할게요.");
-      return;
-    }
-    void prepareClarification();
-  }
-
   async function analyzeOnboardingRecord(file: File | undefined) {
     if (!file) return;
     if (file.size > SCHOOL_RECORD_MAX_FILE_SIZE) {
@@ -807,12 +550,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     onboardingRecordAbortRef.current = controller;
     setOnboardingRecordBusy(true); setOnboardingRecordFile(file.name); setOnboardingRecordMessage(""); setError("");
     setOnboardingRecordStage("업로드 완료 · 분석 준비 중");
-    setRecordOnlyMode(false);
-    setClarificationQuestions([]);
-    setClarificationSummary("");
-    setClarificationBlocked(false);
-    setClarificationComplete(false);
-    setClarificationAnswers([]);
     try {
       // PDF 학적사항이 알려준 입학 연도 또는 학생이 직접 입력한 값만 쓴다. 현재
       // 달력으로 거꾸로 계산하면 과거 졸업생 생기부의 날짜·학년이 틀어질 수 있다.
@@ -860,7 +597,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       const nameMessage = studentName && !form.name.trim() ? ` 이름은 ${studentName} 학생으로 자동 입력했습니다.` : "";
       const policyMessage = freshmanAcademicYear ? ` 입학 연도는 ${freshmanAcademicYear}학년도로 확인했습니다.` : "";
       setOnboardingRecordParse(parsed);
-      setRecordOnlyMode(Boolean(completedGrade && completedGrade >= 3));
       setOnboardingRecordAutoFields(true);
       setOnboardingRecordContext({ expectedGrade: expectedCurrentGrade, studentName });
       setOnboardingRecordMessage(completedGrade && completedGrade >= 3
@@ -873,10 +609,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       setOnboardingRecordParse(null);
       setOnboardingRecordAutoFields(false);
       setOnboardingRecordContext({});
-      setClarificationBlocked(false);
-      setClarificationComplete(false);
-      setClarificationAnswers([]);
-      setRecordOnlyMode(false);
     } finally {
       if (onboardingRecordAbortRef.current === controller) {
         onboardingRecordAbortRef.current = null;
@@ -895,12 +627,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     setOnboardingRecordFile("");
     setOnboardingRecordMessage("");
     setOnboardingRecordContext({});
-    setRecordOnlyMode(false);
-    setClarificationQuestions([]);
-    setClarificationSummary("");
-    setClarificationBlocked(false);
-    setClarificationComplete(false);
-    setClarificationAnswers([]);
     setError("");
     if (onboardingRecordRef.current) onboardingRecordRef.current.value = "";
   }
@@ -1502,192 +1228,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                 </span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ───────── Step 2 — AI 맞춤 확인 질문 ───────── */}
-      {step === "ai" && (
-        <div className="w-full max-w-3xl mx-auto space-y-6">
-          {stepper()}
-
-          <div className="bg-white p-5 rounded-2xl border border-gray-200/90 shadow-xs space-y-2.5">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-5 h-5 rounded-md bg-blue-50 text-brand-600 flex items-center justify-center text-xs font-bold flex-none">💡</span>
-              <span className="text-gray-950 font-extrabold">AI 사전 확인 브리핑</span>
-            </div>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              {clarificationSummary || (
-                <>
-                  <strong className="text-gray-900 font-bold">{form.name || "학생"}</strong>
-                  {" "}학생이 입력한 정보
-                  {form.grade && (
-                    <span className="text-gray-800 font-semibold">
-                      ({isGraduatedGrade(form.grade) ? "졸업" : `${form.grade}학년 ${form.semester}학기`}
-                      {form.targetCareer ? ` · ${form.targetCareer}` : ""})
-                    </span>
-                  )}
-                  와 학생부 기록을 대조해, 방향이 달라질 수 있는 것만 골라 확인합니다. 답변한 뒤에도 더 물을 것이 있으면 계속 이어집니다.
-                </>
-              )}
-            </p>
-          </div>
-
-          {recordOnlyMode && onboardingRecordParse && (
-            <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
-              <div className="flex items-center justify-between gap-2 pb-3 border-b border-gray-100">
-                <div className="min-w-0">
-                  <span className="block text-[10px] font-bold text-gray-400">학생부 정리 결과</span>
-                  <strong className="block text-sm font-extrabold text-gray-900 truncate">{onboardingRecordParse.fileName}</strong>
-                </div>
-                <span className="text-[11px] font-bold text-gray-500 flex-none">
-                  활동 {onboardingRecordParse.entries.length}개 · 과목 {onboardingRecordParse.courses.length}개
-                </span>
-              </div>
-              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                {onboardingRecordParse.entries.slice(0, 12).map((entry) => (
-                  <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50/60 border border-gray-100" key={entry.id}>
-                    <span className="text-[10px] font-bold text-gray-400 flex-none pt-0.5">
-                      {entry.grade}학년 {entry.semester ? `${entry.semester}학기` : ""}
-                    </span>
-                    <span className="min-w-0">
-                      <strong className="block text-xs font-bold text-gray-900 truncate">{entry.title}</strong>
-                      <span className="block text-[11px] text-gray-500 truncate">{entry.subject || entry.category} · {entry.summary}</span>
-                    </span>
-                  </div>
-                ))}
-                {!onboardingRecordParse.entries.length && (
-                  <p className="text-xs text-gray-400">구조화할 활동 후보를 찾지 못했습니다. PDF 원문을 다시 확인해주세요.</p>
-                )}
-              </div>
-              {onboardingRecordParse.entries.length > 12 && (
-                <span className="block text-[11px] text-gray-400">활동 후보 {onboardingRecordParse.entries.length - 12}개가 더 있습니다.</span>
-              )}
-            </div>
-          )}
-
-          {clarificationQuestions.length > 0 && (
-            <div className="bg-white p-6 sm:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-7">
-              {clarificationQuestions.map((question, index) => {
-                const tone = AI_QUESTION_TONES[index % AI_QUESTION_TONES.length];
-                const selected = clarificationAnswers.find((answer) => answer.id === question.id)?.answer
-                  ?? readClarificationAnswer(form.roadmapDesignNotes, question.id);
-                const selectedParts = clarificationAnswerParts(selected);
-                const otherSelected = selectedParts.some((part) => part.startsWith("기타"));
-                const otherValue = selectedParts.find((part) => part.startsWith("기타:"))?.replace(/^기타:\s*/, "") ?? "";
-                return (
-                  <div className={`space-y-3 ${index > 0 ? "pt-5 border-t border-gray-100" : ""}`} key={question.id}>
-                    <div className="space-y-1">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${tone.chip}`}>
-                        AI 맞춤 질문 {String(index + 1).padStart(2, "0")} · {question.label}
-                      </span>
-                      <h3 className="text-sm font-extrabold text-gray-900">{question.question}</h3>
-                      {question.why && <p className="text-xs text-gray-500">이 답이 필요한 이유: {question.why}</p>}
-                    </div>
-
-                    <div className="space-y-2">
-                      {clarificationOptions(question).map((option) => {
-                        const isSelected = option === OTHER_CLARIFICATION_OPTION ? otherSelected : selectedParts.includes(option);
-                        return (
-                          <button
-                            className={`w-full p-3.5 rounded-xl border text-left transition flex items-center justify-between gap-3 text-xs ${
-                              isSelected ? tone.card : "border-gray-200 hover:border-gray-300 bg-gray-50/30 text-gray-700"
-                            }`}
-                            key={option}
-                            onClick={() => chooseClarificationOption(question, option)}
-                            type="button"
-                          >
-                            <span className="flex items-center gap-2.5">
-                              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] flex-none ${
-                                isSelected ? `${tone.dot} text-white font-bold` : "border border-gray-300 bg-white"
-                              }`}>
-                                {isSelected ? "✓" : ""}
-                              </span>
-                              <span>{option}</span>
-                            </span>
-                            {isSelected && (
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-none ${tone.badge}`}>선택됨</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {allowsMultipleClarificationAnswers(question) && (
-                      <span className="block text-[11px] text-gray-400">복수 선택 가능</span>
-                    )}
-
-                    {otherSelected && (
-                      <div>
-                        <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor={`other-${question.id}`}>직접 입력</label>
-                        <input
-                          className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
-                          id={`other-${question.id}`}
-                          onChange={(event) => updateOtherClarificationAnswer(question, event.target.value)}
-                          placeholder="선택지에 없는 내용을 적어주세요"
-                          value={otherValue}
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {clarificationBlocked && (
-            <div className="banner banner-warning">{clarificationSummary || "업로드한 학생부로는 진행할 수 없습니다."}</div>
-          )}
-
-          {!clarificationBlocked && clarificationComplete && (
-            <div className="bg-white p-6 sm:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
-              <div>
-                <strong className="block text-sm font-extrabold text-gray-900">더 확인할 것이 없습니다</strong>
-                <span className="block text-xs text-gray-500 mt-1">
-                  선택한 답변은 자동으로 반영됩니다. 선택지에 없던 학교 상황이나 꼭 지켜야 할 방향만 아래에 적어주세요.
-                </span>
-              </div>
-              <textarea
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition min-h-20"
-                id="ob-roadmap-notes"
-                onChange={(e) => update("roadmapDesignNotes", e.target.value)}
-                placeholder="예: 2학기에는 과학 과목에서만 새 주제를 시도할 수 있음"
-                value={form.roadmapDesignNotes}
-              />
-            </div>
-          )}
-
-          <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs flex items-center justify-between gap-4">
-            <button
-              className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-bold transition"
-              onClick={() => setStep("profile")}
-              type="button"
-            >
-              ← 기본 정보 수정
-            </button>
-            <button
-              className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-md hover:shadow-lg transition flex items-center gap-2"
-              disabled={(!recordOnlyMode && clarificationBlocked) || busy || clarificationBusy || onboardingRecordBusy || !canSubmitProfile}
-              onClick={recordOnlyMode || clarificationComplete ? confirmOnboarding : continueClarification}
-              type="button"
-            >
-              <span>
-                {recordOnlyMode
-                  ? "학생부 기록으로 시작하기"
-                  : clarificationBlocked
-                    ? "졸업자 학생부로는 진행 불가"
-                    : onboardingRecordBusy
-                      ? "학생부 분석 대기 중…"
-                      : clarificationBusy
-                        ? "답변 반영해 다시 검토 중…"
-                        : busy
-                          ? "저장하는 중…"
-                          : clarificationComplete
-                            ? "AI 정밀 진단 시작하기"
-                            : "답변 반영하고 다시 검토하기"}
-              </span>
-              <span>➔</span>
-            </button>
           </div>
         </div>
       )}
