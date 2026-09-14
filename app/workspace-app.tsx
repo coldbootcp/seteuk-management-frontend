@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, downloadFile, logout, tokens } from "../lib/api-client";
+import { api, ApiError, downloadFile, logout, tokens } from "../lib/api-client";
+import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
 import { SignIn } from "./sign-in";
 import { LandingView } from "./landing-view";
@@ -11,6 +12,7 @@ import { ChatView } from "./chat-view";
 import { TimetableView } from "./timetable-view";
 import { GradesView } from "./grades-view";
 import { DashboardView } from "./dashboard-view";
+import { ApplicationPreparationView } from "./application-preparation-view";
 import { createEmptyTimetable, type TimetableConfig } from "./types/academic";
 import type {
   ActivityAttachment,
@@ -36,10 +38,11 @@ import {
 /* ──────────────────────────────────────────────
    Types
    ────────────────────────────────────────────── */
-type TabId = "overview" | "dashboard" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
+type TabId = "overview" | "journey" | "dashboard" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
+  freshmanAcademicYear: string;
   targetCareer: string; targetMajors: string; interests: string;
   concreteResearchQuestion: string; knowledgeLevel: string;
   motivationTrigger: string; careerResolution: string; currentEngagement: string;
@@ -48,10 +51,7 @@ type ProfileForm = {
 };
 
 
-/**
- * 온보딩 화면의 세 걸음. 예전에는 1/2/3 숫자였는데, 첫 화면(진단 방식 선택)이
- * 생기면서 숫자와 "Step N" 표기가 어긋나기 시작해 이름으로 바꿨다.
- */
+/** 온보딩은 기본 정보를 저장한 뒤 별도 사전 질문 없이 상담 관문으로 이어진다. */
 type OnboardingStep = "select" | "profile" | "ai";
 
 type ActivityDraft = {
@@ -92,14 +92,6 @@ type OnboardingRecordContext = {
   studentName?: string;
 };
 
-/** 진단 실행 전 생기부-답변 갭을 메우는 사전질문 하나. 최초 진단에만 나온다. */
-type DiagnosisPreQuestion = {
-  key: string;
-  prompt: string;
-  options: string[];
-  allow_custom: boolean;
-};
-
 /** 활동 하나를 근거로 만든 후속 탐구 선택지 하나(기능2). */
 type RecommendationOption = {
   topic: string;
@@ -125,7 +117,7 @@ type FollowUpRecommendation = {
    Constants
    ────────────────────────────────────────────── */
 const EMPTY_PROFILE: ProfileForm = {
-  name: "", grade: "", semester: "", targetCareer: "",
+  name: "", grade: "", semester: "", freshmanAcademicYear: "", targetCareer: "",
   concreteResearchQuestion: "", knowledgeLevel: "",
   targetMajors: "", interests: "", motivationTrigger: "",
   careerResolution: "",
@@ -134,17 +126,6 @@ const EMPTY_PROFILE: ProfileForm = {
   collaborationStyle: "",
   roadmapDesignNotes: "",
 };
-
-/**
- * 온보딩에서 학생이 직접 고르는 고민. 백엔드의 `self_assessed_weaknesses`로 그대로
- * 저장되므로 장식이 아니다 — 진단과 상담 프롬프트가 이 값을 읽는다.
- */
-const ONBOARDING_CONCERNS = [
-  { title: "세특의 학술적 깊이", desc: "교과서 개념 요약을 넘어서는 심화 탐구가 부족합니다" },
-  { title: "활동 사이의 연계성", desc: "과목·동아리 활동이 하나의 서사로 이어지지 않습니다" },
-  { title: "성적과 세특의 균형", desc: "내신 관리와 탐구 보고서 작성 시간이 서로 부딪힙니다" },
-  { title: "차별화된 주제 찾기", desc: "같은 학과를 지망하는 학생들과 겹치지 않는 주제가 필요합니다" },
-];
 
 /** AI 확인 질문 카드의 색. 질문 순서대로 돌려 쓴다(목업의 파랑·보라·초록). */
 const AI_QUESTION_TONES = [
@@ -284,10 +265,6 @@ function readClarificationAnswer(notes: string, id: string) {
   return notes.split("\n").find((line) => line.startsWith(`${id}: `))?.slice(id.length + 2) ?? "";
 }
 
-function removeClarificationAnswers(notes: string) {
-  return notes.split("\n").filter((line) => !/^[a-z][a-z0-9_]*: /i.test(line)).join("\n");
-}
-
 function toProfileInput(form: ProfileForm): ProfileInput {
   const useSpecificGoal = hasSpecificCareerGoal(form);
   const branchInterests = [
@@ -298,6 +275,7 @@ function toProfileInput(form: ProfileForm): ProfileInput {
   ].filter(Boolean).join("\n");
   return {
     name: form.name.trim(), grade: profileGradeValue(form), semester: profileSemesterValue(form),
+    freshmanAcademicYear: form.freshmanAcademicYear ? Number(form.freshmanAcademicYear) : null,
     targetCareer: form.targetCareer.trim(), targetMajors: splitList(form.targetMajors),
     interests: splitList(branchInterests),
     motivationTrigger: form.motivationTrigger,
@@ -335,10 +313,9 @@ type SchoolRecordProgress = {
   error?: string | null;
 };
 
-async function analyzeSchoolRecordPdf(file: File, academicStartYear: number, signal?: AbortSignal, onProgress?: (state: SchoolRecordProgress) => void) {
+async function analyzeSchoolRecordPdf(file: File, signal?: AbortSignal, onProgress?: (state: SchoolRecordProgress) => void) {
   const payload = new FormData();
   payload.append("file", file);
-  payload.append("academicStartYear", String(academicStartYear));
   if (signal?.aborted) throw new Error("학생부 분석을 취소했습니다.");
   const initial = await jsonRequest<{ task_id?: string }>("/api/school-record/parse", {
     method: "POST",
@@ -463,7 +440,8 @@ function PlanDetailModal({ plan, node, courseSubjects, onClose, onConvertPlan }:
   node: RoadmapNode;
   courseSubjects?: string[];
   onClose: () => void;
-  onConvertPlan: (draft: ActivityDraft) => void;
+  /** 미래 학기 흐름에서는 후보의 상세 안내만 열고, 실제 활동 연결은 이번 학기에서만 한다. */
+  onConvertPlan?: (draft: ActivityDraft) => void;
 }) {
   const guide = planDetailGuide(plan, node, courseSubjects);
   const [selectedSubject, setSelectedSubject] = useState(plan.subject);
@@ -517,7 +495,7 @@ function PlanDetailModal({ plan, node, courseSubjects, onClose, onConvertPlan }:
         </div>
         <div className="modal-foot">
           <button className="btn btn-secondary" onClick={onClose} type="button">닫기</button>
-          <button className="btn btn-primary" onClick={() => onConvertPlan({ title: plan.title, subject: plan.subject, planEventId: plan.id, roadmapNodeId: node.id })} type="button">이 주제를 실제 활동에 연결</button>
+          {onConvertPlan && <button className="btn btn-primary" onClick={() => onConvertPlan({ title: plan.title, subject: plan.subject, planEventId: plan.id, roadmapNodeId: node.id })} type="button">이 주제를 실제 활동에 연결</button>}
         </div>
       </section>
     </div>
@@ -714,7 +692,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     });
 
     const detectedMessage = completedGrade ? ` 학생부는 ${completedGrade}학년까지 확정된 기록으로 보았습니다.` : "";
-    const gradeMessage = expectedCurrentGrade ? ` 현재 상태 후보는 ${gradeLabel(expectedCurrentGrade)}로 보이며, 입력값과 다르면 다음 확인 단계에서 묻습니다.` : "";
+    const gradeMessage = expectedCurrentGrade ? ` 학생부 기준 현재 상태 후보는 ${gradeLabel(expectedCurrentGrade)}입니다. 입력한 학년·학기와 다르면 직접 수정해 주세요.` : "";
     setOnboardingRecordMessage(`학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 기록에 반영합니다.${detectedMessage}${gradeMessage}`);
   }, [form.grade, onboardingRecordAutoFields, onboardingRecordParse]);
 
@@ -816,13 +794,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     void prepareClarification();
   }
 
-  function startClarification() {
-    setClarificationAnswers([]);
-    setClarificationComplete(false);
-    setForm((current) => ({ ...current, roadmapDesignNotes: removeClarificationAnswers(current.roadmapDesignNotes) }));
-    void prepareClarification(true);
-  }
-
   async function analyzeOnboardingRecord(file: File | undefined) {
     if (!file) return;
     if (file.size > SCHOOL_RECORD_MAX_FILE_SIZE) {
@@ -843,13 +814,19 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     setClarificationComplete(false);
     setClarificationAnswers([]);
     try {
-      const fallbackGrade = isGraduatedGrade(form.grade) ? 3 : Number(form.grade || 1);
-      const fallbackAcademicStartYear = new Date().getFullYear() - (fallbackGrade - 1);
-      const resultJson = await analyzeSchoolRecordPdf(file, fallbackAcademicStartYear, controller.signal, (state) => {
+      // PDF 학적사항이 알려준 입학 연도 또는 학생이 직접 입력한 값만 쓴다. 현재
+      // 달력으로 거꾸로 계산하면 과거 졸업생 생기부의 날짜·학년이 틀어질 수 있다.
+      const providedFreshmanYear = Number(form.freshmanAcademicYear);
+      const manualFreshmanYear = Number.isInteger(providedFreshmanYear) ? providedFreshmanYear : undefined;
+      const resultJson = await analyzeSchoolRecordPdf(file, controller.signal, (state) => {
         if (state.stage) setOnboardingRecordStage(state.stage);
       });
       if (controller.signal.aborted) return;
-      const initialParsed = parseSchoolRecordJson(resultJson, fallbackAcademicStartYear);
+      const parsedFreshmanYear = Number(resultJson.freshman_academic_year);
+      const freshmanAcademicYear = Number.isInteger(parsedFreshmanYear)
+        ? parsedFreshmanYear
+        : manualFreshmanYear;
+      const initialParsed = parseSchoolRecordJson(resultJson, freshmanAcademicYear);
       const latestPeriod = getLatestSchoolRecordPeriod(initialParsed);
       const completedGrade = latestPeriod?.grade;
       const expectedPeriod = expectedCurrentPeriodFromRecord(latestPeriod);
@@ -857,11 +834,9 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       const expectedCurrentSemester = expectedPeriod?.semester ?? null;
       const studentName = typeof resultJson.student_name === "string" ? resultJson.student_name.trim() : "";
 
-      const resolvedGrade = isGraduatedGrade(expectedCurrentGrade ?? form.grade) ? 3 : Number(expectedCurrentGrade ?? form.grade) || 1;
-      const resolvedAcademicStartYear = new Date().getFullYear() - (resolvedGrade - 1);
       const targetMaxGrade = isGraduatedGrade(expectedCurrentGrade ?? form.grade) ? 3 : Number(expectedCurrentGrade ?? form.grade) || 2;
       const targetMaxSemester = isGraduatedGrade(expectedCurrentGrade ?? form.grade) ? null : Number(form.semester) || (expectedCurrentSemester ? Number(expectedCurrentSemester) : 2);
-      const parsed = parseSchoolRecordJson(resultJson, resolvedAcademicStartYear, {
+      const parsed = parseSchoolRecordJson(resultJson, freshmanAcademicYear, {
         grade: targetMaxGrade,
         semester: targetMaxSemester,
       });
@@ -875,18 +850,22 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
         }
       }
       if (studentName && !form.name.trim()) update("name", studentName);
+      if (freshmanAcademicYear && !form.freshmanAcademicYear) {
+        update("freshmanAcademicYear", String(freshmanAcademicYear));
+      }
       if (summary.subjects.length && !form.preferredSubjects.trim()) update("preferredSubjects", summary.subjects.join(", "));
       if (summary.currentActivities && !form.currentEngagement.trim()) update("currentEngagement", summary.currentActivities);
       const periodMessage = completedGrade ? ` ${completedGrade}학년까지 확정된 기록으로 확인했습니다.` : "";
       const gradeMessage = expectedCurrentGrade ? ` 현재 상태는 ${gradeLabel(expectedCurrentGrade)}${expectedCurrentSemester ? ` ${expectedCurrentSemester}학기` : ""} 후보로 자동 입력했습니다.` : "";
       const nameMessage = studentName && !form.name.trim() ? ` 이름은 ${studentName} 학생으로 자동 입력했습니다.` : "";
+      const policyMessage = freshmanAcademicYear ? ` 입학 연도는 ${freshmanAcademicYear}학년도로 확인했습니다.` : "";
       setOnboardingRecordParse(parsed);
       setRecordOnlyMode(Boolean(completedGrade && completedGrade >= 3));
       setOnboardingRecordAutoFields(true);
       setOnboardingRecordContext({ expectedGrade: expectedCurrentGrade, studentName });
       setOnboardingRecordMessage(completedGrade && completedGrade >= 3
         ? "3학년까지 확정된 졸업자 학생부로 확인했습니다. 계획은 만들지 않고, 분석·정리한 학생부 기록을 보여드립니다."
-        : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}`);
+        : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}${policyMessage}`);
     } catch (e) {
       if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : "학생부를 분석하지 못했습니다. 건너뛰고 시작해도 됩니다.");
@@ -952,9 +931,14 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     finally { setBusy(false); }
   }
 
-  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && !!form.targetCareer.trim();
+  const hasValidFreshmanYear = /^(19|20)\d{2}$/.test(form.freshmanAcademicYear);
+  // 진로가 아직 비어 있어도 상담에서 탐색할 수 있다. 가입 단계에서 억지로 분야를
+  // 정하게 하면 이후 모든 추천의 출발점이 부정확해진다.
+  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && hasValidFreshmanYear;
   const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution;
-  const recordLocked = Boolean(onboardingRecordFile || onboardingRecordBusy);
+  // 파서가 읽은 학년·학기는 제안값일 뿐이다. 학생이 언제든 직접 고칠 수 있고,
+  // 불일치는 안내로만 다룬다.
+  const recordLocked = false;
   /**
    * 이름은 학생부를 올려도 잠그지 않는다. 파서가 읽은 이름이 틀리거나(붙어 나온 글자,
    * 옛 이름) 학생이 다르게 쓰고 싶을 때 고칠 길이 아예 없었다. 대신 학생부와 다르면
@@ -962,8 +946,10 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
    */
   const recordStudentName = onboardingRecordContext.studentName?.trim() ?? "";
   const recordNameMismatch = Boolean(recordStudentName && form.name.trim() && recordStudentName !== form.name.trim());
-  const gapValues = splitList(form.gaps);
-
+  const recordFreshmanYear = onboardingRecordParse?.freshmanAcademicYear ?? null;
+  const freshmanYearMismatch = Boolean(
+    recordFreshmanYear && form.freshmanAcademicYear && Number(form.freshmanAcademicYear) !== recordFreshmanYear
+  );
   /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
   function startWithRecord(file: File | undefined) {
     if (!file) return;
@@ -971,60 +957,37 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     void analyzeOnboardingRecord(file);
   }
 
-  function toggleGap(value: string) {
-    setForm((cur) => {
-      const values = splitList(cur.gaps);
-      const next = values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
-      return { ...cur, gaps: next.join(", ") };
-    });
-  }
-
-  /** 진행 표시. "지금 어느 걸음인가"만 말하고 남은 걸음 수를 지어내지 않는다. */
-  function stepper(current: "profile" | "ai") {
+  /** 기본 정보 뒤에는 별도 사전 질문 없이 상담 관문으로 이어진다. */
+  function stepper() {
     return (
       <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button
             className="text-xs text-gray-500 hover:text-gray-900 font-bold flex items-center gap-1"
-            onClick={() => setStep(current === "ai" ? "profile" : "select")}
+            onClick={() => setStep("select")}
             type="button"
           >
-            <span>←</span> {current === "ai" ? "1단계 수정" : "처음으로"}
+            <span>←</span> 처음으로
           </button>
           <span className="text-gray-300">|</span>
-          <span
-            className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              current === "ai" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-brand-600"
-            }`}
-          >
-            {current === "ai" ? "Step 2 / 2 · AI 맞춤 확인 질문" : "Step 1 / 2 · 기본 정보와 목표"}
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-brand-600">
+            기본 정보와 목표
           </span>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-gray-400 font-semibold">
-          {current === "ai" ? (
-            <>
-              <span className="text-emerald-600 font-bold">✓ 1. 기본 프로필</span>
-              <span>➔</span>
-              <span className="w-2 h-2 rounded-full bg-purple-600" />
-              <span className="text-purple-700 font-bold">2. AI 맞춤 질문</span>
-            </>
-          ) : (
-            <>
-              <span className="w-2 h-2 rounded-full bg-brand-500" />
-              <span className="text-brand-600 font-bold">1. 기본 프로필</span>
-              <span>➔</span>
-              <span>2. AI 맞춤 질문</span>
-            </>
-          )}
+          <>
+            <span className="w-2 h-2 rounded-full bg-brand-500" />
+            <span className="text-brand-600 font-bold">기본 프로필</span>
+          </>
           <span>➔</span>
-          <span>3. 정밀 진단</span>
+          <span>AI 진단 · 상담</span>
         </div>
       </div>
     );
   }
 
   return (
-    <GateFrame badge={step === "select" ? "신규 온보딩" : step === "profile" ? "Step 1 / 2" : "Step 2 / 2"} onSignOut={onSignOut}>
+    <GateFrame badge={step === "select" ? "신규 온보딩" : "기본 정보"} onSignOut={onSignOut}>
       {/* 파일 선택기는 세 화면이 함께 쓴다 — 어느 걸음에서도 학생부를 올릴 수 있다. */}
       <input
         accept="application/pdf,.pdf"
@@ -1127,8 +1090,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                 </div>
 
                 <p className="text-xs text-gray-600 leading-relaxed">
-                  과거 기록이 없어도 괜찮습니다. 관심분야와 목표를 답해주시면 AI가 그 자리에서 확인 질문을 만들고,
-                  이어지는 상담에서 이번 학기 목표와 탐구 주제를 함께 정합니다. 학생부는 나중에 [활동 &amp; 세특] 화면에서
+                  과거 기록이 없어도 괜찮습니다. 관심분야와 목표를 답해주시면,
+                  이어지는 AI 상담에서 이번 학기 목표와 탐구 주제를 함께 정합니다. 학생부는 나중에 [활동 &amp; 세특] 화면에서
                   언제든 올릴 수 있습니다.
                 </p>
 
@@ -1178,7 +1141,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       {/* ───────── Step 1 — 기본 정보와 목표 ───────── */}
       {step === "profile" && (
         <div className="w-full max-w-3xl mx-auto space-y-6">
-          {stepper("profile")}
+          {stepper()}
 
           {/* 학생부 상태 — 분석은 이 화면을 막지 않고 뒤에서 돈다 */}
           <div
@@ -1245,7 +1208,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
             <div>
               <h2 className="text-xl font-extrabold text-gray-950 tracking-tight">기본 정보와 목표를 확인해 주세요</h2>
               <p className="text-xs text-gray-500 mt-1">
-                여기 적은 내용을 바탕으로 다음 화면에서 AI가 맞춤 확인 질문을 만듭니다.
+                기본 정보를 저장하면 별도 사전 질문 없이 AI 상담에서 진단과 다음 활동을 함께 구체화합니다.
               </p>
             </div>
 
@@ -1323,6 +1286,40 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                   </p>
                 )}
               </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-freshman-year">
+                  고등학교 입학 연도
+                </label>
+                <input
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
+                  id="ob-freshman-year"
+                  inputMode="numeric"
+                  max="2100"
+                  min="1990"
+                  onChange={(event) => update("freshmanAcademicYear", event.target.value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="예: 2025"
+                  type="text"
+                  value={form.freshmanAcademicYear}
+                />
+                <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
+                  예: 2025학년도 고1이었다면 2025. 생기부를 올리면 학적사항에서 읽은 값으로 자동 입력하며, 직접 수정할 수 있습니다.
+                </p>
+                {freshmanYearMismatch && (
+                  <div className="mt-2 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-[11px] text-amber-900 leading-relaxed">
+                      업로드한 생기부 학적사항은 <strong className="font-bold">{recordFreshmanYear}학년도 입학</strong>으로 읽혔습니다. 입력값과 다르면 어느 값이 맞는지 확인해주세요.
+                    </span>
+                    <button
+                      className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-800 text-[11px] font-bold hover:bg-amber-100 transition flex-none"
+                      onClick={() => update("freshmanAcademicYear", String(recordFreshmanYear))}
+                      type="button"
+                    >
+                      학생부 값 사용
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* 2. 목표와 관심 */}
@@ -1336,7 +1333,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-career">현재 가장 끌리는 분야 또는 진로</label>
+                <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-career">현재 가장 끌리는 분야 또는 진로 <span className="font-medium text-gray-400">(아직 모르겠다면 비워도 됩니다)</span></label>
                 <input
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
                   id="ob-career"
@@ -1427,7 +1424,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {[
+                  {[
+                  { value: "아직 잘 모르겠음", label: "아직 잘 모르겠음", desc: "상담에서 관심사와 학교 상황을 함께 살펴봅니다." },
                   { value: "넓은 분야만 정한 단계", label: "넓은 분야만 있음", desc: "예: 의료, AI, 교육. 추가 질문 없이 상담에서 좁혀갑니다." },
                   { value: "구체적인 학과나 직무까지 정한 단계", label: "구체 목표가 있음", desc: "학과·직무·주제가 꽤 명확합니다." },
                 ].map((item) => {
@@ -1456,95 +1454,17 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               </div>
 
               {form.careerResolution === "구체적인 학과나 직무까지 정한 단계" && (
-                <div className="p-4 rounded-2xl bg-gray-50/80 border border-gray-200/80 space-y-3.5">
-                  <div>
-                    <strong className="block text-[11px] font-extrabold text-gray-900">관련 배경지식에 맞춰 탐구 난이도를 조절합니다</strong>
-                    <span className="block text-[11px] text-gray-500 mt-0.5">배경지식이 있더라도 기초부터 쌓고 싶다면 &lsquo;하&rsquo;를 고르세요.</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[
-                      { value: "하", desc: "기초 개념부터 차근히" },
-                      { value: "중", desc: "기본 개념은 알고 적용해보고 싶음" },
-                      { value: "상", desc: "심화·차별화 탐구부터 가능" },
-                    ].map((item) => {
-                      const isActive = form.knowledgeLevel === item.value;
-                      return (
-                        <button
-                          className={`px-3 py-2.5 rounded-xl border text-left transition ${
-                            isActive ? "border-brand-500 bg-white" : "border-gray-200 bg-white/60 hover:border-gray-300"
-                          }`}
-                          key={item.value}
-                          onClick={() => update("knowledgeLevel", item.value)}
-                          type="button"
-                        >
-                          <span className={`block text-xs font-bold ${isActive ? "text-brand-600" : "text-gray-800"}`}>{item.value}</span>
-                          <span className="block text-[11px] text-gray-500 leading-snug mt-0.5">{item.desc}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-question">특히 궁금한 세부 키워드나 문제</label>
-                    <textarea
-                      className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-white transition min-h-20"
-                      id="ob-question"
-                      onChange={(e) => update("concreteResearchQuestion", e.target.value)}
-                      placeholder={
-                        form.knowledgeLevel === "상"
-                          ? "예: 의료 AI 진단 모델의 오류 원인을 데이터 편향 관점에서 분석하고 싶음"
-                          : form.knowledgeLevel === "중"
-                            ? "예: AI 진단 정확도, 의료 데이터, 모델 비교처럼 관심 키워드를 적어주세요"
-                            : "아직 안 적어도 됩니다. 키워드 1~2개만 적어도 괜찮아요."
-                      }
-                      value={form.concreteResearchQuestion}
-                    />
-                  </div>
-                </div>
+                <p className="text-[11px] text-gray-500 leading-relaxed rounded-xl bg-gray-50/80 border border-gray-200/80 px-3.5 py-3">
+                  세부 관심사와 현재 이해도는 지금 확정하지 않아도 됩니다. 상담에서 실제 기록과 학교 상황을 보며 필요한 경우에만 함께 좁혀갈게요.
+                </p>
               )}
             </div>
 
-            {/* 4. 고민 (자기평가 약점으로 저장된다) */}
-            <div className="space-y-3 pt-4 border-t border-gray-100">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
-                  <span>💭</span>
-                  <span>4. 지금 가장 고민되는 부분 (복수 선택 · 선택 사항)</span>
-                </h3>
-                <span className="text-[10px] text-gray-400 font-medium">선택 {gapValues.length}건</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {ONBOARDING_CONCERNS.map((item) => {
-                  const isChecked = gapValues.includes(item.title);
-                  return (
-                    <button
-                      className={`p-3.5 rounded-xl border text-left transition flex items-start gap-2.5 ${
-                        isChecked ? "border-brand-500 bg-blue-50/40" : "border-gray-200 hover:border-gray-300 bg-gray-50/30"
-                      }`}
-                      key={item.title}
-                      onClick={() => toggleGap(item.title)}
-                      type="button"
-                    >
-                      <span className={`w-4 h-4 rounded mt-0.5 flex items-center justify-center text-[10px] font-bold flex-none ${
-                        isChecked ? "bg-brand-500 text-white" : "border border-gray-300 bg-white"
-                      }`}>
-                        {isChecked ? "✓" : ""}
-                      </span>
-                      <span className="block">
-                        <span className={`font-bold text-xs block ${isChecked ? "text-brand-700" : "text-gray-800"}`}>{item.title}</span>
-                        <span className="text-[11px] text-gray-500 block leading-snug">{item.desc}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 5. 제약 */}
+            {/* 4. 제약 */}
             <div className="space-y-3 pt-4 border-t border-gray-100">
               <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
                 <span>⚠️</span>
-                <span>5. 계획을 짤 때 반드시 피해야 할 제약 (선택 사항)</span>
+                <span>4. 계획을 짤 때 반드시 피해야 할 제약 (선택 사항)</span>
               </h3>
               <input
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
@@ -1569,16 +1489,16 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               </button>
               <button
                 className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs hover:shadow transition flex items-center gap-1.5"
-                disabled={!canLeaveProfileStep || clarificationBusy || onboardingRecordBusy}
-                onClick={startClarification}
+                disabled={!canLeaveProfileStep || busy || onboardingRecordBusy}
+                onClick={() => void confirmOnboarding()}
                 type="button"
               >
                 <span>
                   {onboardingRecordBusy
                     ? "학생부 분석이 끝나면 진행할 수 있어요"
-                    : clarificationBusy
-                      ? "확인 질문을 만드는 중…"
-                      : "다음 단계: AI 맞춤 확인 질문 ➔"}
+                    : busy
+                      ? "저장하는 중…"
+                      : "AI 상담 시작하기 ➔"}
                 </span>
               </button>
             </div>
@@ -1589,7 +1509,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       {/* ───────── Step 2 — AI 맞춤 확인 질문 ───────── */}
       {step === "ai" && (
         <div className="w-full max-w-3xl mx-auto space-y-6">
-          {stepper("ai")}
+          {stepper()}
 
           <div className="bg-white p-5 rounded-2xl border border-gray-200/90 shadow-xs space-y-2.5">
             <div className="flex items-center gap-2 text-xs">
@@ -1779,6 +1699,170 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
 /* ──────────────────────────────────────────────
    Overview
    ────────────────────────────────────────────── */
+function ThreeYearJourney({ workspace, onNavigate }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void }) {
+  const orderedNodes = [...workspace.roadmap.nodes].sort((a, b) => a.orderIndex - b.orderIndex);
+  const currentNode = orderedNodes.find((node) => node.isCurrent)
+    ?? orderedNodes.find((node) => node.status === "active")
+    ?? orderedNodes.at(-1);
+  const [selectedNodeId, setSelectedNodeId] = useState(currentNode?.id ?? "");
+  const [selectedPlan, setSelectedPlan] = useState<RoadmapPlanEvent | null>(null);
+  const selectedNode = orderedNodes.find((node) => node.id === selectedNodeId) ?? currentNode;
+  const currentIndex = currentNode ? orderedNodes.findIndex((node) => node.id === currentNode.id) : -1;
+
+  const nodeActivities = selectedNode
+    ? workspace.activities.filter((activity) => activity.roadmapNodeId === selectedNode.id)
+    : [];
+  const linkedTopics = selectedNode?.planEvents ?? [];
+  const isCurrent = selectedNode?.id === currentNode?.id;
+  const isFuture = selectedNode ? orderedNodes.findIndex((node) => node.id === selectedNode.id) > currentIndex : false;
+
+  return (
+    <div className="space-y-6">
+      <section className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200/80 shadow-xs">
+        <div className="flex items-start justify-between gap-5 flex-wrap">
+          <div className="max-w-2xl">
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-brand-600">3-YEAR JOURNEY</span>
+            <h2 className="text-xl md:text-2xl font-extrabold text-gray-950 tracking-tight mt-1">고교 3개년 흐름</h2>
+            <p className="text-sm text-gray-500 leading-relaxed mt-2">
+              지나온 학기는 실제로 남긴 기록으로, 이번 학기는 실행할 주제로, 이후 학기는 방향으로 봅니다.
+              미래 학기의 활동은 아직 확정된 계획이 아닙니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
+            <span className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">과거 · 실제 기록</span>
+            <span className="px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-100">현재 · 실행 주제</span>
+            <span className="px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-100">미래 · 방향</span>
+          </div>
+        </div>
+
+        {orderedNodes.length ? (
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3">
+            {orderedNodes.map((node, index) => {
+              const isPast = currentIndex >= 0 && index < currentIndex;
+              const nodeRecordCount = workspace.activities.filter((activity) => activity.roadmapNodeId === node.id).length;
+              const selected = node.id === selectedNode?.id;
+              const tone = node.isCurrent || node.status === "active"
+                ? "border-brand-400 bg-brand-50/70 ring-2 ring-brand-100"
+                : isPast
+                  ? "border-gray-200 bg-white hover:border-gray-300"
+                  : "border-violet-100 bg-violet-50/40 hover:border-violet-300";
+              return (
+                <button
+                  aria-pressed={selected}
+                  className={`text-left min-h-44 p-4 rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-brand-300 ${tone} ${selected ? "shadow-sm" : ""}`}
+                  key={node.id}
+                  onClick={() => setSelectedNodeId(node.id)}
+                  type="button"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-extrabold text-gray-500">{node.grade}학년 {node.semester}학기</span>
+                    {node.isCurrent || node.status === "active" ? (
+                      <span className="text-[10px] font-extrabold text-brand-700">지금</span>
+                    ) : isPast ? (
+                      <span className="text-[10px] font-bold text-gray-400">기록</span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-violet-600">방향</span>
+                    )}
+                  </div>
+                  <div className={`w-2 h-2 rounded-full mt-4 mb-3 ${node.isCurrent || node.status === "active" ? "bg-brand-500" : isPast ? "bg-gray-400" : "bg-violet-400"}`} />
+                  <strong className="block text-xs font-extrabold text-gray-900 leading-snug line-clamp-3">{node.title}</strong>
+                  <p className="mt-2 text-[11px] leading-relaxed text-gray-500 line-clamp-3">{node.objective || "학기 방향을 준비 중입니다."}</p>
+                  <span className="block mt-3 text-[10px] font-semibold text-gray-400">
+                    {isPast ? `연결 기록 ${nodeRecordCount}건` : `후보 주제 ${node.planEvents?.length ?? 0}개`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-gray-400">상담을 마치면 3개년 흐름이 만들어집니다.</p>
+        )}
+      </section>
+
+      {selectedNode && (
+        <section className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
+          <div className="p-6 md:p-7 border-b border-gray-100 flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-brand-600">{selectedNode.grade}학년 {selectedNode.semester}학기 · {isCurrent ? "CURRENT FOCUS" : isFuture ? "FUTURE DIRECTION" : "PAST RECORD"}</span>
+              <h3 className="text-lg font-extrabold text-gray-950 mt-1">{selectedNode.title}</h3>
+              <p className="text-sm text-gray-600 leading-relaxed mt-2 max-w-3xl">{selectedNode.objective || "이 학기의 방향이 아직 정리되지 않았습니다."}</p>
+            </div>
+            <StatusBadge status={selectedNode.status} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-gray-100">
+            <div className="bg-white p-6 space-y-3">
+              <h4 className="text-sm font-extrabold text-gray-900">{isFuture ? "이 학기에 이어갈 방향" : isCurrent ? "이번 학기에 실행할 주제" : "이 학기에 남긴 기록"}</h4>
+              {isFuture ? (
+                <>
+                  <p className="text-xs text-gray-500 leading-relaxed">아래는 미리 살펴볼 후보입니다. 학교 과목·수행평가·대회 등 실제 기회가 생긴 뒤에 골라 활동으로 연결합니다.</p>
+                  {linkedTopics.length ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {linkedTopics.map((topic) => (
+                        <button
+                          className="text-left rounded-xl border border-violet-100 bg-violet-50/30 p-3 hover:border-violet-300 hover:bg-violet-50 transition focus:outline-none focus:ring-2 focus:ring-violet-300"
+                          key={topic.id}
+                          onClick={() => setSelectedPlan(topic)}
+                          type="button"
+                        >
+                          <span className={`text-[10px] font-extrabold ${topic.priority === "core" ? "text-amber-800" : "text-violet-700"}`}>{topic.priority === "core" ? "★ 우선 추천" : "여유가 있으면"}{topic.subject ? ` · ${topic.subject}` : ""}</span>
+                          <strong className="block text-xs text-gray-900 mt-1 leading-snug">{topic.title}</strong>
+                          <span className="block text-[10px] text-gray-400 mt-2">상세 가이드 보기 →</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : selectedNode.candidateSubjects.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedNode.candidateSubjects.map((subject) => <span className="px-2.5 py-1 rounded-lg bg-violet-50 border border-violet-100 text-xs font-semibold text-violet-700" key={subject}>{subject}</span>)}
+                    </div>
+                  ) : <p className="text-xs text-gray-400">아직 이 학기의 후보 주제를 만들지 않았습니다.</p>}
+                </>
+              ) : isCurrent ? (
+                linkedTopics.length ? (
+                  <div className="space-y-2">
+                    {linkedTopics.slice(0, 4).map((topic) => (
+                      <div className="rounded-xl border border-gray-200 p-3" key={topic.id}>
+                        <span className="text-[10px] font-bold text-brand-600">{topic.priority === "core" ? "★ 최우선" : "선택 심화"}{topic.subject ? ` · ${topic.subject}` : ""}</span>
+                        <strong className="block text-xs text-gray-900 mt-1 leading-snug">{topic.title}</strong>
+                      </div>
+                    ))}
+                    <button className="text-xs font-bold text-brand-600 hover:text-brand-700" onClick={() => onNavigate("overview")} type="button">이번 학기 주제 전체 보기 →</button>
+                  </div>
+                ) : <p className="text-xs text-gray-400">아직 제안된 주제가 없습니다.</p>
+              ) : nodeActivities.length ? (
+                <div className="space-y-2">
+                  {nodeActivities.slice(0, 5).map((activity) => (
+                    <div className="rounded-xl bg-gray-50 border border-gray-200/80 p-3" key={activity.id}>
+                      <span className="text-[10px] font-bold text-gray-500">{activity.subject || activity.activityCategory || "활동"}</span>
+                      <strong className="block text-xs text-gray-900 mt-1 leading-snug">{activity.title}</strong>
+                    </div>
+                  ))}
+                  {nodeActivities.length > 5 && <p className="text-[11px] text-gray-400">외 {nodeActivities.length - 5}건</p>}
+                </div>
+              ) : <p className="text-xs text-gray-400">이 학기에 서비스로 연결된 기록이 아직 없습니다.</p>}
+            </div>
+
+            <div className="bg-gray-50/60 p-6 space-y-3">
+              <h4 className="text-sm font-extrabold text-gray-900">이 단계의 역할</h4>
+              <p className="text-xs text-gray-600 leading-relaxed">{selectedNode.narrativeStage || "학기 흐름을 연결하는 단계"}</p>
+              {selectedNode.competencyGoals.length > 0 && (
+                <>
+                  <h4 className="text-sm font-extrabold text-gray-900 pt-2">쌓아갈 역량</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedNode.competencyGoals.map((goal) => <span className="px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-xs font-semibold text-gray-700" key={goal}>{goal}</span>)}
+                  </div>
+                </>
+              )}
+              {!isCurrent && !isFuture && <p className="pt-2 text-[11px] text-gray-400">과거 학기는 새 계획을 덧붙이지 않고 실제 기록 중심으로 보여줍니다.</p>}
+            </div>
+          </div>
+        </section>
+      )}
+      {selectedPlan && selectedNode && <PlanDetailModal plan={selectedPlan} node={selectedNode} onClose={() => setSelectedPlan(null)} />}
+    </div>
+  );
+}
+
 function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { workspace: ProductWorkspace; onNavigate: (tab: TabId) => void; onConvertPlan: (draft: ActivityDraft) => void; onWorkspace: (workspace: ProductWorkspace) => void }) {
   const active = workspace.roadmap.nodes.find((n) => n.isCurrent)
     ?? workspace.roadmap.nodes.find((n) => n.status === "active");
@@ -1790,8 +1874,6 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
 
   const [diagnosisBusy, setDiagnosisBusy] = useState(false);
   const [diagnosisError, setDiagnosisError] = useState("");
-  const [preQuestions, setPreQuestions] = useState<DiagnosisPreQuestion[] | null>(null);
-  const [preAnswerDrafts, setPreAnswerDrafts] = useState<Record<string, string>>({});
   const [diagnosisDetailOpen, setDiagnosisDetailOpen] = useState(false);
   const hasDiagnosis = Boolean(workspace.dna.narrative);
   const activityTitleById = new Map(workspace.activities.map((a) => [a.id, a.title]));
@@ -1828,46 +1910,8 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
     }
   }
 
-  /** 진단 버튼을 누르면 사전질문부터 확인한다 — 최초 진단에만 나오고, 재진단은 빈
-   *  배열을 받아 바로 진단으로 넘어간다. */
+  /** 기록 기반 진단을 먼저 실행한다. 사전 설문은 상담 대화로 통합했다. */
   async function beginDiagnosis() {
-    setDiagnosisError("");
-    setDiagnosisBusy(true);
-    try {
-      const pre = await jsonRequest<{ questions: DiagnosisPreQuestion[] }>("/api/diagnosis/pre-questions");
-      if (pre.questions.length > 0) {
-        setPreAnswerDrafts({});
-        setPreQuestions(pre.questions);
-        setDiagnosisBusy(false);
-        return;
-      }
-    } catch (error) {
-      setDiagnosisError(error instanceof Error ? error.message : "사전 질문을 불러오지 못했습니다.");
-      setDiagnosisBusy(false);
-      return;
-    }
-    await startDiagnosisJob();
-  }
-
-  async function submitPreQuestions(questions: DiagnosisPreQuestion[], skip: boolean) {
-    const answers = questions.map((question) => ({
-      key: question.key,
-      prompt: question.prompt,
-      answer: skip ? null : preAnswerDrafts[question.key]?.trim() || null,
-    }));
-    setPreQuestions(null);
-    setDiagnosisBusy(true);
-    try {
-      await jsonRequest("/api/diagnosis/pre-questions/answers", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ answers }),
-      });
-    } catch (error) {
-      setDiagnosisError(error instanceof Error ? error.message : "답변을 저장하지 못했습니다.");
-      setDiagnosisBusy(false);
-      return;
-    }
     await startDiagnosisJob();
   }
 
@@ -2259,61 +2303,6 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
         )}
       </section>
       {selectedPlan && active && <PlanDetailModal plan={selectedPlan} node={active} courseSubjects={workspace.semesterCourses.filter((course) => course.roadmapNodeId === active.id).map((course) => course.subject)} onClose={() => setSelectedPlan(null)} onConvertPlan={onConvertPlan} />}
-      {preQuestions && (
-        <div className="modal-overlay" onClick={() => setPreQuestions(null)} role="presentation">
-          <section aria-label="진단 전 확인 질문" aria-modal="true" className="modal-panel diagnosis-prequestion-panel" onClick={(event) => event.stopPropagation()} role="dialog">
-            <div className="modal-head">
-              <h3>진단하기 전에 몇 가지만 확인할게요</h3>
-              <button className="btn btn-ghost btn-sm" onClick={() => setPreQuestions(null)} type="button">닫기</button>
-            </div>
-            <div className="modal-body">
-              <p className="onboarding-record-note">
-                생기부만으로는 알 수 없는 부분이에요. 답하지 않고 넘어가도 진단은 실행됩니다.
-              </p>
-              {preQuestions.map((question) => (
-                <div className="branch-question-card" key={question.key}>
-                  <div className="branch-question-head">
-                    <strong>{question.prompt}</strong>
-                  </div>
-                  {question.options.length > 0 && (
-                    <div className="clarity-choice-row">
-                      {question.options.map((option) => (
-                        <button
-                          className={`clarity-choice${preAnswerDrafts[question.key] === option ? " is-active" : ""}`}
-                          key={option}
-                          onClick={() => setPreAnswerDrafts((cur) => ({ ...cur, [question.key]: option }))}
-                          type="button"
-                        >
-                          <strong>{option}</strong>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {question.allow_custom && (
-                    <div className="form-field" style={{ marginTop: 10 }}>
-                      <label htmlFor={`pre-question-${question.key}`}>직접 입력</label>
-                      <input
-                        id={`pre-question-${question.key}`}
-                        onChange={(event) => setPreAnswerDrafts((cur) => ({ ...cur, [question.key]: event.target.value }))}
-                        placeholder="답변을 입력해주세요 (선택)"
-                        value={preAnswerDrafts[question.key] ?? ""}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="modal-foot">
-              <button className="btn btn-ghost" onClick={() => void submitPreQuestions(preQuestions, true)} type="button">
-                건너뛰고 진단하기
-              </button>
-              <button className="btn btn-primary" onClick={() => void submitPreQuestions(preQuestions, false)} type="button">
-                답변 제출하고 진단하기
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
     </div>
   );
 }
@@ -2355,6 +2344,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   const [adoptBusyIndex, setAdoptBusyIndex] = useState<number | null>(null);
   const [adoptedIndexes, setAdoptedIndexes] = useState<Set<number>>(new Set());
   const [rejectedIndexes, setRejectedIndexes] = useState<Set<number>>(new Set());
+  const [savedPlans, setSavedPlans] = useState<components["schemas"]["PlanItemRead"][]>([]);
   const allSelectablePlans = workspace.roadmap.nodes.flatMap((node) => (node.planEvents ?? []).map((event) => ({
     ...event,
     nodeId: node.id,
@@ -2369,6 +2359,22 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   const selectedPlanIsOutsideCurrentSemester = !!planEventId && !currentSemesterPlans.some((plan) => plan.id === planEventId);
   const [showAllPlanOptions, setShowAllPlanOptions] = useState(selectedPlanIsOutsideCurrentSemester);
   const selectablePlans = showAllPlanOptions ? allSelectablePlans : currentSemesterPlans;
+
+  const loadSavedPlans = useCallback(async () => {
+    try {
+      const result = await api<components["schemas"]["ListResponse_PlanItemRead_"]>(
+        `/plans?target_grade=${workspace.profile.grade}&target_semester=${workspace.profile.semester}&status=planned`,
+      );
+      setSavedPlans(result.items);
+    } catch {
+      // 기록 입력은 계획 목록 요청이 실패해도 계속할 수 있어야 한다.
+      setSavedPlans([]);
+    }
+  }, [workspace.profile.grade, workspace.profile.semester]);
+
+  useEffect(() => {
+    void loadSavedPlans();
+  }, [loadSavedPlans]);
 
   function recordQualityPrompts() {
     const prompts: string[] = [];
@@ -2486,6 +2492,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
         }),
       });
       setAdoptedIndexes((cur) => new Set(cur).add(optionIndex));
+      await loadSavedPlans();
       await jsonRequest(`/api/recommendations/${recommendation.id}/feedback`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -2531,6 +2538,20 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       {/* Form */}
       <div className="activity-form-card md:col-span-1">
         <h2>활동 간편 등록</h2>
+        {savedPlans.length > 0 && (
+          <section className="mb-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3" aria-label="이번 학기에 저장한 계획">
+            <p className="text-[10px] font-extrabold tracking-wider text-brand-700">SAVED PLANS · 이번 학기</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-gray-600">학교에서 실제 기회가 생겨 진행한 뒤, 아래에서 활동으로 직접 기록하세요.</p>
+            <ul className="mt-2 space-y-1.5">
+              {savedPlans.map((plan) => (
+                <li className="text-[11px] font-semibold text-gray-800" key={plan.id}>
+                  <span className="mr-1 text-brand-600">•</span>{plan.title}
+                  {plan.subject ? <span className="ml-1 font-medium text-gray-400">· {plan.subject}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <div className="form-field" style={{ marginBottom: "14px" }}>
           <label htmlFor="act-plan">연결할 이번 학기 주제 (선택 · 변경 가능)</label>
           <select id="act-plan" value={planEventId} onChange={(e) => setPlanEventId(e.target.value)}>
@@ -2792,7 +2813,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
               })}
               {adoptedIndexes.size > 0 && (
                 <p className="onboarding-record-note">
-                  계획으로 담은 주제는 완료하면 이 활동의 후속 기록으로 이어집니다. 계획 목록 화면은 아직 준비 중이라, 지금은 챗봇에게 &ldquo;내 계획 보여줘&rdquo;라고 물어보면 확인할 수 있습니다.
+                  선택한 주제는 이번 학기 &lsquo;저장한 계획&rsquo;에 남았습니다. 학교에서 실제로 진행한 뒤 활동 기록으로 직접 남기면 됩니다.
                 </p>
               )}
             </div>
@@ -2803,169 +2824,12 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   );
 }
 
-function PortfolioView({ workspace }: { workspace: ProductWorkspace }) {
-  const records = [...workspace.activities].sort((a, b) => (a.completedAt || "").localeCompare(b.completedAt || ""));
-  const themes = [...new Set(records.flatMap((record) => record.concepts))].slice(0, 8);
-  const [copiedQuestionId, setCopiedQuestionId] = useState<string | null>(null);
-
-  const copyToClipboard = (text: string, id: string) => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      void navigator.clipboard.writeText(text);
-      setCopiedQuestionId(id);
-      setTimeout(() => setCopiedQuestionId(null), 2000);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-gray-200/80">
-        <div>
-          <h2 className="text-xl font-bold text-gray-950 tracking-tight">수시 학생부종합전형 준비 자료</h2>
-          <p className="text-xs text-gray-500 mt-1">
-            실제로 기록한 활동만 근거로 씁니다 — 자소서 서사 흐름과 면접 검증 질문을 정리합니다.
-          </p>
-        </div>
-        <div className="text-left md:text-right flex-none">
-          <span className="text-[11px] text-gray-400 block font-medium">누적 검증 활동</span>
-          <strong className="text-lg font-bold text-gray-950 tabular-nums">{records.length}건</strong>
-        </div>
-      </div>
-
-      {/* 목표와 핵심 키워드 */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200/80 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-        <div className="min-w-0">
-          <span className="inline-block px-2 py-0.5 rounded bg-blue-50 text-brand-600 text-[10px] font-bold">
-            목표 진로 및 학과
-          </span>
-          <h3 className="text-lg font-extrabold text-gray-950 tracking-tight mt-1.5">
-            {workspace.profile.targetCareer || "진로 미입력"}{" "}
-            <span className="text-sm font-bold text-gray-400">
-              ({workspace.profile.targetMajors.join(", ") || "전공 미정"})
-            </span>
-          </h3>
-          <p className="text-xs text-gray-600 leading-relaxed mt-1.5 break-keep">
-            {records.length > 0
-              ? `${workspace.profile.targetCareer} 전공 적합성을 중심으로 ${records.length}개의 탐구·수행 기록이 이어져 있습니다.`
-              : "활동을 기록하면 진로 관심과 연결된 자소서 핵심 서사가 자동으로 구조화됩니다."}
-          </p>
-        </div>
-        {themes.length > 0 && (
-          <div className="lg:max-w-sm w-full flex-none p-3.5 rounded-xl bg-gray-50/70 border border-gray-200/60">
-            <span className="text-[10px] font-bold text-gray-400 block mb-1.5">핵심 역량 키워드</span>
-            <div className="flex flex-wrap gap-1.5">
-              {themes.map((theme) => (
-                <span
-                  className="px-2 py-0.5 rounded-lg bg-white border border-gray-200/80 text-[11px] font-semibold text-gray-700"
-                  key={theme}
-                >
-                  #{theme}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* 자소서 서사 흐름 */}
-        <section className="bg-white p-6 rounded-xl border border-gray-200/80 space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="text-sm font-bold text-gray-950">자소서 서사 흐름</h3>
-            <span className="text-xs text-gray-400 font-medium">{records.length}개 탐구 연계</span>
-          </div>
-
-          {records.length === 0 ? (
-            <p className="text-xs text-gray-400 leading-relaxed py-6 text-center break-keep">
-              아직 기록된 활동이 없습니다. [활동 &amp; 세특] 화면에서 이번 학기 수행평가와 탐구 활동을 남겨보세요.
-            </p>
-          ) : (
-            <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
-              {records.map((record) => (
-                <article className="p-3.5 rounded-lg bg-gray-50/70 border border-gray-200/60" key={record.id}>
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-xs font-bold text-brand-600">{record.completedAt || record.periodLabel}</span>
-                    {record.subject && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-500">
-                        {record.subject}
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-xs font-bold text-gray-900 leading-snug break-keep">{record.title}</h4>
-                  {record.summary && (
-                    <p className="text-xs text-gray-600 leading-relaxed mt-1 break-keep">{record.summary}</p>
-                  )}
-                  {record.reflection && (
-                    <div className="text-xs text-gray-600 bg-white p-2.5 rounded border-l-2 border-brand-500 mt-2">
-                      <strong className="block text-[10px] text-gray-400 font-semibold mb-0.5">배운 점 · 느낀 점</strong>
-                      <span className="break-keep">{record.reflection}</span>
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 면접 대비 */}
-        <section className="bg-white p-6 rounded-xl border border-gray-200/80 space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h3 className="text-sm font-bold text-gray-950">면접 대비 예상 질문 &amp; 답변 포인트</h3>
-            <span className="text-xs text-gray-400 font-medium">심층 검증</span>
-          </div>
-
-          {records.length === 0 ? (
-            <p className="text-xs text-gray-400 leading-relaxed py-6 text-center break-keep">
-              활동을 저장하면 그 기록을 근거로 면접 검증 질문이 만들어집니다.
-            </p>
-          ) : (
-            <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
-              {records.slice(-6).reverse().map((record, index) => {
-                const questionText = `“${record.title}”에서 본인이 주도적으로 탐구한 핵심 원리는 무엇이며, 이 과정이 ${workspace.profile.targetCareer} 진로에 미친 영향은?`;
-                const isCopied = copiedQuestionId === record.id;
-                return (
-                  <div className="p-3.5 rounded-lg border border-gray-200/70 bg-white space-y-2" key={record.id}>
-                    <div className="flex items-start justify-between gap-2">
-                      <h5 className="text-xs font-bold text-gray-900 leading-snug break-keep">
-                        Q{index + 1}. {questionText}
-                      </h5>
-                      <button
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition flex-none ${
-                          isCopied
-                            ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                            : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
-                        }`}
-                        onClick={() => copyToClipboard(questionText, record.id)}
-                        type="button"
-                      >
-                        {isCopied ? "복사됨 ✓" : "복사"}
-                      </button>
-                    </div>
-                    <div className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded border-l-2 border-brand-500 space-y-1">
-                      <div>
-                        <strong className="block text-[10px] text-gray-400 font-semibold mb-0.5">검증 포인트</strong>
-                        <span className="break-keep">단순 참여가 아니라 본인이 무엇을 어떻게 해결했는지 설명해야 합니다.</span>
-                      </div>
-                      <div>
-                        <strong className="block text-[10px] text-gray-400 font-semibold mb-0.5">근거 기록</strong>
-                        <span className="break-keep">{record.title} ({record.completedAt || record.periodLabel})</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
-}
-
 function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void }) {
   const [form, setForm] = useState<ProfileForm>({
     name: workspace.profile.name,
     grade: String(workspace.profile.grade),
     semester: String(workspace.profile.semester),
+    freshmanAcademicYear: "",
     targetCareer: workspace.profile.targetCareer,
     targetMajors: workspace.profile.targetMajors.join(", "),
     interests: workspace.profile.interests.join(", "),
@@ -2993,6 +2857,7 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
       name: workspace.profile.name,
       grade: String(workspace.profile.grade),
       semester: workspace.profile.semester ? String(workspace.profile.semester) : "",
+      freshmanAcademicYear: "",
       targetCareer: workspace.profile.targetCareer,
       targetMajors: workspace.profile.targetMajors.join(", "),
       interests: workspace.profile.interests.join(", "),
@@ -3334,6 +3199,18 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       ),
     },
     {
+      id: "journey",
+      label: "3개년 흐름",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 18c3-6 5-8 8-8s5 2 8-4" />
+          <circle cx="4" cy="18" r="1.5" />
+          <circle cx="12" cy="10" r="1.5" />
+          <circle cx="20" cy="6" r="1.5" />
+        </svg>
+      ),
+    },
+    {
       id: "dashboard",
       label: "대시보드",
       icon: (
@@ -3572,6 +3449,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
         <div className="product-content">
           {tab === "dashboard" && <DashboardView workspace={workspace} onNavigate={setTab} />}
           {tab === "overview"   && <Overview workspace={workspace} onNavigate={setTab} onConvertPlan={startActivity} onWorkspace={onWorkspace} />}
+          {tab === "journey"    && <ThreeYearJourney workspace={workspace} onNavigate={setTab} />}
           {tab === "timetable"  && (
             <TimetableView
               activities={workspace.activities}
@@ -3622,7 +3500,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               onRecordsChanged={onRefresh}
             />
           )}
-          {tab === "portfolio" && <PortfolioView workspace={workspace} />}
+          {tab === "portfolio" && <ApplicationPreparationView workspace={workspace} />}
           {tab === "chat"       && <ChatView onRecordsChanged={onRefresh} />}
           {tab === "profile"    && <ProfileView workspace={workspace} onWorkspace={onWorkspace} />}
         </div>

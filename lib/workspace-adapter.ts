@@ -635,16 +635,23 @@ function profileToBackend(profile: ProfileInput): Json {
     name: profile.name,
     grade: profile.grade,
     semester: profile.semester,
+    freshman_academic_year: profile.freshmanAcademicYear ?? null,
     career_goal: { goal: profile.targetCareer, note: profile.motivationTrigger || null },
     target_department: profile.targetMajors[0] ?? "",
     interest_keywords: profile.interests,
     career_specificity: {
-      level: profile.careerResolution === "확실하다" ? "specific" : "broad",
-      known_concepts: profile.preferredSubjects,
-      curious_topics: profile.currentEngagement,
+      level: profile.careerResolution === "구체적인 학과나 직무까지 정한 단계" ? "specific" : "broad",
+      // 수강 과목과 실제 활동을 지식 수준/관심 질문으로 바꿔 보내면 모델이 이미
+      // 있는 정보를 못 알아보고 다시 묻게 된다. 각 값은 본래 의미에 맞춰 보낸다.
+      // ProfileInput에는 이 두 값의 정본이 아직 없다. 수강 과목·실제 활동처럼
+      // 의미가 다른 값을 억지로 넣지 말고, 비어 있음을 정직하게 보낸다.
+      known_concepts: [],
+      curious_topics: [],
     },
-    preferred_output_types: profile.outputPreference ? [profile.outputPreference] : [],
-    activity_channels: profile.collaborationStyle ? [profile.collaborationStyle] : [],
+    // 학교별 기회가 나타난 뒤 학생이 활동과 연결할 문제다. 온보딩 입력값으로
+    // 고정하지 않는다.
+    preferred_output_types: [],
+    activity_channels: [],
     roadmap_constraints: profile.constraints.join(", ") || null,
     self_assessed_strengths: profile.strengths.join(", "),
     self_assessed_weaknesses: profile.gaps.join(", "),
@@ -676,8 +683,6 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
     }
     case path === "/api/onboarding/clarify": {
       const form = body.form ?? {};
-      // answers를 빼면 학생이 방금 답한 것을 백엔드가 모른 채 같은 질문을 다시 내서
-      // 온보딩이 끝나지 않는다.
       const answers = (body.answers ?? []) as { id?: string; key?: string; question?: string; answer?: unknown }[];
       const result = await api<{ questions: Json[]; complete: boolean }>("/profile/clarify", {
         method: "POST",
@@ -685,6 +690,9 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
           name: form.name || null,
           grade: form.grade ? Number(form.grade) : null,
           semester: form.semester ? Number(form.semester) : null,
+          freshman_academic_year: form.freshmanAcademicYear
+            ? Number(form.freshmanAcademicYear)
+            : null,
           career_goal: form.targetCareer || null,
           target_department: (form.targetMajors ?? [])[0] || null,
           interest_keywords: form.interests ?? [],
@@ -697,9 +705,6 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
             })),
         },
       });
-      // 화면은 질문을 `id`로 구분해 답을 쌓는데 백엔드는 `key`를 준다. 옮겨 주지
-      // 않으면 모든 답의 id가 undefined가 되어 서로를 덮어써 한 개만 남고, 그러면
-      // 확인 질문이 영영 끝나지 않는다.
       return {
         ...result,
         questions: (result.questions ?? []).map((question) => ({

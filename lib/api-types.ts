@@ -92,6 +92,288 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admission-catalog/universities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Universities */
+        get: operations["search_universities_api_v1_admission_catalog_universities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/universities/{university_id}/statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * University Statistics
+         * @description 대입정보포털이 공개한 대학 전체 통계를 출처/기준연도와 함께 반환한다.
+         */
+        get: operations["university_statistics_api_v1_admission_catalog_universities__university_id__statistics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/universities/{university_id}/admission-guide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * University Admission Guide
+         * @description 요청 학년도가 없으면 그 이전의 가장 최근 공개 대학 가이드를 반환한다.
+         */
+        get: operations["university_admission_guide_api_v1_admission_catalog_universities__university_id__admission_guide_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/universities/{university_id}/programs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Programs */
+        get: operations["list_programs_api_v1_admission_catalog_universities__university_id__programs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/programs/{program_id}/tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tracks */
+        get: operations["list_tracks_api_v1_admission_catalog_programs__program_id__tracks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/tracks/{track_id}/reference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Track Reference */
+        get: operations["track_reference_api_v1_admission_catalog_tracks__track_id__reference_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/tracks/{track_id}/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Track Detail
+         * @description 대학별로 수집·검증된 전형 상세. 현재 서울대 2027 수시만 제공한다.
+         */
+        get: operations["track_detail_api_v1_admission_catalog_tracks__track_id__detail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/tracks/{track_id}/research": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Track Research
+         * @description 대학·단과대학·학과·전형 단위의 수집 정보를 공통 카드 형식으로 제공한다.
+         */
+        get: operations["track_research_api_v1_admission_catalog_tracks__track_id__research_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/tracks/{track_id}/past-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Track Past Results
+         * @description 현재 모집단위에 이름이 정확히 대응하는 가장 최신 과거 공개 입시결과.
+         */
+        get: operations["track_past_results_api_v1_admission_catalog_tracks__track_id__past_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/tracks/{track_id}/program-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Track Program Profile
+         * @description 현재 모집단위와 이름이 정확히 대응하는 과거 학과 소개를 반환한다.
+         */
+        get: operations["track_program_profile_api_v1_admission_catalog_tracks__track_id__program_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admission-catalog/tracks/{track_id}/writing-requirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Writing Requirements
+         * @description 공식 자기소개·에세이 문항이 확인된 경우에만 반환한다.
+         *
+         *     빈 배열은 제출 서류가 없다는 뜻이 아니라, 아직 최종 모집요강에서 확인되지
+         *     않았다는 뜻이다.
+         */
+        get: operations["list_writing_requirements_api_v1_admission_catalog_tracks__track_id__writing_requirements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/application-preparations/activity-flows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Activity Flows */
+        get: operations["activity_flows_api_v1_application_preparations_activity_flows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/application-preparations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Preparations */
+        get: operations["list_preparations_api_v1_application_preparations_get"];
+        put?: never;
+        /** Create Preparation */
+        post: operations["create_preparation_api_v1_application_preparations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/application-preparations/{preparation_id}/activity-recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recommend Activities */
+        post: operations["recommend_activities_api_v1_application_preparations__preparation_id__activity_recommendations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/application-preparations/{preparation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Preparation */
+        get: operations["get_preparation_api_v1_application_preparations__preparation_id__get"];
+        /** Update Preparation */
+        put: operations["update_preparation_api_v1_application_preparations__preparation_id__put"];
+        post?: never;
+        /** Delete Preparation */
+        delete: operations["delete_preparation_api_v1_application_preparations__preparation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/seteuk/uploads": {
         parameters: {
             query?: never;
@@ -285,6 +567,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/education-policies/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve My Education Policy
+         * @description 생기부 학적사항 또는 온보딩에 확정된 입학 연도로 제도를 판정한다.
+         */
+        get: operations["resolve_my_education_policy_api_v1_education_policies_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnosis/pre-questions": {
         parameters: {
             query?: never;
@@ -364,6 +666,108 @@ export interface paths {
         get: operations["get_diagnosis_api_v1_diagnosis__diagnosis_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consultation/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Status */
+        get: operations["get_status_api_v1_consultation_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consultation/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Or Resume Session */
+        post: operations["create_or_resume_session_api_v1_consultation_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consultation/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Session */
+        get: operations["get_session_api_v1_consultation_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consultation/sessions/{session_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send Message */
+        post: operations["send_message_api_v1_consultation_sessions__session_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consultation/sessions/{session_id}/confirm-full-replan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Full Replan */
+        post: operations["confirm_full_replan_api_v1_consultation_sessions__session_id__confirm_full_replan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consultation/sessions/{session_id}/conclude": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Conclude Session */
+        post: operations["conclude_session_api_v1_consultation_sessions__session_id__conclude_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1400,6 +1804,49 @@ export interface components {
             /** Source Plan Event Id */
             source_plan_event_id?: string | null;
         };
+        /** ActivityEvidenceRead */
+        ActivityEvidenceRead: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /** Grade */
+            grade: number;
+            /** Semester */
+            semester: number | null;
+            /** Title */
+            title: string;
+            /** Subject */
+            subject: string | null;
+            /** Description */
+            description: string;
+            /** Reflection */
+            reflection: string | null;
+            /** Attachment Count */
+            attachment_count: number;
+            /** Readiness */
+            readiness: string;
+            /** Missing Fields */
+            missing_fields: string[];
+            /** Narrative Role */
+            narrative_role?: string | null;
+            /** Order Index */
+            order_index?: number | null;
+            /** Student Note */
+            student_note?: string | null;
+        };
+        /** ActivityFlowRead */
+        ActivityFlowRead: {
+            /** Id */
+            id: string | null;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string | null;
+            /** Activities */
+            activities: components["schemas"]["ActivityEvidenceRead"][];
+        };
         /** ActivityInventoryEntry */
         ActivityInventoryEntry: {
             /**
@@ -1588,6 +2035,357 @@ export interface components {
             /** Source Plan Event Id */
             source_plan_event_id?: string | null;
         };
+        /** AdmissionCompetitionRateRead */
+        AdmissionCompetitionRateRead: {
+            /** Admission Year */
+            admission_year: number | null;
+            /** Early Ratio */
+            early_ratio: number | null;
+            /** Regular Ratio */
+            regular_ratio: number | null;
+        };
+        /** AdmissionEmploymentRateRead */
+        AdmissionEmploymentRateRead: {
+            /** Year */
+            year: number | null;
+            /** Rate */
+            rate: number | null;
+        };
+        /** AdmissionPolicyRuleRead */
+        AdmissionPolicyRuleRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Admission Year Start */
+            admission_year_start: number | null;
+            /** Admission Year End */
+            admission_year_end: number | null;
+            /** Category */
+            category: string;
+            /** Decision Scope */
+            decision_scope: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Action Required */
+            action_required: string | null;
+            /** Source Label */
+            source_label: string;
+            /** Source Url */
+            source_url: string;
+            /** Source Published On */
+            source_published_on: string | null;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /** AdmissionProgramOutcomeRead */
+        AdmissionProgramOutcomeRead: {
+            /** Recruitment Period */
+            recruitment_period: string | null;
+            /** Selection Type */
+            selection_type: string | null;
+            /** Selection Name */
+            selection_name: string | null;
+            /** Initial Recruitment Count */
+            initial_recruitment_count: number | null;
+            /** Transferred Recruitment Count */
+            transferred_recruitment_count: number | null;
+            /** Final Recruitment Count */
+            final_recruitment_count: number | null;
+            /** Competition Rate */
+            competition_rate: number | null;
+            /** Additional Admission Count */
+            additional_admission_count: number | null;
+            /** Metrics */
+            metrics: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * AdmissionProgramPastResultsRead
+         * @description 현재 모집단위와 이름이 확인된 가장 최근 공개 입시결과.
+         *
+         *     과거 결과는 합격선이나 지원 가능 여부의 확정값이 아니다. 화면에서 반드시
+         *     source_admission_year를 함께 보여주도록 응답에 고정한다.
+         */
+        AdmissionProgramPastResultsRead: {
+            /** Source Admission Year */
+            source_admission_year: number;
+            /** Reference Program Name */
+            reference_program_name: string;
+            /** Source Url */
+            source_url: string;
+            /** Outcomes */
+            outcomes: components["schemas"]["AdmissionProgramOutcomeRead"][];
+        };
+        /**
+         * AdmissionProgramProfileRead
+         * @description 이름이 정확히 맞는 과거 공개 학과 소개.
+         *
+         *     교육목표·교육과정·진로는 과거 공개 자료라는 점을 응답 학년도로 분명히 한다.
+         */
+        AdmissionProgramProfileRead: {
+            /** Source Admission Year */
+            source_admission_year: number;
+            /** Reference Program Name */
+            reference_program_name: string;
+            /** Academic Field */
+            academic_field: string | null;
+            /** Recruitment Count */
+            recruitment_count: number | null;
+            /** Early Competition Rate */
+            early_competition_rate: number | null;
+            /** Regular Competition Rate */
+            regular_competition_rate: number | null;
+            /** Source Url */
+            source_url: string;
+            /** Sections */
+            sections: components["schemas"]["AdmissionProgramProfileSectionRead"][];
+        };
+        /** AdmissionProgramProfileSectionRead */
+        AdmissionProgramProfileSectionRead: {
+            /** Title */
+            title: string;
+            /** Items */
+            items: string[];
+        };
+        /** AdmissionProgramRead */
+        AdmissionProgramRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Admission Year */
+            admission_year: number;
+            /** Name */
+            name: string;
+            /** College Name */
+            college_name: string | null;
+            /** Source Url */
+            source_url: string;
+            /** Source Status */
+            source_status: string;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /** AdmissionRecruitmentStatisticRead */
+        AdmissionRecruitmentStatisticRead: {
+            /** Admission Year */
+            admission_year: number | null;
+            /** Admission Period */
+            admission_period: string | null;
+            /** Recruitment Count */
+            recruitment_count: number | null;
+            /** Applicant Count */
+            applicant_count: number | null;
+        };
+        /** AdmissionResearchCardRead */
+        AdmissionResearchCardRead: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Items */
+            items: string[];
+            /** Source Label */
+            source_label: string;
+            /** Source Url */
+            source_url: string;
+            /** Source Admission Year */
+            source_admission_year?: number | null;
+            /**
+             * Is Service Interpretation
+             * @default false
+             */
+            is_service_interpretation: boolean;
+        };
+        /** AdmissionSelectionDistributionRead */
+        AdmissionSelectionDistributionRead: {
+            /** Admission Year */
+            admission_year: number | null;
+            /** Selection Type */
+            selection_type: string | null;
+            /** Recruitment Count */
+            recruitment_count: number | null;
+        };
+        /** AdmissionTrackDetailRead */
+        AdmissionTrackDetailRead: {
+            /** Source Admission Year */
+            source_admission_year: number;
+            /** Source Url */
+            source_url: string;
+            /** Selection Method */
+            selection_method: string;
+            /** Eligibility */
+            eligibility: string;
+            /** Document Evaluation */
+            document_evaluation: string;
+            /** Interview */
+            interview: string;
+            /** Csat Minimum */
+            csat_minimum: string;
+            /** Schedule */
+            schedule: string[];
+            /** Subject Tip */
+            subject_tip: string;
+            /** Notes */
+            notes: string[];
+            /** Sections */
+            sections: components["schemas"]["AdmissionTrackDetailSectionRead"][];
+        };
+        /** AdmissionTrackDetailSectionRead */
+        AdmissionTrackDetailSectionRead: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Items */
+            items: string[];
+        };
+        /** AdmissionTrackRead */
+        AdmissionTrackRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Admission Type */
+            admission_type: string | null;
+            /** Recruitment Period */
+            recruitment_period: string | null;
+            /** Has Document Review */
+            has_document_review: boolean | null;
+            /** Has Interview */
+            has_interview: boolean | null;
+            /** Has Minimum Requirement */
+            has_minimum_requirement: boolean | null;
+            /** Source Url */
+            source_url: string;
+            /** Source Status */
+            source_status: string;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /** AdmissionTrackReferenceRead */
+        AdmissionTrackReferenceRead: {
+            /** Source Admission Year */
+            source_admission_year: number;
+            /** Source Url */
+            source_url: string;
+            /** Has Document Review */
+            has_document_review: boolean | null;
+            /** Has Interview */
+            has_interview: boolean | null;
+            /** Has Minimum Requirement */
+            has_minimum_requirement: boolean | null;
+            /** Summary */
+            summary: string;
+        };
+        /** AdmissionTrackResearchRead */
+        AdmissionTrackResearchRead: {
+            /** University Name */
+            university_name: string;
+            /** Program Name */
+            program_name: string;
+            /** Track Name */
+            track_name: string;
+            /** Cards */
+            cards: components["schemas"]["AdmissionResearchCardRead"][];
+        };
+        /**
+         * AdmissionUniversityGuideRead
+         * @description 대학 공통 대입특징·입시가이드. 표시 시 기준 학년도를 반드시 함께 쓴다.
+         */
+        AdmissionUniversityGuideRead: {
+            /** Source Admission Year */
+            source_admission_year: number;
+            /** Source Url */
+            source_url: string;
+            /** Verified At */
+            verified_at: string | null;
+            /** Sections */
+            sections: components["schemas"]["AdmissionUniversityGuideSectionRead"][];
+        };
+        /** AdmissionUniversityGuideSectionRead */
+        AdmissionUniversityGuideSectionRead: {
+            /** Title */
+            title: string;
+            /** Paragraphs */
+            paragraphs: string[];
+            /** Tables */
+            tables: components["schemas"]["AdmissionUniversityGuideTableRead"][];
+            /** Source Admission Year */
+            source_admission_year: number;
+            /** Source Url */
+            source_url: string;
+        };
+        /**
+         * AdmissionUniversityGuideTableRead
+         * @description 원문 표의 병합 셀까지 행렬로 펼친 값이다.
+         */
+        AdmissionUniversityGuideTableRead: {
+            /** Rows */
+            rows: string[][];
+        };
+        /** AdmissionWritingRequirementRead */
+        AdmissionWritingRequirementRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Source Admission Year */
+            source_admission_year: number;
+            /** Prompt Order */
+            prompt_order: number;
+            /** Prompt Label */
+            prompt_label: string;
+            /** Prompt Text */
+            prompt_text: string;
+            /** Min Characters */
+            min_characters: number | null;
+            /** Max Characters */
+            max_characters: number | null;
+            /** Character Unit */
+            character_unit: string;
+            /** Submission Method */
+            submission_method: string | null;
+            /** Source Url */
+            source_url: string;
+            /** Source Status */
+            source_status: string;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /** AdmissionWritingRequirementStatusRead */
+        AdmissionWritingRequirementStatusRead: {
+            /** Requirement Status */
+            requirement_status: string;
+            /** Source Admission Year */
+            source_admission_year: number | null;
+            /** Source Url */
+            source_url: string | null;
+            /** Source Status */
+            source_status: string | null;
+            /** Verification Note */
+            verification_note: string | null;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /** AdmissionWritingRequirementsResponse */
+        AdmissionWritingRequirementsResponse: {
+            status: components["schemas"]["AdmissionWritingRequirementStatusRead"];
+            /** Requirements */
+            requirements: components["schemas"]["AdmissionWritingRequirementRead"][];
+        };
         /**
          * AdoptOptionRequest
          * @description 추천 선택지 하나를 계획으로 담는다 — 추천에서 끝나지 않고
@@ -1623,6 +2421,80 @@ export interface components {
             due_date?: string | null;
             /** Source Activity Id */
             source_activity_id?: string | null;
+        };
+        /** ApplicationPreparationCreate */
+        ApplicationPreparationCreate: {
+            /**
+             * University Id
+             * Format: uuid
+             */
+            university_id: string;
+            /**
+             * Program Id
+             * Format: uuid
+             */
+            program_id: string;
+            /** Track Id */
+            track_id?: string | null;
+            /** Admission Year */
+            admission_year: number;
+        };
+        /** ApplicationPreparationRead */
+        ApplicationPreparationRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * University Id
+             * Format: uuid
+             */
+            university_id: string;
+            /**
+             * Program Id
+             * Format: uuid
+             */
+            program_id: string;
+            /** Track Id */
+            track_id: string | null;
+            /** University Name */
+            university_name: string;
+            /** Program Name */
+            program_name: string;
+            /** Track Name */
+            track_name: string | null;
+            /** Admission Year */
+            admission_year: number;
+            /** Central Question */
+            central_question: string | null;
+            /** Narrative Outline */
+            narrative_outline: {
+                [key: string]: string;
+            }[];
+            /** Evidence */
+            evidence: components["schemas"]["ActivityEvidenceRead"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ApplicationPreparationUpdate */
+        ApplicationPreparationUpdate: {
+            /** Central Question */
+            central_question?: string | null;
+            /** Narrative Outline */
+            narrative_outline?: {
+                [key: string]: string;
+            }[];
+            /** Evidence */
+            evidence?: components["schemas"]["EvidenceInput"][];
         };
         /**
          * AttachmentRead
@@ -1919,6 +2791,8 @@ export interface components {
             grade?: number | null;
             /** Semester */
             semester?: number | null;
+            /** Freshman Academic Year */
+            freshman_academic_year?: number | null;
             /** Career Goal */
             career_goal?: string | null;
             /** Target Department */
@@ -1950,6 +2824,63 @@ export interface components {
              * @default false
              */
             complete: boolean;
+        };
+        /** ConfirmFullReplanRequest */
+        ConfirmFullReplanRequest: {
+            /** Confirmed */
+            confirmed: boolean;
+        };
+        /** ConsultationMessageCreate */
+        ConsultationMessageCreate: {
+            /** Content */
+            content: string;
+        };
+        /** ConsultationSessionRead */
+        ConsultationSessionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Kind */
+            kind: string;
+            /** Target Grade */
+            target_grade: number;
+            /** Target Semester */
+            target_semester: number;
+            /** Status */
+            status: string;
+            /**
+             * Ready
+             * @default false
+             */
+            ready: boolean;
+            /**
+             * Full Replan Confirmed
+             * @default false
+             */
+            full_replan_confirmed: boolean;
+        };
+        /**
+         * ConsultationStatusResponse
+         * @description 관문 판정 결과. 프론트는 이 하나만 보고 게이트를 그릴지 결정한다.
+         */
+        ConsultationStatusResponse: {
+            /** Satisfied */
+            satisfied: boolean;
+            /** Required Kind */
+            required_kind?: ("initial" | "semester_review") | null;
+            /** Target Grade */
+            target_grade?: number | null;
+            /** Target Semester */
+            target_semester?: number | null;
+            /** Resumable Session Id */
+            resumable_session_id?: string | null;
         };
         /** ConversationRead */
         ConversationRead: {
@@ -2037,6 +2968,75 @@ export interface components {
          * @enum {string}
          */
         DiagnosisStatus: "processing" | "done" | "failed";
+        /** EducationPolicyRead */
+        EducationPolicyRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Title */
+            title: string;
+            /** Freshman Year Start */
+            freshman_year_start: number;
+            /** Freshman Year End */
+            freshman_year_end: number | null;
+            /** Curriculum Name */
+            curriculum_name: string;
+            /** Rank Grade Scale */
+            rank_grade_scale: number | null;
+            /** Summary */
+            summary: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /** Source Label */
+            source_label: string;
+            /** Source Url */
+            source_url: string;
+            /** Source Published On */
+            source_published_on: string | null;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /**
+         * EducationPolicyResolutionRead
+         * @description 현재 사용자에게 실제로 적용할 수 있는 기준만 묶어 돌려준다.
+         */
+        EducationPolicyResolutionRead: {
+            /** Freshman Academic Year */
+            freshman_academic_year: number | null;
+            policy: components["schemas"]["EducationPolicyRead"] | null;
+            /** Admission Rules */
+            admission_rules: components["schemas"]["AdmissionPolicyRuleRead"][];
+            /** Needs Freshman Academic Year */
+            needs_freshman_academic_year: boolean;
+            /** Message */
+            message?: string | null;
+        };
+        /** EvidenceInput */
+        EvidenceInput: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /**
+             * Narrative Role
+             * @default exploration
+             */
+            narrative_role: string;
+            /**
+             * Order Index
+             * @default 0
+             */
+            order_index: number;
+            /** Student Note */
+            student_note?: string | null;
+        };
         /**
          * FeedbackCreate
          * @description 추천 선택지에 대한 반응. **append-only다** — 원래 추천 실행 기록을 덮어쓰지
@@ -2533,6 +3533,13 @@ export interface components {
              */
             questions: components["schemas"]["PreQuestion"][];
         };
+        /** PreparationActivityRecommendationRead */
+        PreparationActivityRecommendationRead: {
+            /** Activities */
+            activities: components["schemas"]["RankedActivityRead"][];
+            /** Gap Notice */
+            gap_notice?: string | null;
+        };
         /** ProfileRequest */
         ProfileRequest: {
             /** Name */
@@ -2541,6 +3548,8 @@ export interface components {
             grade: number;
             /** Semester */
             semester: number;
+            /** Freshman Academic Year */
+            freshman_academic_year?: number | null;
             career_goal: components["schemas"]["CareerGoal"];
             /** Target Department */
             target_department: string;
@@ -2566,6 +3575,8 @@ export interface components {
             grade?: number | null;
             /** Semester */
             semester?: number | null;
+            /** Freshman Academic Year */
+            freshman_academic_year?: number | null;
             career_goal?: components["schemas"]["CareerGoal"] | null;
             /** Target Department */
             target_department?: string | null;
@@ -2591,6 +3602,22 @@ export interface components {
             self_assessed_strengths?: string | null;
             /** Self Assessed Weaknesses */
             self_assessed_weaknesses?: string | null;
+        };
+        /** RankedActivityRead */
+        RankedActivityRead: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /** Rank */
+            rank: number;
+            /** Reason */
+            reason: string;
+            /** Readiness */
+            readiness: string;
+            /** Missing Fields */
+            missing_fields: string[];
         };
         /** ReadingActivityCreate */
         ReadingActivityCreate: {
@@ -2939,6 +3966,8 @@ export interface components {
         };
         /** SeteukAnalysisResult */
         SeteukAnalysisResult: {
+            /** Freshman Academic Year */
+            freshman_academic_year?: number | null;
             /**
              * Attendance
              * @default []
@@ -3022,6 +4051,44 @@ export interface components {
             /** Refresh Token */
             refresh_token: string;
         };
+        /**
+         * UniversityAdmissionStatisticsRead
+         * @description 대학 전체 공개 통계. 모집단위별 입결과 혼동하지 않도록 별도 응답으로 둔다.
+         */
+        UniversityAdmissionStatisticsRead: {
+            /** Source Admission Year */
+            source_admission_year: number;
+            /** Source Url */
+            source_url: string;
+            /** Verified At */
+            verified_at: string | null;
+            /** Recruitment And Applicants */
+            recruitment_and_applicants: components["schemas"]["AdmissionRecruitmentStatisticRead"][];
+            /** Selection Distribution */
+            selection_distribution: components["schemas"]["AdmissionSelectionDistributionRead"][];
+            /** Employment Rate */
+            employment_rate: components["schemas"]["AdmissionEmploymentRateRead"][];
+            /** Competition Rate */
+            competition_rate: components["schemas"]["AdmissionCompetitionRateRead"][];
+        };
+        /** UniversitySearchRead */
+        UniversitySearchRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Campus Name */
+            campus_name: string | null;
+            /** Region */
+            region: string | null;
+            /** Source Url */
+            source_url: string;
+            /** Verified At */
+            verified_at: string | null;
+        };
         /** UploadCreateResponse */
         UploadCreateResponse: {
             /**
@@ -3061,6 +4128,8 @@ export interface components {
         VolunteerRecordCreate: {
             /** Grade */
             grade: number;
+            /** Semester */
+            semester?: number | null;
             /** Date */
             date?: string | null;
             /** Raw Date */
@@ -3076,6 +4145,8 @@ export interface components {
         VolunteerRecordItem: {
             /** Grade */
             grade: number;
+            /** Semester */
+            semester?: number | null;
             /** Date */
             date?: string | null;
             /** Raw Date */
@@ -3103,6 +4174,8 @@ export interface components {
             created_at: string;
             /** Grade */
             grade: number;
+            /** Semester */
+            semester: number | null;
             /** Date */
             date: string | null;
             /** Raw Date */
@@ -3118,6 +4191,8 @@ export interface components {
         VolunteerRecordUpdate: {
             /** Grade */
             grade?: number | null;
+            /** Semester */
+            semester?: number | null;
             /** Date */
             date?: string | null;
             /** Raw Date */
@@ -3318,6 +4393,555 @@ export interface operations {
                 "application/json": components["schemas"]["RefreshRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_universities_api_v1_admission_catalog_universities_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UniversitySearchRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    university_statistics_api_v1_admission_catalog_universities__university_id__statistics_get: {
+        parameters: {
+            query?: {
+                source_admission_year?: number;
+            };
+            header?: never;
+            path: {
+                university_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UniversityAdmissionStatisticsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    university_admission_guide_api_v1_admission_catalog_universities__university_id__admission_guide_get: {
+        parameters: {
+            query?: {
+                source_admission_year?: number;
+            };
+            header?: never;
+            path: {
+                university_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionUniversityGuideRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_programs_api_v1_admission_catalog_universities__university_id__programs_get: {
+        parameters: {
+            query: {
+                admission_year: number;
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                university_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionProgramRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tracks_api_v1_admission_catalog_programs__program_id__tracks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                program_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionTrackRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    track_reference_api_v1_admission_catalog_tracks__track_id__reference_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionTrackReferenceRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    track_detail_api_v1_admission_catalog_tracks__track_id__detail_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionTrackDetailRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    track_research_api_v1_admission_catalog_tracks__track_id__research_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionTrackResearchRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    track_past_results_api_v1_admission_catalog_tracks__track_id__past_results_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionProgramPastResultsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    track_program_profile_api_v1_admission_catalog_tracks__track_id__program_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionProgramProfileRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_writing_requirements_api_v1_admission_catalog_tracks__track_id__writing_requirements_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionWritingRequirementsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activity_flows_api_v1_application_preparations_activity_flows_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityFlowRead"][];
+                };
+            };
+        };
+    };
+    list_preparations_api_v1_application_preparations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationPreparationRead"][];
+                };
+            };
+        };
+    };
+    create_preparation_api_v1_application_preparations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationPreparationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationPreparationRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recommend_activities_api_v1_application_preparations__preparation_id__activity_recommendations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preparation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreparationActivityRecommendationRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_preparation_api_v1_application_preparations__preparation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preparation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationPreparationRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_preparation_api_v1_application_preparations__preparation_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preparation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationPreparationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationPreparationRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_preparation_api_v1_application_preparations__preparation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preparation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             204: {
@@ -3637,6 +5261,26 @@ export interface operations {
             };
         };
     };
+    resolve_my_education_policy_api_v1_education_policies_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EducationPolicyResolutionRead"];
+                };
+            };
+        };
+    };
     get_pre_questions_api_v1_diagnosis_pre_questions_get: {
         parameters: {
             query?: never;
@@ -3746,6 +5390,178 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiagnosisResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_status_api_v1_consultation_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsultationStatusResponse"];
+                };
+            };
+        };
+    };
+    create_or_resume_session_api_v1_consultation_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsultationSessionRead"];
+                };
+            };
+        };
+    };
+    get_session_api_v1_consultation_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsultationSessionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_message_api_v1_consultation_sessions__session_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsultationMessageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_full_replan_api_v1_consultation_sessions__session_id__confirm_full_replan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmFullReplanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsultationSessionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conclude_session_api_v1_consultation_sessions__session_id__conclude_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsultationSessionRead"];
                 };
             };
             /** @description Validation Error */

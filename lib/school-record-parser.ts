@@ -35,6 +35,8 @@ export type SchoolRecordParseResult = {
   fileName: string;
   totalPages: number;
   extractedCharacters: number;
+  /** 학적사항에서 백엔드가 읽은 고교 1학년 학년도. 없으면 추정하지 않는다. */
+  freshmanAcademicYear: number | null;
   courses: SchoolRecordCourse[];
   entries: SchoolRecordDraft[];
   warnings: string[];
@@ -101,6 +103,7 @@ export type SeteukAnalysisResult = {
   attendance?: unknown[];
   awards?: SeteukAward[];
   errors?: unknown[];
+  freshman_academic_year?: unknown;
   reading_activities?: SeteukReadingActivity[];
   student_name?: unknown;
   time_logs?: unknown[];
@@ -255,7 +258,7 @@ function isWithinMaxPeriod(
 
 export function parseSchoolRecordJson(
   jsonData: unknown,
-  academicStartYear: number,
+  academicStartYear?: number,
   maxPeriod?: { grade: number; semester?: number | null }
 ): SchoolRecordParseResult {
   const courses = new Map<string, SchoolRecordCourse>();
@@ -279,7 +282,10 @@ export function parseSchoolRecordJson(
 
       const id = `${grade}-${semester}-${subject}`;
       const parsedRank = Number.parseInt(textValue(item.rank), 10);
-      const rank = Number.isInteger(parsedRank) && parsedRank >= 1 && parsedRank <= 5 ? parsedRank : null;
+      // 구 교육과정 생기부에는 9등급 석차가 올 수 있다. 5등급제라고 가정해
+      // 잘라내지 말고, 실제 적용 한도는 입학 연도 정책을 읽는 성적 화면·서버가
+      // 결정한다.
+      const rank = Number.isInteger(parsedRank) && parsedRank >= 1 && parsedRank <= 9 ? parsedRank : null;
       const existingCourse = courses.get(id);
       if (!existingCourse) {
         courses.set(id, { id, grade, semester, subject, rank });
@@ -353,7 +359,9 @@ export function parseSchoolRecordJson(
 
     const rank = textValue(item.rank);
     const parsedDate = parseApiDate(item.date);
-    const inferredPeriod = parsedDate ? periodFromDate(parsedDate, academicStartYear) : null;
+    const inferredPeriod = parsedDate && academicStartYear != null
+      ? periodFromDate(parsedDate, academicStartYear)
+      : null;
     const grade = gradeValue(item.grade ?? inferredPeriod?.grade);
     const semester = semesterValue(item.semester ?? inferredPeriod?.semester);
     if (grade && !isWithinMaxPeriod(grade, semester, maxPeriod)) return;
@@ -384,7 +392,9 @@ export function parseSchoolRecordJson(
     if (!content && !place) return;
 
     const parsedDate = parseApiDate(item.date);
-    const inferredPeriod = parsedDate ? periodFromDate(parsedDate, academicStartYear) : null;
+    const inferredPeriod = parsedDate && academicStartYear != null
+      ? periodFromDate(parsedDate, academicStartYear)
+      : null;
     const grade = gradeValue(item.grade ?? inferredPeriod?.grade);
     const semester = semesterValue(item.semester ?? inferredPeriod?.semester);
     if (grade && !isWithinMaxPeriod(grade, semester, maxPeriod)) return;
@@ -489,6 +499,10 @@ export function parseSchoolRecordJson(
     fileName: "structured_data.json",
     totalPages: 0,
     extractedCharacters: JSON.stringify(jsonData).length,
+    freshmanAcademicYear: (() => {
+      const year = Number(result.freshman_academic_year);
+      return Number.isInteger(year) && year >= 1990 && year <= 2100 ? year : null;
+    })(),
     courses: [...courses.values()],
     entries: [...entries.values()],
     warnings,

@@ -12,6 +12,10 @@ import {
   gradeItemToCreatePayload,
   gradeItemToUpdatePayload,
 } from "../lib/academic-records-api";
+import { api } from "../lib/api-client";
+import type { components } from "../lib/api-types";
+
+type EducationPolicyResolution = components["schemas"]["EducationPolicyResolutionRead"];
 
 interface GradesViewProps {
   currentGrade: number;
@@ -87,7 +91,8 @@ function syncTimetableWithSemesters(
           units: tc.units,
           // 시간표에서 가져오는 것은 "무슨 과목을 듣는가"이지 성적이 아니다. 예전에는
           // 일반선택이면 2등급, 진로선택이면 A를 넣어 두어, 학생이 입력한 적 없는
-          // 성적이 평점 계산에까지 들어갔다. 성적은 비운 채로 가져온다.
+          // 성적이 평점 계산에까지 들어갔다. 시간표는 수강 예정/중인 과목만 알려주므로
+          // 성적·성취도는 학생이 실제 결과를 입력할 때까지 비워 둔다.
           rank: null,
           achievement: null,
           rawScore: null,
@@ -126,6 +131,8 @@ export function GradesView({
   );
   /** 백엔드 조회가 끝나기 전에는 "성적이 없다"고 단정하지 않는다. */
   const [recordsLoaded, setRecordsLoaded] = useState(false);
+  const [educationPolicy, setEducationPolicy] = useState<EducationPolicyResolution | null>(null);
+  const [educationPolicyLoaded, setEducationPolicyLoaded] = useState(false);
   const [prevDefaultTimetable, setPrevDefaultTimetable] = useState(defaultTimetable);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<"synced" | "saving" | "error" | null>(null);
@@ -172,6 +179,26 @@ export function GradesView({
     };
   }, []);
 
+  // 성적 체계는 화면의 기본값이 아니라 입학 연도와 공식 기준 데이터에서 결정한다.
+  // 생기부 학적사항이 아직 없으면 범위를 억지로 추정하지 않고 안내만 표시한다.
+  useEffect(() => {
+    let isMounted = true;
+    api<EducationPolicyResolution>("/education-policies/me")
+      .then((result) => {
+        if (isMounted) setEducationPolicy(result);
+      })
+      .catch(() => {
+        // 성적 기록 자체를 막지는 않는다. 정책을 불러오지 못한 상태는 별도 안내로
+        // 남기고, 서버가 저장 시점에 최종 검증한다.
+      })
+      .finally(() => {
+        if (isMounted) setEducationPolicyLoaded(true);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const updateTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   useEffect(() => {
@@ -200,7 +227,19 @@ export function GradesView({
     [semestersData, activeGrade, activeSem]
   );
 
-  // 통계 계산 (전체 평균 등급, 국수영 평균 등급, 석차등급 1~5등급 분포)
+  const rankGradeScale = educationPolicy?.policy?.rank_grade_scale ?? null;
+  const displayedRankScale = rankGradeScale ?? 9;
+  const rankOptions = useMemo(
+    () => Array.from({ length: displayedRankScale }, (_, index) => index + 1),
+    [displayedRankScale]
+  );
+  const chartRanks = Array.from(
+    new Set([1, Math.ceil((displayedRankScale + 1) / 2), displayedRankScale])
+  );
+  const chartY = (rank: number) =>
+    20 + ((rank - 1) / Math.max(1, displayedRankScale - 1)) * 80;
+
+  // 통계 계산 (전체 평균 등급, 국수영 평균 등급, 입학 연도 기준 석차등급 분포)
   const stats = useMemo(() => {
     let totalRankWeightedSum = 0;
     let totalUnitsForRank = 0;
@@ -263,8 +302,12 @@ export function GradesView({
       3: "#F59E0B", // 앰버 오렌지
       4: "#8B5CF6", // 퍼플
       5: "#6B7280", // 슬레이트 그레이
+      6: "#0F766E",
+      7: "#B45309",
+      8: "#7E22CE",
+      9: "#475569",
     };
-    [1, 2, 3, 4, 5].forEach((rank) => {
+    rankOptions.forEach((rank) => {
       const c = rankCounts[rank] || 0;
       if (c > 0 || totalRankEvaluated > 0) {
         const pct = totalRankEvaluated > 0 ? Math.round((c / totalRankEvaluated) * 100) : 0;
@@ -302,7 +345,7 @@ export function GradesView({
       linkRate: totalCourses ? Math.round((linkedCourses / totalCourses) * 100) : 0,
       currentSemesterSeteuk,
     };
-  }, [semestersData, currentGrade, currentSemester]);
+  }, [semestersData, currentGrade, currentSemester, rankOptions]);
 
   // 현재 선택된 학기의 요약 통계 (전체 평점, 국수영 평점)
   const currentSemStats = useMemo(() => {
@@ -529,6 +572,79 @@ export function GradesView({
 
   return (
     <div className="space-y-6">
+      <section className="bg-white px-5 py-4 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col md:flex-row md:items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-extrabold tracking-wide text-brand-600">적용 중인 교육 제도 기준</p>
+          {educationPolicy?.policy ? (
+            <>
+              <h2 className="mt-1 text-sm font-extrabold text-gray-950">
+                {educationPolicy.policy.curriculum_name} · 석차 {educationPolicy.policy.rank_grade_scale}등급제
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">{educationPolicy.policy.summary}</p>
+            </>
+          ) : (
+            <>
+              <h2 className="mt-1 text-sm font-extrabold text-gray-950">
+                {educationPolicyLoaded ? "입학 연도 확인 필요" : "교육 제도 기준 확인 중"}
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                {educationPolicy?.message ?? "입학 연도를 확인하면 5등급제·9등급제와 학생부 기준을 정확히 적용합니다."}
+              </p>
+            </>
+          )}
+        </div>
+        {educationPolicy?.policy && (
+          <a
+            className="shrink-0 text-xs font-bold text-brand-600 hover:underline"
+            href={educationPolicy.policy.source_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {educationPolicy.policy.source_label} ↗
+          </a>
+        )}
+      </section>
+
+      {educationPolicy && educationPolicy.admission_rules.length > 0 && (
+        <section className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-xs">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-extrabold tracking-wide text-brand-600">대입 지원 관련 기준</p>
+              <h2 className="mt-1 text-sm font-extrabold text-gray-950">등급제와 별도로 확인할 사항</h2>
+            </div>
+            <p className="text-[11px] text-gray-400">공식 원문 기준 · 전형별 조건은 지원 카드에서 다시 대조합니다</p>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {educationPolicy.admission_rules.map((rule) => {
+              const admissionYear = rule.admission_year_start
+                ? `${rule.admission_year_start}학년도${rule.admission_year_end && rule.admission_year_end !== rule.admission_year_start ? `~${rule.admission_year_end}학년도` : ""}`
+                : "대입 연도별 확인";
+              const requiresTrackCheck = rule.decision_scope === "track_specific";
+              return (
+                <article key={rule.id} className="rounded-xl border border-gray-100 bg-gray-50/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-sm font-bold text-gray-900">{rule.title}</h3>
+                    <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-bold text-gray-500 ring-1 ring-gray-200">
+                      {requiresTrackCheck ? "지원 전형별 확인" : admissionYear}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-gray-600">{rule.summary}</p>
+                  {rule.action_required && <p className="mt-2 text-xs font-semibold leading-relaxed text-brand-700">확인 방법 · {rule.action_required}</p>}
+                  <a
+                    className="mt-3 inline-flex text-xs font-bold text-brand-600 hover:underline"
+                    href={rule.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {rule.source_label} ↗
+                  </a>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* ──────────────────────────────────────────
           상단 학점계산기 대시보드 카드 (에타 스타일)
           ────────────────────────────────────────── */}
@@ -540,7 +656,7 @@ export function GradesView({
           </div>
           <div className="flex items-baseline gap-1.5">
             <span className="text-3xl font-extrabold text-brand-500 tabular-nums tracking-tight">{stats.overallAvg}</span>
-            <span className="text-sm text-gray-400 font-medium">/ 9.00</span>
+            <span className="text-sm text-gray-400 font-medium">/ {rankGradeScale ?? "?"}.00</span>
           </div>
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px]">
             <span className="text-gray-500">성적이 입력된 과목</span>
@@ -555,7 +671,7 @@ export function GradesView({
           </div>
           <div className="flex items-baseline gap-1.5">
             <span className="text-3xl font-extrabold text-gray-900 tabular-nums tracking-tight">{stats.coreAvg}</span>
-            <span className="text-sm text-gray-400 font-medium">/ 9.00</span>
+            <span className="text-sm text-gray-400 font-medium">/ {rankGradeScale ?? "?"}.00</span>
           </div>
           <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px]">
             <span className="text-gray-500">전체 평점 대비</span>
@@ -616,13 +732,16 @@ export function GradesView({
           <div className="h-44 w-full">
             {stats.trendData.length > 1 ? (
               <svg viewBox="0 0 400 120" className="w-full h-full overflow-visible">
-                {/* Y축 그리드선 (1등급, 2등급, 3등급) */}
-                <line x1="30" y1="20" x2="380" y2="20" stroke="#f0f0f0" />
-                <text x="8" y="24" fontSize="10" fill="#a6a6a6">1.0</text>
-                <line x1="30" y1="60" x2="380" y2="60" stroke="#f0f0f0" />
-                <text x="8" y="64" fontSize="10" fill="#a6a6a6">2.0</text>
-                <line x1="30" y1="100" x2="380" y2="100" stroke="#f0f0f0" />
-                <text x="8" y="104" fontSize="10" fill="#a6a6a6">3.0</text>
+                {/* 입학 연도에 맞춰 5등급/9등급 축을 함께 바꾼다. */}
+                {chartRanks.map((rank) => {
+                  const y = chartY(rank);
+                  return (
+                    <g key={rank}>
+                      <line x1="30" y1={y} x2="380" y2={y} stroke="#f0f0f0" />
+                      <text x="8" y={y + 4} fontSize="10" fill="#a6a6a6">{rank}.0</text>
+                    </g>
+                  );
+                })}
 
                 {/* 전체 등급 라인 */}
                 {stats.trendData.length > 1 && (
@@ -634,14 +753,14 @@ export function GradesView({
                       points={stats.trendData
                         .map((d, i) => {
                           const x = 60 + i * 80;
-                          const y = Math.min(100, Math.max(20, 20 + (d.overall - 1.0) * 40));
+                          const y = Math.min(100, Math.max(20, chartY(d.overall)));
                           return `${x},${y}`;
                         })
                         .join(" ")}
                     />
                     {stats.trendData.map((d, i) => {
                       const x = 60 + i * 80;
-                      const y = Math.min(100, Math.max(20, 20 + (d.overall - 1.0) * 40));
+                      const y = Math.min(100, Math.max(20, chartY(d.overall)));
                       return (
                         <g key={d.period}>
                           <circle cx={x} cy={y} r="3.5" fill="#ffffff" stroke="#3182F6" strokeWidth="2" />
@@ -661,14 +780,14 @@ export function GradesView({
                       points={stats.trendData
                         .map((d, i) => {
                           const x = 60 + i * 80;
-                          const y = Math.min(100, Math.max(20, 20 + (d.core - 1.0) * 40));
+                          const y = Math.min(100, Math.max(20, chartY(d.core)));
                           return `${x},${y}`;
                         })
                         .join(" ")}
                     />
                     {stats.trendData.map((d, i) => {
                       const x = 60 + i * 80;
-                      const y = Math.min(100, Math.max(20, 20 + (d.core - 1.0) * 40));
+                      const y = Math.min(100, Math.max(20, chartY(d.core)));
                       return (
                         <circle key={`c-${d.period}`} cx={x} cy={y} r="2.5" fill="#a6a6a6" />
                       );
@@ -690,7 +809,9 @@ export function GradesView({
 
         {/* 석차등급 분포 */}
         <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col">
-          <h3 className="text-base font-bold text-gray-900 mb-4">석차등급 분포</h3>
+          <h3 className="text-base font-bold text-gray-900 mb-4">
+            석차등급 분포{rankGradeScale ? ` · ${rankGradeScale}등급제` : ""}
+          </h3>
           {stats.distribution.length === 0 && (
             <p className="text-xs text-gray-400 my-auto text-center leading-relaxed break-keep">
               {recordsLoaded
@@ -841,11 +962,16 @@ export function GradesView({
                           const newCat = e.target.value as HighSchoolGradeItem["category"];
                           // 진로선택은 성취도, 공통·일반선택은 석차등급을 쓴다. 둘 중
                           // 쓰지 않는 쪽만 비우고, 값을 지어내지는 않는다 — 학생이 바꾼
-                          // 것은 교과 구분이지 성적이 아니다.
+                          // 것은 교과 구분이지 성적이 아니다. 이미 입력된 등급이 학생의
+                          // 등급제 범위를 넘으면(예: 5등급제인데 8등급) 그 범위로 맞춘다.
                           if (newCat === "진로선택") {
                             handleUpdateItem(item.id, { category: newCat, rank: null, achievement: item.achievement });
                           } else if (newCat === "공통" || newCat === "일반선택") {
-                            handleUpdateItem(item.id, { category: newCat, rank: item.rank, achievement: null });
+                            handleUpdateItem(item.id, {
+                              category: newCat,
+                              rank: item.rank !== null ? Math.min(item.rank, displayedRankScale) : null,
+                              achievement: null,
+                            });
                           } else {
                             handleUpdateItem(item.id, { category: newCat });
                           }
@@ -895,16 +1021,12 @@ export function GradesView({
                         }}
                       >
                         <option value="">미입력</option>
-                        <optgroup label="석차등급 (공통/일반선택)">
-                          <option value="rank-1">1등급</option>
-                          <option value="rank-2">2등급</option>
-                          <option value="rank-3">3등급</option>
-                          <option value="rank-4">4등급</option>
-                          <option value="rank-5">5등급</option>
-                          <option value="rank-6">6등급</option>
-                          <option value="rank-7">7등급</option>
-                          <option value="rank-8">8등급</option>
-                          <option value="rank-9">9등급</option>
+                        <optgroup
+                          label={`석차등급 (공통/일반선택 · ${rankGradeScale ? `${rankGradeScale}등급제` : "입학 연도 확인 필요"})`}
+                        >
+                          {rankOptions.map((rank) => (
+                            <option key={rank} value={`rank-${rank}`}>{rank}등급</option>
+                          ))}
                         </optgroup>
                         <optgroup label="성취도 (진로선택/예체능)">
                           <option value="achieve-A">A (성취도)</option>
