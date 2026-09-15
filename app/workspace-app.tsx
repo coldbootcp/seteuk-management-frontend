@@ -1,12 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, downloadFile, logout, tokens } from "../lib/api-client";
+import {
+  api,
+  ApiError,
+  downloadFile,
+  getAccountStatus,
+  logout,
+  tokens,
+  type AccountStatus,
+} from "../lib/api-client";
 import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
 import { SignIn } from "./sign-in";
 import { LandingView } from "./landing-view";
 import { ConsultationGate } from "./consultation-view";
+import { AccountSection, EmailVerificationGate, WithdrawalPendingGate } from "./account-gate";
 import { GateFrame } from "./gate-frame";
 import { ChatView } from "./chat-view";
 import { TimetableView } from "./timetable-view";
@@ -2644,6 +2653,8 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
             ))}
           </div>
         </div>
+
+        <AccountSection />
       </div>
       </div>
     </div>
@@ -3063,6 +3074,10 @@ export function WorkspaceApp() {
   const [authOpen, setAuthOpen] = useState(false);
   // null이면 아직 확인 전, satisfied=false면 진단+상담 관문이 메인 화면을 막는다.
   const [consultationStatus, setConsultationStatus] = useState<ConsultationStatus | null>(null);
+  // 이메일 인증·탈퇴 유예 상태. null이면 아직 확인 전이거나(로그인 전) 문제
+  // 없음 — 이 관문은 진단+상담보다 먼저 확인해야 한다(인증도 안 된 계정이
+  // 온보딩까지 가면 안 된다).
+  const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
 
   /**
    * `quiet`는 로딩 화면을 띄우지 않고 데이터만 갈아 끼운다. 챗봇 수정 모드가 기록을
@@ -3112,6 +3127,29 @@ export function WorkspaceApp() {
       });
   }, [refresh]);
 
+  /**
+   * 진단+상담 관문보다 먼저 통과해야 하는 관문. 이메일 인증이 안 됐거나
+   * 탈퇴가 예약된 계정은 온보딩·상담 어느 쪽으로도 보내지 않고 여기서
+   * 멈춘다 — 그렇지 않으면 인증 안 된 계정이 온보딩까지 가버린다.
+   */
+  const checkAccountThenGate = useCallback(() => {
+    setLoading(true);
+    getAccountStatus()
+      .then((status) => {
+        setAccountStatus(status);
+        if (!status.email_verified || status.withdrawal_requested_at) {
+          setLoading(false);
+          return;
+        }
+        checkGate();
+      })
+      .catch(() => {
+        // 상태 조회 자체가 실패하면(네트워크 등) 기존 흐름으로 넘어가 원인을
+        // 다시 드러낸다.
+        checkGate();
+      });
+  }, [checkGate]);
+
   useEffect(() => {
     if (!tokens.access) {
       setSignedIn(false);
@@ -3119,8 +3157,8 @@ export function WorkspaceApp() {
       return;
     }
     setSignedIn(true);
-    checkGate();
-  }, [checkGate]);
+    checkAccountThenGate();
+  }, [checkAccountThenGate]);
 
   /**
    * 어느 화면에서든 계정을 빠져나가는 길. 온보딩과 진단·상담 관문에도 준다 —
@@ -3131,6 +3169,7 @@ export function WorkspaceApp() {
     void logout().finally(() => {
       setWorkspace(null);
       setConsultationStatus(null);
+      setAccountStatus(null);
       setSignedIn(false);
       // 로그아웃은 대개 계정을 바꾸려는 것이므로 랜딩이 아니라 로그인 화면으로 둔다.
       setAuthOpen(true);
@@ -3149,7 +3188,7 @@ export function WorkspaceApp() {
       <SignIn
         onSignedIn={() => {
           setSignedIn(true);
-          checkGate();
+          checkAccountThenGate();
         }}
       />
     );
@@ -3166,6 +3205,21 @@ export function WorkspaceApp() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // 이메일 인증·탈퇴 유예는 진단+상담 관문보다도 먼저 확인한다 — 인증 안 된
+  // 계정이 온보딩까지 가버리면 안 된다.
+  if (accountStatus && !accountStatus.email_verified) {
+    return <EmailVerificationGate email={accountStatus.email} onSignOut={signOut} />;
+  }
+  if (accountStatus?.withdrawal_requested_at) {
+    return (
+      <WithdrawalPendingGate
+        status={accountStatus}
+        onCancelled={checkAccountThenGate}
+        onSignOut={signOut}
+      />
     );
   }
 

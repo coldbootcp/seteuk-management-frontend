@@ -146,6 +146,47 @@ export async function signup(email: string, password: string): Promise<void> {
   tokens.set(body.access_token, body.refresh_token);
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  await api("/auth/password/forgot", { method: "POST", body: { email } });
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await api("/auth/password/reset", {
+    method: "POST",
+    body: { token, new_password: newPassword },
+  });
+}
+
+export async function verifyEmail(token: string): Promise<void> {
+  await api("/auth/verify-email", { method: "POST", body: { token } });
+}
+
+export async function resendVerificationEmail(email: string): Promise<void> {
+  await api("/auth/resend-verification", { method: "POST", body: { email } });
+}
+
+export type AccountStatus = {
+  email: string;
+  email_verified: boolean;
+  has_password: boolean;
+  google_linked: boolean;
+  kakao_linked: boolean;
+  withdrawal_requested_at: string | null;
+  scheduled_deletion_at: string | null;
+};
+
+export async function getAccountStatus(): Promise<AccountStatus> {
+  return api<AccountStatus>("/account/status");
+}
+
+export async function withdrawAccount(password?: string): Promise<AccountStatus> {
+  return api<AccountStatus>("/account/withdraw", { method: "POST", body: { password } });
+}
+
+export async function cancelWithdrawal(): Promise<AccountStatus> {
+  return api<AccountStatus>("/account/cancel-withdrawal", { method: "POST" });
+}
+
 /** 카카오 JS 키가 있을 때만 소셜 로그인을 노출한다 — 키가 없으면 눌러도 되는 일이 없다. */
 export const KAKAO_JS_KEY = process.env.NEXT_PUBLIC_KAKAO_JS_KEY ?? "";
 
@@ -199,6 +240,77 @@ export async function loginWithKakao(): Promise<{ isNewUser: boolean }> {
     refresh_token: string;
     is_new_user: boolean;
   }>("/auth/social/kakao", { method: "POST", body: { kakao_access_token: access_token } });
+  tokens.set(body.access_token, body.refresh_token);
+  return { isNewUser: body.is_new_user };
+}
+
+/** 구글 JS 키가 있을 때만 소셜 로그인을 노출한다 — 카카오와 같은 원칙. */
+export const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
+
+type GoogleTokenClient = { requestAccessToken: () => void };
+type GoogleTokenResponse = { access_token?: string; error?: string };
+type GoogleSdk = {
+  accounts: {
+    oauth2: {
+      initTokenClient: (options: {
+        client_id: string;
+        scope: string;
+        callback: (response: GoogleTokenResponse) => void;
+        error_callback?: (error: { type: string }) => void;
+      }) => GoogleTokenClient;
+    };
+  };
+};
+
+declare global {
+  interface Window {
+    google?: GoogleSdk;
+  }
+}
+
+/** 구글 SDK를 처음 쓸 때 한 번만 불러온다 — 카카오와 같은 이유(안 쓰는 사용자에게까지 외부 스크립트를 받게 하지 않는다). */
+async function loadGoogleSdk(): Promise<GoogleSdk> {
+  if (!GOOGLE_CLIENT_ID) throw new Error("구글 로그인이 설정되어 있지 않습니다.");
+  if (!window.google) {
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("구글 로그인을 불러오지 못했습니다."));
+      document.head.appendChild(script);
+    });
+  }
+  if (!window.google) throw new Error("구글 로그인을 불러오지 못했습니다.");
+  return window.google;
+}
+
+/**
+ * 구글로 로그인한다.
+ *
+ * 카카오와 같은 패턴 — Google Identity Services의 OAuth2 토큰 클라이언트로
+ * access token만 받아 백엔드에 넘기고, 사용자 정보 해석은 백엔드가 구글
+ * userinfo API를 직접 불러 한다.
+ */
+export async function loginWithGoogle(): Promise<{ isNewUser: boolean }> {
+  const sdk = await loadGoogleSdk();
+  const accessToken = await new Promise<string>((resolve, reject) => {
+    const client = sdk.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: "openid email profile",
+      callback: (response) => {
+        if (response.access_token) resolve(response.access_token);
+        else reject(new Error(response.error ?? "구글 로그인이 취소되었습니다."));
+      },
+      error_callback: (error) => reject(new Error(error.type === "popup_closed" ? "popup closed" : "구글 로그인을 마치지 못했습니다.")),
+    });
+    client.requestAccessToken();
+  });
+
+  const body = await api<{
+    access_token: string;
+    refresh_token: string;
+    is_new_user: boolean;
+  }>("/auth/social/google", { method: "POST", body: { google_access_token: accessToken } });
   tokens.set(body.access_token, body.refresh_token);
   return { isNewUser: body.is_new_user };
 }
