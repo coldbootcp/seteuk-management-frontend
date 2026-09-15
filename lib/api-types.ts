@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/social/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Google Login */
+        post: operations["google_login_api_v1_auth_social_google_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/refresh": {
         parameters: {
             query?: never;
@@ -86,6 +103,125 @@ export interface paths {
          * @description refresh 토큰을 무효화한다. 다른 기기의 세션은 유지된다.
          */
         post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify Email */
+        post: operations["verify_email_api_v1_auth_verify_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/resend-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resend Verification */
+        post: operations["resend_verification_api_v1_auth_resend_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forgot Password */
+        post: operations["forgot_password_api_v1_auth_password_forgot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset Password */
+        post: operations["reset_password_api_v1_auth_password_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Status */
+        get: operations["get_status_api_v1_account_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraw */
+        post: operations["withdraw_api_v1_account_withdraw_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/cancel-withdrawal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Withdrawal */
+        post: operations["cancel_withdrawal_api_v1_account_cancel_withdrawal_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1058,6 +1194,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/calendar-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Records */
+        get: operations["list_records_api_v1_calendar_events_get"];
+        put?: never;
+        /** Create Record */
+        post: operations["create_record_api_v1_calendar_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calendar-events/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Record */
+        get: operations["get_record_api_v1_calendar_events__record_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Record */
+        delete: operations["delete_record_api_v1_calendar_events__record_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Record */
+        patch: operations["update_record_api_v1_calendar_events__record_id__patch"];
+        trace?: never;
+    };
     "/api/v1/activities/{activity_id}/attachments": {
         parameters: {
             query?: never;
@@ -1764,6 +1937,23 @@ export interface components {
         AccessTokenResponse: {
             /** Access Token */
             access_token: string;
+        };
+        /** AccountStatusResponse */
+        AccountStatusResponse: {
+            /** Email */
+            email: string;
+            /** Email Verified */
+            email_verified: boolean;
+            /** Has Password */
+            has_password: boolean;
+            /** Google Linked */
+            google_linked: boolean;
+            /** Kakao Linked */
+            kakao_linked: boolean;
+            /** Withdrawal Requested At */
+            withdrawal_requested_at: string | null;
+            /** Scheduled Deletion At */
+            scheduled_deletion_at: string | null;
         };
         /**
          * ActivityCategory
@@ -2668,6 +2858,75 @@ export interface components {
             /** File */
             file: string;
         };
+        /** CalendarEventCreate */
+        CalendarEventCreate: {
+            event_type: components["schemas"]["CalendarEventType"];
+            /** Title */
+            title: string;
+            /** Subject */
+            subject?: string | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Memo */
+            memo?: string | null;
+        };
+        /** CalendarEventRead */
+        CalendarEventRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            event_type: components["schemas"]["CalendarEventType"];
+            /** Title */
+            title: string;
+            /** Subject */
+            subject: string | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Memo */
+            memo: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * CalendarEventType
+         * @enum {string}
+         */
+        CalendarEventType: "시험" | "수행평가" | "기타";
+        /** CalendarEventUpdate */
+        CalendarEventUpdate: {
+            event_type?: components["schemas"]["CalendarEventType"] | null;
+            /** Title */
+            title?: string | null;
+            /** Subject */
+            subject?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** End Date */
+            end_date?: string | null;
+            /** Memo */
+            memo?: string | null;
+        };
         /** CareerGoal */
         CareerGoal: {
             /** Goal */
@@ -3090,6 +3349,28 @@ export interface components {
             /** Note */
             note?: string | null;
         };
+        /** ForgotPasswordRequest */
+        ForgotPasswordRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+        };
+        /** GoogleLoginRequest */
+        GoogleLoginRequest: {
+            /** Google Access Token */
+            google_access_token: string;
+        };
+        /** GoogleLoginResponse */
+        GoogleLoginResponse: {
+            /** Access Token */
+            access_token: string;
+            /** Refresh Token */
+            refresh_token: string;
+            /** Is New User */
+            is_new_user: boolean;
+        };
         /** GradesTrend */
         GradesTrend: {
             /**
@@ -3271,6 +3552,13 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** ListResponse[CalendarEventRead] */
+        ListResponse_CalendarEventRead_: {
+            /** Items */
+            items: components["schemas"]["CalendarEventRead"][];
+            /** Total */
+            total: number;
+        };
         /** ListResponse[ConversationRead] */
         ListResponse_ConversationRead_: {
             /** Items */
@@ -3343,6 +3631,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** MessageResponse */
+        MessageResponse: {
+            /** Message */
+            message: string;
         };
         /** NodeSummaryResponse */
         NodeSummaryResponse: {
@@ -3770,6 +4063,21 @@ export interface components {
             /** Refresh Token */
             refresh_token: string;
         };
+        /** ResendVerificationRequest */
+        ResendVerificationRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+        };
+        /** ResetPasswordRequest */
+        ResetPasswordRequest: {
+            /** Token */
+            token: string;
+            /** New Password */
+            new_password: string;
+        };
         /** RoadmapDraftItem */
         RoadmapDraftItem: {
             item_type: components["schemas"]["PlanItemType"];
@@ -4112,6 +4420,8 @@ export interface components {
             parsing_confidence?: number | null;
             /** Imported At */
             imported_at?: string | null;
+            /** Failure Reason */
+            failure_reason?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -4125,6 +4435,11 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VerifyEmailRequest */
+        VerifyEmailRequest: {
+            /** Token */
+            token: string;
         };
         /** VolunteerRecordCreate */
         VolunteerRecordCreate: {
@@ -4205,6 +4520,11 @@ export interface components {
             content?: string | null;
             /** Hours */
             hours?: number | null;
+        };
+        /** WithdrawAccountRequest */
+        WithdrawAccountRequest: {
+            /** Password */
+            password?: string | null;
         };
         /**
          * RoadmapGenerateRequest
@@ -4350,6 +4670,39 @@ export interface operations {
             };
         };
     };
+    google_login_api_v1_auth_social_google_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleLoginResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     refresh_api_v1_auth_refresh_post: {
         parameters: {
             query?: never;
@@ -4410,6 +4763,211 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_email_api_v1_auth_verify_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_verification_api_v1_auth_resend_verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendVerificationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forgot_password_api_v1_auth_password_forgot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_password_api_v1_auth_password_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_status_api_v1_account_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountStatusResponse"];
+                };
+            };
+        };
+    };
+    withdraw_api_v1_account_withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WithdrawAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_withdrawal_api_v1_account_cancel_withdrawal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountStatusResponse"];
                 };
             };
         };
@@ -6629,6 +7187,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityReviewRead"][];
+                };
+            };
+        };
+    };
+    list_records_api_v1_calendar_events_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                event_type?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListResponse_CalendarEventRead_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_record_api_v1_calendar_events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarEventCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_record_api_v1_calendar_events__record_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_record_api_v1_calendar_events__record_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_record_api_v1_calendar_events__record_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarEventUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

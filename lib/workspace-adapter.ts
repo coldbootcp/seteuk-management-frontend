@@ -947,8 +947,12 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
     }
     case path.startsWith("/api/school-record/status/"): {
       const uploadId = path.split("/").pop()!;
-      const status = await api<{ status: string }>(`/seteuk/uploads/${uploadId}`);
-      if (status.status === "failed") return { status: "failed", error: "생기부 분석에 실패했습니다." };
+      const status = await api<{ status: string; failure_reason: string | null }>(
+        `/seteuk/uploads/${uploadId}`,
+      );
+      if (status.status === "failed") {
+        return { status: "failed", error: status.failure_reason ?? "생기부 분석에 실패했습니다." };
+      }
       if (status.status !== "done") return { status: "processing" };
       return { status: "completed", result: await api(`/seteuk/uploads/${uploadId}/result`) };
     }

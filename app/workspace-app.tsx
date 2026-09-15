@@ -19,6 +19,7 @@ import { AccountSection, EmailVerificationGate, WithdrawalPendingGate } from "./
 import { GateFrame } from "./gate-frame";
 import { ChatView } from "./chat-view";
 import { TimetableView } from "./timetable-view";
+import { CalendarView } from "./calendar-view";
 import { GradesView } from "./grades-view";
 import { DashboardView } from "./dashboard-view";
 import { ApplicationPreparationView } from "./application-preparation-view";
@@ -47,7 +48,7 @@ import {
 /* ──────────────────────────────────────────────
    Types
    ────────────────────────────────────────────── */
-type TabId = "overview" | "journey" | "dashboard" | "timetable" | "activities" | "grades" | "portfolio" | "chat" | "profile";
+type TabId = "overview" | "journey" | "dashboard" | "timetable" | "calendar" | "activities" | "grades" | "portfolio" | "chat" | "profile";
 
 type ProfileForm = {
   name: string; grade: string; semester: string;
@@ -223,25 +224,30 @@ async function analyzeSchoolRecordPdf(file: File, signal?: AbortSignal, onProgre
   });
   if (!initial.task_id) throw new Error("분석 작업 ID를 발급받지 못했습니다.");
 
+  // 상태 조회 자체가 실패하는 것(네트워크 끊김 등)과 분석이 실제로 실패로
+  // 끝난 것(status === "failed")은 서로 다르다 — 전자만 몇 번 재시도한다.
+  // 후자는 재시도해도 똑같은 결과이므로 바로 사용자에게 이유를 보여준다.
   let temporaryFailures = 0;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 1500));
     if (signal?.aborted) throw new Error("학생부 분석을 취소했습니다.");
+
+    let task: SchoolRecordProgress;
     try {
-      const task = await jsonRequest<SchoolRecordProgress>(`/api/school-record/status/${encodeURIComponent(initial.task_id)}`, { signal });
+      task = await jsonRequest<SchoolRecordProgress>(`/api/school-record/status/${encodeURIComponent(initial.task_id)}`, { signal });
       temporaryFailures = 0;
-      onProgress?.(task);
-      if (task.status === "completed") {
-        if (!task.result) throw new Error("분석 결과가 비어 있습니다.");
-        return task.result;
-      }
-      if (task.status === "failed") throw new Error(task.error || "학생부 분석 중 오류가 발생했습니다.");
     } catch (error) {
       temporaryFailures += 1;
-      if (temporaryFailures >= 3 || (error instanceof Error && /분석 중 오류|결과가 비어/.test(error.message))) {
-        throw error;
-      }
+      if (temporaryFailures >= 3) throw error instanceof Error ? error : new Error("요청을 처리하지 못했습니다.");
+      continue;
     }
+
+    onProgress?.(task);
+    if (task.status === "completed") {
+      if (!task.result) throw new Error("분석 결과가 비어 있습니다.");
+      return task.result;
+    }
+    if (task.status === "failed") throw new Error(task.error || "학생부 분석 중 오류가 발생했습니다.");
   }
   throw new Error("분석 시간이 5분을 초과했습니다. 잠시 후 다시 시도해주세요.");
 }
@@ -2797,6 +2803,20 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       ),
     },
     {
+      id: "calendar",
+      label: "캘린더",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+          <circle cx="8" cy="15" r="1.2" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="15" r="1.2" fill="currentColor" stroke="none" />
+        </svg>
+      ),
+    },
+    {
       id: "activities",
       label: "활동 & 세특",
       icon: (
@@ -3029,6 +3049,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               }}
             />
           )}
+          {tab === "calendar" && <CalendarView />}
           {tab === "activities" && (
             <ActivitiesView
               key={activityDraft?.title ?? "activity-entry"}
@@ -3211,7 +3232,13 @@ export function WorkspaceApp() {
   // 이메일 인증·탈퇴 유예는 진단+상담 관문보다도 먼저 확인한다 — 인증 안 된
   // 계정이 온보딩까지 가버리면 안 된다.
   if (accountStatus && !accountStatus.email_verified) {
-    return <EmailVerificationGate email={accountStatus.email} onSignOut={signOut} />;
+    return (
+      <EmailVerificationGate
+        email={accountStatus.email}
+        onSignOut={signOut}
+        onVerified={checkAccountThenGate}
+      />
+    );
   }
   if (accountStatus?.withdrawal_requested_at) {
     return (
