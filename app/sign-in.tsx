@@ -12,6 +12,7 @@ import {
   resendVerificationEmail,
   signup,
 } from "../lib/api-client";
+import { PasswordHints } from "./password-hints";
 
 /**
  * 로그인 게이트.
@@ -369,6 +370,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
                   {showPassword ? "숨김" : "보기"}
                 </button>
               </div>
+              {mode === "signup" && <PasswordHints password={password} />}
             </div>
 
             {mode === "signup" && (

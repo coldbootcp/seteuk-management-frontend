@@ -6,6 +6,7 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ApiError, resetPassword } from "../../lib/api-client";
+import { PasswordHints } from "../password-hints";
 
 function ResetPasswordContent() {
   const params = useSearchParams();
@@ -78,6 +79,7 @@ function ResetPasswordContent() {
                 type="password"
                 value={password}
               />
+              <PasswordHints password={password} />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1.5" htmlFor="new-password-confirm">

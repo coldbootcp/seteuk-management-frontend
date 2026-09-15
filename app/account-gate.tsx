@@ -11,21 +11,40 @@ import {
 } from "../lib/api-client";
 import { GateFrame } from "./gate-frame";
 
+/** 인증 여부를 몇 초 간격으로 조용히 확인하는 주기(ms). 사용자가 다른
+ * 탭에서 메일의 링크를 누르면, 이 화면을 새로고침하지 않아도 자동으로
+ * 넘어간다. */
+const VERIFICATION_POLL_INTERVAL_MS = 4000;
+
 /**
  * 이메일 인증 대기 화면.
  *
  * 로그인은 됐지만(토큰은 있다) 이메일 인증을 안 마친 계정이 여기서 멈춘다.
- * 인증 링크를 눌러 새로고침하면 넘어간다 — 별도 폴링은 두지 않는다(사용자가
- * 메일을 확인하고 돌아오는 흐름이므로 새로고침이 자연스럽다).
  */
 export function EmailVerificationGate({
   email,
+  onVerified,
   onSignOut,
 }: {
   email: string;
+  /** 다른 탭에서 인증을 마친 게 폴링으로 감지되면 부른다 — 상위가 관문을 다시 평가한다. */
+  onVerified: () => void;
   onSignOut: () => void;
 }) {
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      getAccountStatus()
+        .then((status) => {
+          if (status.email_verified) onVerified();
+        })
+        .catch(() => {
+          /* 폴링 실패는 조용히 넘어간다 — 다음 주기에 다시 시도된다 */
+        });
+    }, VERIFICATION_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [onVerified]);
 
   async function resend() {
     setState("sending");
@@ -44,7 +63,7 @@ export function EmailVerificationGate({
         <h2 className="text-lg font-extrabold text-gray-950">이메일 인증을 완료해주세요</h2>
         <p className="text-xs text-gray-600 leading-relaxed">
           <strong className="text-gray-950">{email}</strong>로 인증 메일을 보냈습니다. 메일함(스팸함
-          포함)에서 링크를 눌러 인증을 마친 뒤, 이 화면을 새로고침해주세요.
+          포함)에서 링크를 누르면 이 화면이 자동으로 넘어갑니다.
         </p>
         <div className="flex flex-col gap-2 pt-2">
           <button
@@ -72,6 +91,15 @@ export function EmailVerificationGate({
             메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.
           </p>
         )}
+        <div className="pt-2 border-t border-gray-100">
+          <button
+            className="text-[11px] text-gray-400 hover:text-gray-600 font-medium underline"
+            onClick={onSignOut}
+            type="button"
+          >
+            이메일을 잘못 입력하셨나요? 로그아웃하고 다시 가입하기
+          </button>
+        </div>
       </div>
     </GateFrame>
   );
