@@ -1447,6 +1447,8 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
   // 있어도 진행이 0으로 표시된다.
   const completed = workspace.roadmap.nodes.filter((n) => n.status === "done").length;
   const [selectedPlan, setSelectedPlan] = useState<RoadmapPlanEvent | null>(null);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [topicFilter, setTopicFilter] = useState<"all" | "core" | "optional">("all");
   const completedPlanIds = new Set(workspace.activities.map((activity) => activity.planEventId).filter(Boolean));
 
   const [diagnosisBusy, setDiagnosisBusy] = useState(false);
@@ -1493,13 +1495,13 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
   }
 
   return (
-    <div className="overview-page">
-      {/* Current Semester Plans */}
+    <div className="space-y-6">
+      {/* Current Semester Plans (Mission Hero) */}
       <section className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200/80 shadow-xs space-y-6">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-brand-600 bg-brand-50 px-3 py-1 rounded-full border border-brand-200/60 inline-flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
               THIS SEMESTER · {workspace.profile.grade}학년 {workspace.profile.semester}학기
             </span>
             {workspace.profile.targetCareer && (
@@ -1509,14 +1511,27 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
             )}
           </div>
 
-          <h2 className="text-xl md:text-2xl font-extrabold text-gray-950 tracking-tight leading-snug">
-            이번 학기 목표: <span className="text-brand-600">{active?.objective ?? "아직 목표가 없습니다"}</span>
-          </h2>
+          <div className="space-y-2">
+            <h2 className="text-xl md:text-2xl font-extrabold text-gray-950 tracking-tight leading-snug">
+              {active?.title ?? "이번 학기 핵심 목표"}
+            </h2>
+
+            {active?.objective && (
+              <div className="p-3.5 md:p-4 rounded-xl bg-blue-50/70 border border-blue-100 text-xs md:text-sm text-gray-800 leading-relaxed flex items-start gap-2.5">
+                <span className="px-2 py-0.5 rounded-md bg-brand-100 text-brand-700 text-[11px] font-bold shrink-0 mt-0.5">
+                  학기 목표
+                </span>
+                <p className="font-medium text-gray-800">
+                  {active.objective}
+                </p>
+              </div>
+            )}
+          </div>
 
           {active && active.competencyGoals.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               {active.competencyGoals.map((goal) => (
-                <span className="px-3 py-1 rounded-lg bg-gray-50 border border-gray-200/90 text-xs font-semibold text-gray-700" key={goal}>
+                <span className="px-3 py-1 rounded-lg bg-gray-50 border border-gray-200/90 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition cursor-default" key={goal}>
                   {goal}
                 </span>
               ))}
@@ -1524,6 +1539,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
           )}
         </div>
 
+        {/* 활동 주제 제안: 10개 카드 격자 나열을 탈피한 인터랙티브 토픽 스포트라이트 탐색기 */}
         <div className="pt-5 border-t border-gray-100 space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
@@ -1531,102 +1547,202 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
               <h3 className="text-sm font-bold text-gray-950">이번 학기 활동 주제 제안</h3>
               {active && (
                 <span className="text-xs text-gray-400">
-                  · {active.grade}-{active.semester}학기 목표에서 이어지는 주제
+                  · {active.planEvents?.length ?? 0}개 탐구 과제 후보
                 </span>
               )}
             </div>
-            <span className="text-xs font-bold text-amber-700 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200/80">
-              ★ 먼저 검토하면 좋은 주제
-            </span>
+
+            {/* Filter Pills */}
+            {active?.planEvents && active.planEvents.length > 0 && (
+              <div className="flex items-center gap-1 p-1 bg-gray-100/90 rounded-xl text-xs font-semibold">
+                <button
+                  className={`px-3 py-1 rounded-lg transition ${topicFilter === "all" ? "bg-white text-gray-950 shadow-2xs font-extrabold" : "text-gray-500 hover:text-gray-900"}`}
+                  onClick={() => setTopicFilter("all")}
+                  type="button"
+                >
+                  전체 ({active.planEvents.length})
+                </button>
+                <button
+                  className={`px-3 py-1 rounded-lg transition ${topicFilter === "core" ? "bg-white text-amber-900 shadow-2xs font-extrabold" : "text-gray-500 hover:text-gray-900"}`}
+                  onClick={() => setTopicFilter("core")}
+                  type="button"
+                >
+                  ★ 최우선 ({active.planEvents.filter((t) => t.priority === "core").length})
+                </button>
+                <button
+                  className={`px-3 py-1 rounded-lg transition ${topicFilter === "optional" ? "bg-white text-gray-950 shadow-2xs font-extrabold" : "text-gray-500 hover:text-gray-900"}`}
+                  onClick={() => setTopicFilter("optional")}
+                  type="button"
+                >
+                  선택 심화 ({active.planEvents.filter((t) => t.priority !== "core").length})
+                </button>
+              </div>
+            )}
           </div>
 
-          {active?.planEvents && active.planEvents.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {active.planEvents.map((ev) => {
-                const isCore = ev.priority === "core";
-                const isCompleted = completedPlanIds.has(ev.id);
-                return (
-                  <div
-                    className="p-4 rounded-xl border border-gray-200/90 bg-white hover:border-brand-400 hover:shadow-sm transition cursor-pointer flex flex-col justify-between gap-3 group"
-                    key={ev.id}
-                    onClick={() => setSelectedPlan(ev)}
-                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedPlan(ev); } }}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded whitespace-nowrap ${isCore ? "bg-amber-100 text-amber-900 border border-amber-200" : "bg-gray-100 text-gray-700"}`}>
-                            {isCore ? "★ 최우선" : "선택 심화"}
+          {active?.planEvents && active.planEvents.length > 0 ? (() => {
+            const activeTopics = active.planEvents;
+            const filteredTopics = activeTopics.filter((t) => {
+              if (topicFilter === "core") return t.priority === "core";
+              if (topicFilter === "optional") return t.priority !== "core";
+              return true;
+            });
+            const currentTopic = activeTopics.find((t) => t.id === selectedTopicId)
+              ?? filteredTopics[0]
+              ?? activeTopics[0];
+            const isCurrentTopicCompleted = completedPlanIds.has(currentTopic.id);
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                {/* 좌측: 슬림한 인터랙티브 토픽 리스트 (5 cols) */}
+                <div className="lg:col-span-5 flex flex-col gap-1.5 max-h-[420px] overflow-y-auto pr-1">
+                  {filteredTopics.map((ev, idx) => {
+                    const isSelected = ev.id === currentTopic.id;
+                    const isCore = ev.priority === "core";
+                    const isCompleted = completedPlanIds.has(ev.id);
+                    return (
+                      <button
+                        className={`w-full text-left p-3 rounded-xl border transition flex items-center justify-between gap-3 text-xs group cursor-pointer ${
+                          isSelected
+                            ? "bg-brand-50/90 border-brand-300 text-brand-950 shadow-2xs"
+                            : "bg-white border-gray-200/80 hover:border-gray-300 hover:bg-gray-50/70 text-gray-700"
+                        }`}
+                        key={ev.id}
+                        onClick={() => setSelectedTopicId(ev.id)}
+                        type="button"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <span className={`w-5 h-5 rounded-md text-[10px] font-black flex items-center justify-center shrink-0 ${
+                            isSelected
+                              ? "bg-brand-500 text-white"
+                              : isCore
+                                ? "bg-amber-100 text-amber-900"
+                                : "bg-gray-100 text-gray-500"
+                          }`}>
+                            {idx + 1}
                           </span>
-                          {ev.subject && (
-                            <span className="text-[11px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded truncate">
-                              {ev.subject}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              {ev.subject && (
+                                <span className="text-[10px] font-bold text-gray-500">
+                                  {ev.subject}
+                                </span>
+                              )}
+                              {isCore && (
+                                <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200/60 px-1 py-0.2 rounded">
+                                  최우선
+                                </span>
+                              )}
+                            </div>
+                            <span className={`block font-bold truncate leading-tight ${isSelected ? "text-brand-900 font-extrabold" : "text-gray-800"}`}>
+                              {ev.title}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-1">
+                          {isCompleted && (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full" title="작성 완료">
+                              ✓
                             </span>
                           )}
+                          <Icon className={isSelected ? "text-brand-500" : "text-gray-300 group-hover:text-gray-400"} name="chevron-right" size={12} />
                         </div>
-                        {isCompleted && (
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 whitespace-nowrap">
-                            <span>✓</span> 작성 완료
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 우측: 단 하나의 스포트라이트 포커스 카드 (7 cols) */}
+                <div className="lg:col-span-7 bg-gradient-to-br from-gray-50/90 via-blue-50/20 to-white p-6 md:p-7 rounded-2xl border border-gray-200/90 flex flex-col justify-between space-y-5 shadow-2xs">
+                  <div className="space-y-3.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full border border-brand-200/60 inline-flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
+                        TOPIC SPOTLIGHT · {currentTopic.priority === "core" ? "★ 최우선 추천 과제" : "선택 심화 탐구"}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {currentTopic.subject && (
+                          <span className="text-xs font-bold text-gray-700 bg-white border border-gray-200 px-2.5 py-1 rounded-lg shadow-2xs">
+                            연계 교과: {currentTopic.subject}
+                          </span>
+                        )}
+                        {isCurrentTopicCompleted && (
+                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg">
+                            ✓ 작성 완료됨
                           </span>
                         )}
                       </div>
-                      <h4 className="text-xs md:text-sm font-bold text-gray-950 group-hover:text-brand-600 transition leading-snug">
-                        {ev.title}
-                      </h4>
-                      <p className="text-xs text-gray-500 leading-relaxed">
-                        {ev.description || "이 학기의 목표와 연결되는 탐구 주제입니다."}
-                      </p>
                     </div>
 
-                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2 text-xs">
-                      <span className="text-gray-400 text-[11px]">클릭하여 상세 가이드 확인</span>
-                      <button
-                        className="px-2.5 py-1 rounded-lg bg-gray-50 hover:bg-brand-50 text-brand-600 hover:text-brand-700 font-bold text-xs border border-gray-200 hover:border-brand-200 transition whitespace-nowrap"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onConvertPlan({ title: ev.title, subject: ev.subject, planEventId: ev.id, roadmapNodeId: active.id });
-                        }}
-                        type="button"
-                      >
-                        이 주제를 실제 활동에 연결 →
-                      </button>
+                    <h4 className="text-base md:text-lg font-extrabold text-gray-950 leading-snug tracking-tight">
+                      {currentTopic.title}
+                    </h4>
+
+                    <p className="text-xs md:text-sm text-gray-600 leading-relaxed">
+                      {currentTopic.description || "이번 학기 목표와 연계되는 심화 탐구 주제입니다."}
+                    </p>
+
+                    <div className="p-3.5 rounded-xl bg-white border border-gray-200/80 text-xs space-y-1">
+                      <span className="text-[11px] font-bold text-gray-400 block">이 주제의 학기 역할</span>
+                      <p className="text-gray-700 leading-relaxed font-medium">
+                        {active ? `${active.grade}-${active.semester}학기 목표('${active.title || "핵심 목표"}')와 직접 연계되어 학생부 세특의 전공 적합성과 깊이를 입증하는 핵심 탐구 과제입니다.` : "학생부 세특 탐구 과제로 연결됩니다."}
+                      </p>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
+
+                  <div className="pt-4 border-t border-gray-200/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <button
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 transition cursor-pointer"
+                      onClick={() => setSelectedPlan(currentTopic)}
+                      type="button"
+                    >
+                      상세 가이드 보기
+                    </button>
+                    <button
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      onClick={() => {
+                        if (active) {
+                          onConvertPlan({ title: currentTopic.title, subject: currentTopic.subject, planEventId: currentTopic.id, roadmapNodeId: active.id });
+                        }
+                      }}
+                      type="button"
+                    >
+                      <span>이 주제를 실제 활동에 연결하기</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })() : (
             <p className="text-xs text-gray-400">이번 학기에 제안된 활동 주제가 없습니다.</p>
           )}
         </div>
       </section>
 
-      {/* Metrics */}
+      {/* Metrics Row (4대 핵심 지표) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {/* 배지는 실제로 센 값만 보여준다 — 셀 수 없는 자리는 배지를 아예 그리지 않는다. */}
         {[
           {
-            label: "학기 진행",
+            label: "로드맵 진행",
             value: `${completed} / 6`,
             desc: "완료 노드",
             badge: `${Math.round((completed / 6) * 100)}%`,
-            badgeColor: "bg-blue-50 text-brand-600",
+            badgeColor: "bg-blue-50 text-brand-600 border border-blue-200/60",
           },
           {
             label: "활동 메모리",
             value: `${workspace.activities.length}건`,
             desc: "구조화 기록",
-            badge: `탐구 활동 ${workspace.activities.filter((a) => a.recordKind === "activity").length}건`,
-            badgeColor: "bg-emerald-50 text-emerald-600",
+            badge: `탐구 ${workspace.activities.filter((a) => a.recordKind === "activity").length}건`,
+            badgeColor: "bg-emerald-50 text-emerald-600 border border-emerald-200/60",
           },
           {
             label: "현재 단계",
             value: active?.narrativeStage ?? "회고",
             desc: active ? `${active.grade}학년 ${active.semester}학기` : "전체 완료",
             badge: active ? `${active.grade}-${active.semester}` : null,
-            badgeColor: "bg-purple-50 text-purple-600",
+            badgeColor: "bg-purple-50 text-purple-600 border border-purple-200/60",
           },
           {
             label: "정합 기록",
@@ -1635,10 +1751,10 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
             badge: workspace.reconciliations.length
               ? `일치 ${workspace.reconciliations.filter((r) => r.matchType === "MATCH").length}건`
               : null,
-            badgeColor: "bg-amber-50 text-amber-700",
+            badgeColor: "bg-amber-50 text-amber-700 border border-amber-200/60",
           },
         ].map((metric) => (
-          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-2" key={metric.label}>
+          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-2 hover:border-gray-300 transition" key={metric.label}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-gray-400">{metric.label}</span>
               {metric.badge && (
@@ -1647,211 +1763,322 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
                 </span>
               )}
             </div>
-            <strong className="text-2xl font-extrabold text-gray-950 block tracking-tight">{metric.value}</strong>
+            <strong className="text-2xl font-extrabold text-gray-950 block tracking-tight tabular-nums">{metric.value}</strong>
             <span className="text-xs text-gray-500 font-medium block">{metric.desc}</span>
           </div>
         ))}
       </div>
 
-      {/* Grid: DNA + Active Node */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* DNA Card */}
-        <section className="lg:col-span-2 bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-5">
-          <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
-            <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">MAJOR NARRATIVE DNA</span>
-              <h3 className="text-base font-extrabold text-gray-950 mt-0.5">관심분야와 증거를 분리해 보여줘요</h3>
+      {/* Grid: DNA + Active Node (Only show DNA card if diagnosis exists or is running) */}
+      {hasDiagnosis || diagnosisBusy ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* DNA Card (Left 2 cols) */}
+          <section className="lg:col-span-2 bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-5">
+            <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">MAJOR NARRATIVE DNA</span>
+                <h3 className="text-base font-extrabold text-gray-950 mt-0.5">관심분야와 증거를 분리해 보여줘요</h3>
+              </div>
+              <button
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap disabled:opacity-60 ${
+                  hasDiagnosis
+                    ? "border border-gray-200 hover:bg-gray-50 text-gray-700"
+                    : "bg-brand-500 hover:bg-brand-600 text-white shadow-xs"
+                }`}
+                disabled={diagnosisBusy}
+                onClick={() => void beginDiagnosis()}
+                type="button"
+              >
+                {hasDiagnosis ? <Icon className={diagnosisBusy ? "animate-spin" : ""} name="refresh" size={14} /> : <Icon className={diagnosisBusy ? "animate-spin" : ""} name="sparkles" size={14} />}
+                <span>{diagnosisBusy ? "진단 중…" : hasDiagnosis ? "다시 진단하기" : "AI 진단 실행"}</span>
+              </button>
             </div>
-            <button
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap disabled:opacity-60 ${
-                hasDiagnosis
-                  ? "border border-gray-200 hover:bg-gray-50 text-gray-700"
-                  : "bg-brand-500 hover:bg-brand-600 text-white shadow-brand-glow"
-              }`}
-              disabled={diagnosisBusy}
-              onClick={() => void beginDiagnosis()}
-              type="button"
-            >
-              {hasDiagnosis ? <Icon name="refresh" size={14} /> : <Icon name="sparkles" size={14} />}
-              <span>{diagnosisBusy ? "진단 중…" : hasDiagnosis ? "다시 진단하기" : "AI 진단 실행"}</span>
-            </button>
-          </div>
-          <div>
-            {diagnosisBusy && (
-              <p className="text-xs text-gray-500 mb-3">
-                기록을 분석해 진단을 만드는 중입니다. 활동이 많으면 1~2분 정도 걸릴 수 있어요.
-              </p>
-            )}
-            {diagnosisError && <div className="banner banner-error" style={{ marginBottom: 12 }}>{diagnosisError}</div>}
-            {hasDiagnosis ? (
-              <>
-                <div className="p-4 rounded-xl bg-gradient-to-r from-brand-50/70 to-blue-50/40 border border-brand-100/80">
-                  <p className="text-xs md:text-sm font-semibold text-gray-800 leading-relaxed">{workspace.dna.narrative}</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-200/80 space-y-2.5">
-                    <div className="flex items-center gap-1.5 pb-1 border-b border-gray-200/60">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <strong className="text-xs font-extrabold text-gray-900">확인된 사실 (Fact)</strong>
-                    </div>
-                    <div className="space-y-2">
-                      {workspace.dna.facts.length ? (
-                        workspace.dna.facts.map((fact) => (
-                          <p className="text-xs text-gray-600 leading-relaxed" key={fact}>{fact}</p>
-                        ))
-                      ) : (
-                        <p className="text-xs text-gray-400">기록에서 확인된 사실이 아직 없습니다.</p>
-                      )}
-                    </div>
+            <div className="space-y-4">
+              {diagnosisBusy && (
+                <p className="text-xs text-gray-500">
+                  기록을 분석해 진단을 만드는 중입니다. 활동이 많으면 1~2분 정도 걸릴 수 있어요.
+                </p>
+              )}
+              {diagnosisError && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-semibold">{diagnosisError}</div>}
+              {hasDiagnosis && (
+                <>
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-brand-50/70 to-blue-50/40 border border-brand-100/80">
+                    <p className="text-xs md:text-sm font-semibold text-gray-800 leading-relaxed">{workspace.dna.narrative}</p>
                   </div>
-                  <div className="p-4 rounded-xl bg-brand-50/40 border border-brand-100/70 space-y-2.5">
-                    <div className="flex items-center gap-1.5 pb-1 border-b border-brand-100">
-                      <span className="w-2 h-2 rounded-full bg-brand-500" />
-                      <strong className="text-xs font-extrabold text-gray-900">AI 해석 (Interpretation)</strong>
-                    </div>
-                    <div className="space-y-2">
-                      {workspace.dna.interpretations.map((item) => (
-                        <p className="text-xs text-gray-600 leading-relaxed" key={item.statement}>{item.statement}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                {workspace.dna.riskFlags.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {workspace.dna.riskFlags.map((flag) => (
-                      <span className="text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2.5 py-1 rounded-lg" key={flag}>
-                        주의 · {flag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {workspace.dna.opportunities.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {workspace.dna.opportunities.map((item) => (
-                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg" key={item}>
-                        기회 · {item}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <button
-                  className="text-xs font-bold text-brand-600 hover:text-brand-700 transition mt-4"
-                  onClick={() => setDiagnosisDetailOpen((cur) => !cur)}
-                  type="button"
-                >
-                  {diagnosisDetailOpen ? "진단 상세 접기 ▲" : "진단 상세 보기 ▼"}
-                </button>
-                {diagnosisDetailOpen && (
-                  <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 18 }}>
-                    {workspace.dna.gradesTrend.length > 0 && (
-                      <div>
-                        <strong>성적 추이 (학기별 평균 석차등급 · 1에 가까울수록 좋음)</strong>
-                        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 100, marginTop: 10, padding: "0 4px" }}>
-                          {workspace.dna.gradesTrend.map((point) => {
-                            const rank = point.averageRank;
-                            const heightPct = rank == null ? 0 : Math.max(6, ((10 - rank) / 9) * 100);
-                            return (
-                              <div key={`${point.grade}-${point.semester}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1, height: "100%", justifyContent: "flex-end" }}>
-                                <small style={{ color: "var(--fg-muted)" }}>{rank == null ? "기록 없음" : rank.toFixed(1)}</small>
-                                <div style={{ width: "60%", height: `${heightPct}%`, background: rank == null ? "var(--border)" : "var(--blue-500)", borderRadius: "4px 4px 0 0", minHeight: 4 }} />
-                                <small style={{ color: "var(--fg-muted)", marginTop: 4 }}>{point.grade}-{point.semester}</small>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {workspace.dna.gradesTrend.some((p) => p.excludedCount > 0) && (
-                          <small style={{ color: "var(--fg-muted)" }}>석차등급이 없는 과목(진로선택·전문교과 등)은 평균에서 제외했습니다.</small>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 확인된 사실 */}
+                    <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-200/80 space-y-2.5">
+                      <div className="flex items-center gap-1.5 pb-1 border-b border-gray-200/60">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <strong className="text-xs font-extrabold text-gray-900">확인된 사실 (Fact)</strong>
+                      </div>
+                      <div className="space-y-2">
+                        {workspace.dna.facts.length ? (
+                          workspace.dna.facts.map((fact, idx) => (
+                            <div className="p-2.5 rounded-lg bg-white border border-gray-200/60 text-xs text-gray-700 leading-relaxed shadow-2xs" key={idx}>
+                              {fact}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-gray-400 p-1">기록에서 확인된 사실이 아직 없습니다.</p>
                         )}
                       </div>
-                    )}
-                    {workspace.dna.semesterReviews.length > 0 && (
-                      <div>
-                        <strong>학기별 평가</strong>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
-                          {workspace.dna.semesterReviews.map((review) => (
-                            <div className="dna-interp" key={`${review.grade}-${review.semester}`} style={{ display: "block" }}>
-                              <strong>{review.grade}학년 {review.semester}학기</strong>
-                              <p style={{ margin: "6px 0 0" }}>{review.gradesReview}</p>
-                              <p style={{ margin: "6px 0 0" }}>{review.readingReview}</p>
-                              <p style={{ margin: "6px 0 0" }}>{review.activitiesReview}</p>
-                            </div>
-                          ))}
-                        </div>
+                    </div>
+                    {/* AI 해석 */}
+                    <div className="p-4 rounded-xl bg-blue-50/40 border border-blue-100 space-y-2.5">
+                      <div className="flex items-center gap-1.5 pb-1 border-blue-200/60">
+                        <span className="w-2 h-2 rounded-full bg-brand-500" />
+                        <strong className="text-xs font-extrabold text-brand-950">AI 해석 (Interpretation)</strong>
                       </div>
-                    )}
-                    {workspace.dna.activityInventory.length > 0 && (
-                      <div>
-                        <strong>활동 인벤토리 (역량 × 심화도)</strong>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-                          {workspace.dna.activityInventory.map((entry) => (
-                            <div className="dna-fact" key={entry.activityId}>
-                              {entry.grade}학년{entry.semester ? ` ${entry.semester}학기` : ""} · {entry.competency} · {entry.depthLevel} — {entry.headline}
+                      <div className="space-y-2">
+                        {workspace.dna.interpretations.length ? (
+                          workspace.dna.interpretations.map((item, idx) => (
+                            <div className="p-2.5 rounded-lg bg-white border border-blue-100 text-xs text-gray-700 leading-relaxed space-y-1 shadow-2xs" key={idx}>
+                              <p>{item.statement}</p>
+                              <div className="flex items-center justify-end">
+                                <span className="text-[10px] font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100">
+                                  신뢰도 {Math.round((item.confidence || 0.9) * 100)}% · {item.verified ? "확인됨" : "미확인"}
+                                </span>
+                              </div>
                             </div>
-                          ))}
-                        </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-gray-400 p-1">해석 데이터가 아직 없습니다.</p>
+                        )}
                       </div>
-                    )}
-                    {workspace.dna.knowledgeGraphLinks.length > 0 && (
-                      <div>
-                        <strong>숨은 연결 (계보로는 안 잡히는 활동 간 연결)</strong>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-                          {workspace.dna.knowledgeGraphLinks.map((link, index) => (
-                            <div className="dna-fact" key={`${link.fromActivityId}-${link.toActivityId}-${index}`}>
-                              {activityTitleById.get(link.fromActivityId) ?? "활동"} ↔ {activityTitleById.get(link.toActivityId) ?? "활동"}
-                              <small style={{ display: "block", color: "var(--fg-muted)" }}>
-                                {link.linkType === "vertical" ? "심화 연결" : "융합 연결"} · {link.relationLabel}
-                              </small>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
-                )}
-              </>
-            ) : (
-              !diagnosisBusy && (
-                <p style={{ color: "var(--fg-muted)" }}>
-                  아직 진단을 실행하지 않았습니다. 지금까지 쌓인 기록으로 강점·약점과 진로 흐름을 분석하려면 진단을 실행해주세요.
-                </p>
-              )
-            )}
-          </div>
-        </section>
+                  {workspace.dna.riskFlags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {workspace.dna.riskFlags.map((flag) => (
+                        <span className="px-3 py-1 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 font-semibold flex items-center gap-1.5" key={flag}>
+                          <span className="font-bold">⚠️ 주의:</span> {flag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {workspace.dna.opportunities.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {workspace.dna.opportunities.map((item) => (
+                        <span className="px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-semibold flex items-center gap-1.5" key={item}>
+                          <span className="font-bold">💡 기회:</span> {item}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="pt-2">
+                    <button
+                      className="w-full py-2.5 px-4 rounded-xl bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-700 transition flex items-center justify-center gap-2 border border-gray-200"
+                      onClick={() => setDiagnosisDetailOpen((cur) => !cur)}
+                      type="button"
+                    >
+                      <span>{diagnosisDetailOpen ? "진단 상세 접기 ▲" : "진단 상세 보기 (성적 추이 · 학기별 평가 · 활동 인벤토리 · 숨은 연결) ▼"}</span>
+                    </button>
+                  </div>
+                  {diagnosisDetailOpen && (
+                    <div className="space-y-6 pt-4 border-t border-gray-100">
+                      {workspace.dna.gradesTrend.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <strong className="text-xs font-extrabold text-gray-900">
+                              성적 추이 (학기별 평균 석차등급 · 1에 가까울수록 좋음)
+                            </strong>
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200/70">
+                            <div className="flex items-end gap-4 md:gap-6 h-28 pt-4 px-4 md:px-6 justify-around">
+                              {workspace.dna.gradesTrend.map((point) => {
+                                const rank = point.averageRank;
+                                const heightPct = rank == null ? 0 : Math.max(8, ((10 - rank) / 9) * 100);
+                                return (
+                                  <div className="flex flex-col items-center flex-1 h-full justify-end group" key={`${point.grade}-${point.semester}`}>
+                                    <span className="text-xs font-bold text-gray-700 mb-1.5 tabular-nums">{rank == null ? "기록 없음" : rank.toFixed(1)}</span>
+                                    <div
+                                      className={`w-10 md:w-12 rounded-t-lg transition-all ${rank == null ? "bg-gray-200" : "bg-brand-500 shadow-xs"}`}
+                                      style={{ height: `${heightPct}%` }}
+                                    />
+                                    <span className="text-[11px] mt-2 font-semibold text-gray-500">{point.grade}-{point.semester}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {workspace.dna.gradesTrend.some((p) => p.excludedCount > 0) && (
+                              <p className="text-[11px] text-gray-400 text-center mt-3">* 석차등급이 없는 과목(진로선택·전문교과 등)은 평균 계산에서 제외되었습니다.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {workspace.dna.semesterReviews.length > 0 && (
+                        <div className="space-y-3">
+                          <strong className="text-xs font-extrabold text-gray-900 block">학기별 정밀 평가</strong>
+                          <div className="space-y-2">
+                            {workspace.dna.semesterReviews.map((review) => (
+                              <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200/80 space-y-1.5 text-xs" key={`${review.grade}-${review.semester}`}>
+                                <div className="flex items-center justify-between font-bold text-gray-900">
+                                  <span>{review.grade}학년 {review.semester}학기</span>
+                                </div>
+                                {review.gradesReview && <p className="text-gray-700 leading-relaxed">{review.gradesReview}</p>}
+                                {review.readingReview && <p className="text-gray-500 text-[11px]">독서: {review.readingReview}</p>}
+                                {review.activitiesReview && <p className="text-gray-500 text-[11px]">활동: {review.activitiesReview}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {workspace.dna.activityInventory.length > 0 && (
+                        <div className="space-y-3">
+                          <strong className="text-xs font-extrabold text-gray-900 block">활동 인벤토리 (역량 × 심화도)</strong>
+                          <div className="space-y-2">
+                            {workspace.dna.activityInventory.map((entry) => (
+                              <div className="p-3 rounded-lg bg-white border border-gray-200 flex items-center justify-between text-xs" key={entry.activityId}>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[11px] font-bold text-gray-500">{entry.grade}학년{entry.semester ? ` ${entry.semester}학기` : ""}</span>
+                                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-brand-700">{entry.competency}</span>
+                                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-600">{entry.depthLevel}</span>
+                                  <strong className="text-gray-900 font-bold ml-1">{entry.headline}</strong>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {workspace.dna.knowledgeGraphLinks.length > 0 && (
+                        <div className="space-y-3">
+                          <strong className="text-xs font-extrabold text-gray-900 block">숨은 연결 (계보로는 안 잡히는 활동 간 연결)</strong>
+                          <div className="space-y-2">
+                            {workspace.dna.knowledgeGraphLinks.map((link, index) => (
+                              <div className="p-3 rounded-lg bg-purple-50/50 border border-purple-100 text-xs space-y-1" key={`${link.fromActivityId}-${link.toActivityId}-${index}`}>
+                                <div className="flex items-center justify-between font-bold text-purple-950">
+                                  <span>{activityTitleById.get(link.fromActivityId) ?? "활동"} ↔ {activityTitleById.get(link.toActivityId) ?? "활동"}</span>
+                                  <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-700">{link.linkType === "vertical" ? "심화 연결" : "융합 연결"}</span>
+                                </div>
+                                <p className="text-purple-700 text-[11px]">{link.relationLabel}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
 
-        {/* Active Node Card */}
-        <section className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col gap-4">
+          {/* Active Roadmap Node Card (Right 1 col) */}
+          <section className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col justify-between space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-2 pb-3 border-b border-gray-100">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">ACTIVE ROADMAP NODE</span>
+                  <h3 className="text-base font-extrabold text-gray-950 mt-0.5 leading-snug">{active ? `${active.grade}-${active.semester}학기 노드` : "이번 학기 노드"}</h3>
+                </div>
+                {active && <StatusBadge status={active.status} />}
+              </div>
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-bold text-gray-900 leading-snug">{active?.title ?? "이번 학기 회고"}</h4>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  {active?.objective ?? "이번 학기 목표가 아직 없습니다. 상담을 마치면 여기에 표시됩니다."}
+                </p>
+              </div>
+              {active && active.candidateSubjects.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <span className="text-[11px] font-bold text-gray-400 block">추천 연계 교과목 ({active.candidateSubjects.length}개)</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {active.candidateSubjects.map((subject) => (
+                      <span className="px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-700" key={subject}>
+                        {subject}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 pt-4 border-t border-gray-100">
+              <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 text-xs text-gray-600 space-y-1.5">
+                <div className="flex items-center justify-between font-bold text-gray-900">
+                  <span>로드맵 이수율</span>
+                  <span className="text-brand-600">{completed} / 6 노드 완료</span>
+                </div>
+                <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-brand-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.round((completed / 6) * 100))}%` }} />
+                </div>
+              </div>
+
+              <button
+                className="w-full py-2.5 px-4 rounded-xl bg-gray-900 hover:bg-black text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-xs"
+                onClick={() => onNavigate("journey")}
+                type="button"
+              >
+                <span>3개년 로드맵 전체 보기</span>
+                <span>→</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : (
+        /* Active Roadmap Node Card (Full width when no diagnosis) */
+        <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-6">
           <div className="flex items-start justify-between gap-2 pb-3 border-b border-gray-100">
             <div className="min-w-0">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">ACTIVE ROADMAP NODE</span>
-              <h3 className="text-base font-extrabold text-gray-950 mt-0.5 leading-snug">{active?.title ?? "이번 학기 회고"}</h3>
+              <h3 className="text-base font-extrabold text-gray-950 mt-0.5 leading-snug">{active ? `${active.grade}-${active.semester}학기 노드` : "이번 학기 노드"}</h3>
             </div>
             {active && <StatusBadge status={active.status} />}
           </div>
-          <p className="text-xs text-gray-600 leading-relaxed flex-1">
-            {active?.objective ?? "이번 학기 목표가 아직 없습니다. 상담을 마치면 여기에 표시됩니다."}
-          </p>
-          {active && active.candidateSubjects.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {active.candidateSubjects.map((subject) => (
-                <span className="text-[11px] font-semibold text-gray-700 bg-gray-50 border border-gray-200/90 px-2 py-0.5 rounded-lg" key={subject}>
-                  {subject}
-                </span>
-              ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <h4 className="text-sm font-bold text-gray-900 leading-snug">{active?.title ?? "이번 학기 회고"}</h4>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                {active?.objective ?? "이번 학기 목표가 아직 없습니다. 상담을 마치면 여기에 표시됩니다."}
+              </p>
+              {active && active.candidateSubjects.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <span className="text-[11px] font-bold text-gray-400 block">추천 연계 교과목 ({active.candidateSubjects.length}개)</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {active.candidateSubjects.map((subject) => (
+                      <span className="px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-700" key={subject}>
+                        {subject}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </section>
-      </div>
 
-      {/* Recent Activities */}
-      <section className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs space-y-4">
+            <div className="space-y-4 flex flex-col justify-between">
+              <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-100 text-xs text-gray-600 space-y-2">
+                <div className="flex items-center justify-between font-bold text-gray-900">
+                  <span>로드맵 이수율</span>
+                  <span className="text-brand-600 font-extrabold">{completed} / 6 노드 완료</span>
+                </div>
+                <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-brand-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.round((completed / 6) * 100))}%` }} />
+                </div>
+              </div>
+
+              <button
+                className="w-full py-2.5 px-4 rounded-xl bg-gray-900 hover:bg-black text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-xs"
+                onClick={() => onNavigate("journey")}
+                type="button"
+              >
+                <span>3개년 로드맵 전체 보기</span>
+                <span>→</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Recent Activities Section */}
+      <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-4">
         <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
           <div>
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">RECENT ACTIVITY</span>
             <h3 className="text-base font-extrabold text-gray-950 mt-0.5">최근 활동과 정합 결과</h3>
           </div>
           <button
-            className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition whitespace-nowrap"
+            className="px-3.5 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-xs transition"
             onClick={() => onNavigate("activities")}
             type="button"
           >
@@ -1859,27 +2086,48 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
           </button>
         </div>
         {workspace.activities.length ? (
-          <div className="space-y-2">
-            {workspace.activities.slice(0, 3).map((activity) => (
-              <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-200/90 hover:border-brand-300 transition" key={activity.id}>
-                <span className="text-[11px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded whitespace-nowrap">
-                  {activity.subject || activity.activityCategory || "활동"}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <strong className="block text-xs font-bold text-gray-900 truncate">{activity.title}</strong>
-                  <small className="block text-[11px] text-gray-400 mt-0.5">{activity.completedAt || activity.periodLabel}</small>
+          <div className="space-y-2.5">
+            {workspace.activities.slice(0, 4).map((activity) => {
+              const recon = workspace.reconciliations.find((r) => r.activityId === activity.id);
+              return (
+                <div className="p-3.5 rounded-xl border border-gray-200/90 hover:border-brand-300 transition bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 group" key={activity.id}>
+                  <div className="flex items-start md:items-center gap-3 min-w-0">
+                    <span className="text-[11px] font-semibold text-brand-700 bg-brand-50 border border-brand-200/60 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                      {activity.subject || activity.activityCategory || "활동"}
+                    </span>
+                    <div className="min-w-0">
+                      <strong className="block text-xs md:text-sm font-bold text-gray-900 group-hover:text-brand-600 transition truncate">
+                        {activity.title}
+                      </strong>
+                      <span className="block text-[11px] text-gray-400 mt-0.5">
+                        {activity.completedAt ? `${activity.completedAt} 완료` : (activity.periodLabel || "진행 중")}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+                    {recon ? (
+                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border flex items-center gap-1 ${recon.matchType === "MATCH" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                        <span>{recon.matchType === "MATCH" ? "✓" : "!"}</span>
+                        <span>{recon.matchType === "MATCH" ? "정합 일치" : "정합 검토"}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg text-gray-400 bg-gray-50 border border-gray-200/60">
+                        정합 대기
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
-          <div className="text-center py-8">
+          <div className="text-center py-10 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 space-y-1.5">
             <strong className="block text-xs font-bold text-gray-700">아직 활동이 없습니다</strong>
-            <p className="text-[11px] text-gray-400 mt-1">첫 활동을 추가하면 진단과 정합 판정이 갱신됩니다.</p>
+            <p className="text-[11px] text-gray-400">첫 활동을 추가하면 진단과 정합 판정이 갱신됩니다.</p>
           </div>
         )}
       </section>
-      {selectedPlan && active && <PlanDetailModal plan={selectedPlan} node={active} courseSubjects={workspace.semesterCourses.filter((course) => course.roadmapNodeId === active.id).map((course) => course.subject)} onClose={() => setSelectedPlan(null)} onConvertPlan={onConvertPlan} />}
+      {selectedPlan && active && <PlanDetailModal courseSubjects={workspace.semesterCourses.filter((course) => course.roadmapNodeId === active.id).map((course) => course.subject)} node={active} onClose={() => setSelectedPlan(null)} onConvertPlan={onConvertPlan} plan={selectedPlan} />}
     </div>
   );
 }
@@ -2401,290 +2649,264 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   );
 }
 
-function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; onWorkspace: (workspace: ProductWorkspace) => void }) {
-  const [form, setForm] = useState<ProfileForm>({
-    name: workspace.profile.name,
-    grade: String(workspace.profile.grade),
-    semester: String(workspace.profile.semester),
-    freshmanAcademicYear: "",
-    targetCareer: workspace.profile.targetCareer,
-    targetMajors: workspace.profile.targetMajors.join(", "),
-    interests: workspace.profile.interests.join(", "),
-    concreteResearchQuestion: "",
-    knowledgeLevel: "",
-    motivationTrigger: workspace.profile.motivationTrigger,
-    careerResolution: workspace.profile.careerResolution,
-    currentEngagement: workspace.profile.currentEngagement.join(", "),
-    preferredSubjects: workspace.profile.preferredSubjects.join(", "),
-    strengths: workspace.profile.strengths.join(", "),
-    gaps: workspace.profile.gaps.join(", "),
-    constraints: workspace.profile.constraints.join(", "),
-    outputPreference: workspace.profile.outputPreference,
-    collaborationStyle: workspace.profile.collaborationStyle,
-    roadmapDesignNotes: "",
-  });
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+function ProfileView({ workspace, onNavigate, onRefresh }: {
+  workspace: ProductWorkspace;
+  onNavigate: (tab: TabId) => void;
+  onRefresh: () => void;
+}) {
   const hasDiagnosis = Boolean(workspace.dna.narrative);
   const hasSchoolRecord = workspace.schoolRecordCourses.length > 0;
+  const recordInputRef = useRef<HTMLInputElement>(null);
+  const [recordBusy, setRecordBusy] = useState(false);
+  const [recordError, setRecordError] = useState("");
 
-  useEffect(() => {
-    setForm({
-      name: workspace.profile.name,
-      grade: String(workspace.profile.grade),
-      semester: workspace.profile.semester ? String(workspace.profile.semester) : "",
-      freshmanAcademicYear: "",
-      targetCareer: workspace.profile.targetCareer,
-      targetMajors: workspace.profile.targetMajors.join(", "),
-      interests: workspace.profile.interests.join(", "),
-      concreteResearchQuestion: "",
-      knowledgeLevel: "",
-      motivationTrigger: workspace.profile.motivationTrigger,
-      preferredSubjects: workspace.profile.preferredSubjects.join(", "),
-      currentEngagement: workspace.profile.currentEngagement.join(", "),
-      careerResolution: workspace.profile.careerResolution,
-      strengths: workspace.profile.strengths.join(", "),
-      gaps: workspace.profile.gaps.join(", "),
-      constraints: workspace.profile.constraints.join(", "),
-      outputPreference: workspace.profile.outputPreference,
-      collaborationStyle: workspace.profile.collaborationStyle,
-      roadmapDesignNotes: "",
-    });
-  }, [workspace.profile]);
-
-  function update<K extends keyof ProfileForm>(key: K, value: ProfileForm[K]) {
-    setForm((cur) => ({ ...cur, [key]: value }));
-  }
-
-  function updateGrade(value: string) {
-    setForm((cur) => ({
-      ...cur,
-      grade: value,
-      semester: isGraduatedGrade(value) ? "" : isGraduatedGrade(cur.grade) ? "" : cur.semester,
-    }));
-  }
-
-  function updateCareerResolution(value: string) {
-    setForm((current) => value === "넓은 분야만 정한 단계"
-      ? { ...current, careerResolution: value, knowledgeLevel: "", concreteResearchQuestion: "" }
-      : { ...current, careerResolution: value });
-  }
-
-  async function save() {
-    setBusy(true); setError(""); setMessage("");
+  async function uploadSchoolRecord(file: File | undefined) {
+    if (!file) return;
+    setRecordBusy(true);
+    setRecordError("");
     try {
-      const result = await jsonRequest<{ workspace: ProductWorkspace }>("/api/profile", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ studentId: workspace.profile.id, profile: toProfileInput(form) }),
-      });
-      onWorkspace(result.workspace);
-      setMessage("프로필을 저장했습니다. 다음 진단과 주제 제안에 반영됩니다.");
-    } catch (e) { setError(e instanceof Error ? e.message : "프로필을 저장하지 못했습니다."); }
-    finally { setBusy(false); }
+      await analyzeSchoolRecordPdf(file);
+      onRefresh();
+    } catch (e) {
+      setRecordError(e instanceof Error ? e.message : "생기부를 분석하지 못했습니다.");
+    } finally {
+      setRecordBusy(false);
+      if (recordInputRef.current) recordInputRef.current.value = "";
+    }
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4 pb-4 border-b border-gray-200/80 flex-wrap">
+      {/* 생기부 연동을 이 화면에서 바로 하도록 늘 떠 있는 파일 선택기 */}
+      <input
+        accept="application/pdf,.pdf"
+        hidden
+        onChange={(event) => void uploadSchoolRecord(event.target.files?.[0])}
+        ref={recordInputRef}
+        type="file"
+      />
+
+      <div className="flex items-center justify-between gap-4 pb-4 border-b border-gray-200/80 flex-wrap">
         <div>
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-2.5 py-0.5 rounded">
             <Icon name="graduation" size={13} />
             공식 학적 프로필
           </span>
           <h2 className="text-xl font-bold text-gray-950 tracking-tight mt-1.5">학생 프로필 및 진로 설정</h2>
-          <p className="text-xs text-gray-500 mt-1">
-            학생이 직접 확인한 현재 상태와 제약만 바꿉니다. 저장하면 다음 진단과 주제 제안에 반영됩니다.
+        </div>
+      </div>
+
+      {/* 상단 공지 안내 배너 */}
+      <div className="bg-blue-50/70 border border-blue-100/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-blue-100/80 text-brand-600 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+            <Icon name="bot" size={16} />
+          </div>
+          <p className="text-blue-950 leading-relaxed font-medium">
+            지금까지 확인된 학적 및 진로 정보입니다. 상황이 바뀌었으면 이 화면에서 직접 고치는 대신{" "}
+            <button
+              className="font-bold text-brand-600 underline underline-offset-2 hover:text-brand-700 transition cursor-pointer"
+              onClick={() => onNavigate("chat")}
+              type="button"
+            >
+              AI 컨설턴트
+            </button>
+            와 대화해 주세요.
           </p>
         </div>
+        <button
+          className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-600 hover:text-brand-700 self-end sm:self-auto shrink-0 transition cursor-pointer"
+          onClick={() => onNavigate("chat")}
+          type="button"
+        >
+          <span>AI 컨설턴트 대화</span>
+          <Icon name="chevron-right" size={12} />
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      <div className="profile-form-card lg:col-span-8">
-        <div className="form-grid-3" style={{ marginBottom: "20px" }}>
-          <div className="form-field">
-            <label htmlFor="pf-name">이름</label>
-            <input id="pf-name" value={form.name} onChange={(e) => update("name", e.target.value)} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="pf-grade">학년</label>
-            <select id="pf-grade" value={form.grade} onChange={(e) => updateGrade(e.target.value)}>
-              <option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option><option value="graduated">졸업</option>
-            </select>
-          </div>
-          <div className="form-field">
-            <label htmlFor="pf-semester">학기</label>
-            <select id="pf-semester" value={form.semester} onChange={(e) => update("semester", e.target.value)} disabled={isGraduatedGrade(form.grade)}>
-              <option value="">{isGraduatedGrade(form.grade) ? "해당 없음" : "선택"}</option><option value="1">1학기</option><option value="2">2학기</option>
-            </select>
-          </div>
-        </div>
-        <div className="form-grid-2">
-          <div className="form-field form-span-2">
-            <label htmlFor="pf-career">현재 가장 끌리는 분야 또는 진로</label>
-            <input id="pf-career" value={form.targetCareer} onChange={(e) => update("targetCareer", e.target.value)} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="pf-majors">관심 학과</label>
-            <input id="pf-majors" value={form.targetMajors} onChange={(e) => update("targetMajors", e.target.value)} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="pf-interests">관심 키워드</label>
-            <textarea id="pf-interests" value={form.interests} onChange={(e) => update("interests", e.target.value)} />
-          </div>
-
-          <div className="form-field form-span-2">
-            <label>현재 진로가 어느 정도 정해졌나요?</label>
-            <div className="clarity-choice-row is-two">
-              <button className={`clarity-choice${form.careerResolution === "넓은 분야만 정한 단계" ? " is-active" : ""}`} onClick={() => updateCareerResolution("넓은 분야만 정한 단계")} type="button"><strong>넓은 분야만 있음</strong><small>세부 키워드는 상담에서 천천히 좁혀갑니다.</small></button>
-              <button className={`clarity-choice${hasSpecificCareerGoal(form) ? " is-active" : ""}`} onClick={() => updateCareerResolution("구체적인 학과나 직무까지 정한 단계")} type="button"><strong>구체 목표가 있음</strong><small>세부 키워드와 현재 지식을 계획에 반영합니다.</small></button>
+        {/* 학생 프로필 요약 카드 (좌측 8열) */}
+        <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-6 sm:p-7 space-y-7 lg:col-span-8">
+          {/* 1. 기본 학적 사항 */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+              <Icon className="text-gray-400" name="user" size={14} />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">학적 기본 사항</h3>
             </div>
-          </div>
-          {hasSpecificCareerGoal(form) && <div className="form-field form-span-2">
-            <label htmlFor="pf-detail">특히 궁금한 세부 키워드나 문제</label>
-            <textarea id="pf-detail" value={form.concreteResearchQuestion} onChange={(event) => update("concreteResearchQuestion", event.target.value)} placeholder="예: 반도체 소자의 전력 효율과 집적회로 설계" />
-          </div>}
-          <div className="form-field form-span-2">
-            <label htmlFor="pf-engagement">현재 실제로 진행 중인 활동</label>
-            <textarea id="pf-engagement" value={form.currentEngagement} onChange={(e) => update("currentEngagement", e.target.value)} placeholder="실제로 참여 중이거나 시작한 활동만 적어주세요. 없으면 비워두세요." />
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="pf-constraints">제약 조건</label>
-            <textarea id="pf-constraints" value={form.constraints} onChange={(e) => update("constraints", e.target.value)} />
-          </div>
-        </div>
-
-        {message && <div className="banner banner-success" style={{ marginTop: "20px" }}>{message}</div>}
-        {error   && <div className="banner banner-error"   style={{ marginTop: "20px" }}>{error}</div>}
-
-        <div className="profile-actions">
-          <button
-            className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold transition disabled:opacity-60"
-            disabled={busy}
-            onClick={() => save()}
-            type="button"
-          >
-            {busy ? "저장 중…" : "프로필 저장하기"}
-          </button>
-        </div>
-      </div>
-
-      {/* SETEUK PASS — 목업의 우측 카드. 상태 값은 전부 실제 기록에서 센 것이다. */}
-      <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-6">
-        <div className="bg-white rounded-2xl border border-gray-200/90 shadow-lg overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-5 text-white">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold tracking-widest text-blue-200">SETEUK PASS</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30">
-                {workspace.profile.grade}학년 {workspace.profile.semester}학기
-              </span>
-            </div>
-          </div>
-
-          <div className="p-6 text-center -mt-10 relative">
-            <div className="relative inline-block mx-auto mb-3">
-              <div className="w-20 h-20 rounded-full border-4 border-white shadow-md bg-gradient-to-tr from-brand-600 to-sky-400 flex items-center justify-center text-white text-2xl font-black">
-                {workspace.profile.name.slice(-2)}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-xl bg-gray-50/70 border border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-500 block mb-1">이름</span>
+                <span className="text-sm font-bold text-gray-950">{workspace.profile.name || "이름 미입력"}</span>
               </div>
-              {hasSchoolRecord && (
-                <div
-                  className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-amber-400 text-amber-950 border-2 border-white font-black text-xs flex items-center justify-center"
-                  title="생기부가 연동된 계정"
-                >
-                  ✓
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-center gap-1.5 mb-0.5">
-              <h4 className="text-lg font-extrabold text-gray-950 tracking-tight">{workspace.profile.name}</h4>
-            </div>
-            <p className="text-xs text-gray-500 font-medium">
-              {workspace.profile.grade}학년 {workspace.profile.semester}학기
-              {workspace.profile.targetCareer && ` · ${workspace.profile.targetCareer}`}
-            </p>
-            {workspace.profile.targetMajors.length > 0 && (
-              <p className="text-[11px] text-brand-600 font-bold mt-0.5">
-                {workspace.profile.targetMajors.join(", ")} 지망
-              </p>
-            )}
-
-            <div className="grid grid-cols-2 gap-3 mt-5">
-              <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-100/80 text-center">
-                <span className="text-[10px] font-semibold text-blue-600 block mb-0.5">AI 진단</span>
-                <span className="text-xs font-black text-blue-950">{hasDiagnosis ? "완료" : "미실행"}</span>
+              <div className="p-3.5 rounded-xl bg-gray-50/70 border border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-500 block mb-1">학년</span>
+                <span className="text-sm font-bold text-gray-950">
+                  {isGraduatedGrade(String(workspace.profile.grade)) ? "졸업" : `${workspace.profile.grade}학년`}
+                </span>
               </div>
-              <div className="p-3 rounded-xl bg-gray-50 border border-gray-200/80 text-center">
-                <span className="text-[10px] font-semibold text-gray-500 block mb-0.5">누적 기록</span>
-                <span className="text-xs font-black text-gray-900">{workspace.activities.length}건</span>
+              <div className="p-3.5 rounded-xl bg-gray-50/70 border border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-500 block mb-1">학기</span>
+                <span className="text-sm font-bold text-gray-950">
+                  {isGraduatedGrade(String(workspace.profile.grade)) ? "해당 없음" : `${workspace.profile.semester}학기`}
+                </span>
               </div>
             </div>
+          </section>
 
-            <div className="mt-5 space-y-2.5 text-left border-t border-gray-100 pt-4 text-xs">
-              {([
-                {
-                  icon: "file",
-                  label: "생기부 연동",
-                  ok: hasSchoolRecord,
-                  okText: "연동됨",
-                  noText: "미연결",
-                },
-                {
-                  icon: "microscope",
-                  label: "AI 진단 리포트",
-                  ok: hasDiagnosis,
-                  okText: "완료",
-                  noText: "미실행",
-                },
-                {
-                  icon: "target",
-                  label: "활동 정합 검토",
-                  ok: workspace.reconciliations.length > 0,
-                  okText: `${workspace.reconciliations.length}건`,
-                  noText: "없음",
-                },
-              ] as const).map((row) => (
-                <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50/50" key={row.label}>
-                  <div className="flex items-center gap-2">
-                    <Icon className="text-gray-400" name={row.icon} size={14} />
-                    <span className="text-gray-700 font-medium">{row.label}</span>
+          {/* 2. 진로 및 지망 분야 */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+              <Icon className="text-gray-400" name="target" size={14} />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">진로 및 지망 분야</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2 p-3.5 rounded-xl bg-gray-50/70 border border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-500 block mb-1">현재 가장 끌리는 분야 또는 진로</span>
+                <span className={`text-sm ${workspace.profile.targetCareer ? "font-bold text-gray-950" : "font-medium text-gray-400"}`}>
+                  {workspace.profile.targetCareer || "아직 답하지 않음"}
+                </span>
+              </div>
+              <div className="p-3.5 rounded-xl bg-gray-50/70 border border-gray-100 flex flex-col justify-between">
+                <span className="text-[11px] font-semibold text-gray-500 block mb-1.5">관심 학과</span>
+                {workspace.profile.targetMajors.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {workspace.profile.targetMajors.map((major) => (
+                      <span key={major} className="inline-flex items-center px-2.5 py-1 rounded-lg bg-white border border-gray-200/90 text-xs font-semibold text-gray-800 shadow-2xs">
+                        {major}
+                      </span>
+                    ))}
                   </div>
+                ) : (
+                  <span className="text-sm font-medium text-gray-400">아직 답하지 않음</span>
+                )}
+              </div>
+              <div className="p-3.5 rounded-xl bg-gray-50/70 border border-gray-100 flex flex-col justify-between">
+                <span className="text-[11px] font-semibold text-gray-500 block mb-1">진로 결정 단계</span>
+                <span className={`text-sm ${workspace.profile.careerResolution ? "font-semibold text-gray-900" : "font-medium text-gray-400"}`}>
+                  {workspace.profile.careerResolution || "아직 답하지 않음"}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* 3. 탐구 키워드 및 활동 맥락 */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+              <Icon className="text-gray-400" name="compass" size={14} />
+              <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">탐구 키워드 및 활동 맥락</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-xl bg-gray-50/70 border border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-500 block mb-1.5">관심 키워드</span>
+                {workspace.profile.interests.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {workspace.profile.interests.map((tag) => (
+                      <span key={tag} className="inline-flex items-center px-2.5 py-1 rounded-lg bg-brand-50 border border-brand-200/80 text-brand-700 text-xs font-bold">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-sm font-medium text-gray-400">아직 답하지 않음</span>
+                )}
+              </div>
+              <div className="p-3.5 rounded-xl bg-gray-50/70 border border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-500 block mb-1">현재 실제로 진행 중인 활동</span>
+                <p className={`text-sm leading-relaxed ${workspace.profile.currentEngagement.length > 0 ? "font-medium text-gray-900" : "font-medium text-gray-400"}`}>
+                  {workspace.profile.currentEngagement.join(", ") || "아직 답하지 않음"}
+                </p>
+              </div>
+              <div className="p-3.5 rounded-xl bg-gray-50/70 border border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-500 block mb-1">제약 조건</span>
+                <p className={`text-sm leading-relaxed ${workspace.profile.constraints.length > 0 ? "font-medium text-gray-900" : "font-medium text-gray-400"}`}>
+                  {workspace.profile.constraints.join(", ") || "아직 답하지 않음"}
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {/* SETEUK PASS 및 계정 카드 (우측 4열) */}
+        <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-6">
+          <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
+            <div className="bg-gradient-to-r from-brand-600 to-blue-700 p-5 text-white">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono font-bold tracking-widest text-blue-100">SETEUK PASS</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30">
+                  {workspace.profile.grade}학년 {workspace.profile.semester}학기
+                </span>
+              </div>
+            </div>
+
+            <div className="p-6 text-center -mt-10 relative">
+              <div className="relative inline-block mx-auto mb-3">
+                <div className="w-20 h-20 rounded-full border-4 border-white shadow-xs bg-brand-600 flex items-center justify-center text-white text-2xl font-black">
+                  {workspace.profile.name.slice(-2)}
+                </div>
+                {hasSchoolRecord && (
+                  <div
+                    className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-amber-400 text-amber-950 border-2 border-white font-black text-xs flex items-center justify-center"
+                    title="생기부가 연동된 계정"
+                  >
+                    <Icon name="check" size={13} />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                <h4 className="text-lg font-extrabold text-gray-950 tracking-tight">{workspace.profile.name}</h4>
+              </div>
+              <p className="text-xs text-gray-500 font-medium">
+                {workspace.profile.grade}학년 {workspace.profile.semester}학기
+                {workspace.profile.targetCareer && ` · ${workspace.profile.targetCareer}`}
+              </p>
+              {workspace.profile.targetMajors.length > 0 && (
+                <p className="text-[11px] text-brand-600 font-bold mt-0.5">
+                  {workspace.profile.targetMajors.join(", ")} 지망
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 mt-5">
+                <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-100/80 text-center">
+                  <span className="text-[10px] font-semibold text-blue-600 block mb-0.5">AI 진단</span>
+                  <span className="text-xs font-black text-blue-950">{hasDiagnosis ? "완료" : "미실행"}</span>
+                </div>
+                <div className="p-3 rounded-xl bg-gray-50 border border-gray-200/80 text-center">
+                  <span className="text-[10px] font-semibold text-gray-500 block mb-0.5">누적 기록</span>
+                  <span className="text-xs font-black text-gray-900">{workspace.activities.length}건</span>
+                </div>
+              </div>
+
+              <div className="mt-5 text-left border-t border-gray-100 pt-4 text-xs">
+                <button
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gray-50/70 border border-gray-100 transition hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+                  disabled={hasSchoolRecord || recordBusy}
+                  onClick={() => recordInputRef.current?.click()}
+                  type="button"
+                >
+                  <span className="flex items-center gap-2">
+                    <Icon className="text-gray-400" name="file" size={14} />
+                    <span className="text-gray-700 font-medium">생기부 연동</span>
+                  </span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                      row.ok
+                      hasSchoolRecord
                         ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                        : "bg-gray-100 text-gray-500 border-gray-200"
+                        : recordBusy
+                          ? "bg-blue-50 text-brand-600 border-blue-200"
+                          : "bg-gray-100 text-gray-500 border-gray-200"
                     }`}
                   >
-                    {row.ok ? row.okText : row.noText}
+                    {hasSchoolRecord ? "연동됨" : recordBusy ? "분석 중…" : "미연결 · 올리기"}
                   </span>
-                </div>
-              ))}
+                </button>
+                {recordError && <p className="text-[11px] text-red-600 font-semibold mt-2 px-1">{recordError}</p>}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="data-priority-card">
-          <span className="kicker">DATA PRIORITY</span>
-          <h2>현재 저장 원칙</h2>
-          <div className="priority-list">
-            {[
-              "학생이 직접 입력한 사실",
-              "활동 원문에서 추출한 Evidence",
-              "학생이 확인한 AI 해석",
-              "아직 확인되지 않은 잠정 추론",
-            ].map((text, i) => (
-              <div className="priority-item" key={text}>
-                <span className="priority-num">{i + 1}</span>
-                {text}
-              </div>
-            ))}
-          </div>
+          <AccountSection />
         </div>
-
-        <AccountSection />
-      </div>
       </div>
     </div>
   );
@@ -2764,6 +2986,20 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
   const studentId = workspace.profile.id;
   const storageKey = `seteuk-timetables-${studentId}`;
 
+  const normalizeTimetables = (list: TimetableConfig[]): TimetableConfig[] => {
+    const map = new Map<string, TimetableConfig>();
+    for (const t of list) {
+      const key = `${t.grade}-${t.semester}`;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { ...t, isDefault: true });
+      } else if ((!existing.isDefault && t.isDefault) || (existing.slots.length === 0 && t.slots.length > 0)) {
+        map.set(key, { ...t, isDefault: true });
+      }
+    }
+    return Array.from(map.values());
+  };
+
   const [timetables, setTimetables] = useState<TimetableConfig[]>(() => {
     if (typeof window !== "undefined") {
       try {
@@ -2771,7 +3007,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
+            return normalizeTimetables(parsed);
           }
         }
       } catch {
@@ -2782,10 +3018,11 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
   });
 
   const handleTimetablesChange = (updated: TimetableConfig[]) => {
-    setTimetables(updated);
+    const normalized = normalizeTimetables(updated);
+    setTimetables(normalized);
     if (typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(storageKey, JSON.stringify(updated));
+        window.localStorage.setItem(storageKey, JSON.stringify(normalized));
       } catch {
         // ignore storage error
       }
@@ -2803,8 +3040,11 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
   }, [workspace.profile.grade, workspace.profile.semester]);
 
   const defaultTimetable = useMemo(
-    () => timetables.find((t) => t.isDefault) || timetables[0] || null,
-    [timetables]
+    () =>
+      timetables.find(
+        (t) => t.grade === workspace.profile.grade && t.semester === workspace.profile.semester
+      ) || timetables[0] || null,
+    [timetables, workspace.profile.grade, workspace.profile.semester]
   );
 
   const initials = workspace.profile.name.slice(-2);
@@ -3162,21 +3402,6 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               onNavigateToActivities={(subject) => {
                 startActivity({ title: `${subject} 심화 탐구`, subject });
               }}
-              onUpdateCurrentPeriod={async (grade, semester) => {
-                const updatedProfile = {
-                  ...workspace.profile,
-                  grade,
-                  semester,
-                };
-                const result = (await handleLegacyRoute("/api/profile", {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ profile: updatedProfile }),
-                })) as { workspace: ProductWorkspace };
-                if (result?.workspace) {
-                  onWorkspace(result.workspace);
-                }
-              }}
             />
           )}
           {tab === "calendar" && <CalendarView />}
@@ -3204,7 +3429,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
           )}
           {tab === "portfolio" && <ApplicationPreparationView workspace={workspace} />}
           {tab === "chat"       && <ChatView onRecordsChanged={onRefresh} />}
-          {tab === "profile"    && <ProfileView workspace={workspace} onWorkspace={onWorkspace} />}
+          {tab === "profile"    && <ProfileView workspace={workspace} onNavigate={setTab} onRefresh={onRefresh} />}
         </div>
       </section>
     </div>

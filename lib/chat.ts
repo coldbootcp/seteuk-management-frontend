@@ -60,6 +60,13 @@ type ConsultationHandlers = Handlers & {
   onSignal: (payload: { ready: boolean; full_replan_confirmed?: boolean }) => void;
 };
 
+/** 상담 세션의 첫 인사 전용. 학생이 아직 아무 말도 안 한 턴이라 도구·나가기 신호가 없다. */
+type OpeningHandlers = {
+  onToken: (delta: string) => void;
+  onDone: (payload: { message_id: string | null }) => void;
+  onError: (payload: { error_code: string; message: string }) => void;
+};
+
 /**
  * SSE 스트리밍 공용 뼈대.
  *
@@ -173,6 +180,27 @@ export async function streamConsultationMessage(
       else if (event === "error") handlers.onError(payload as Parameters<Handlers["onError"]>[0]);
       else if (event === "signal")
         handlers.onSignal(payload as Parameters<ConsultationHandlers["onSignal"]>[0]);
+    },
+    handlers.onError,
+    signal,
+  );
+}
+
+/** 새로 열린 상담 세션의 첫 인사를 모델이 직접 짓게 한다. 화면이 미리 적어 둔 고정
+ * 문구 대신, 실제 진단·학생 데이터를 본 챗봇이 매번 다르게 여는 말을 만든다. 이미
+ * 대화가 시작된 세션에서는 부르지 않는다(호출 측이 메시지 목록이 비었을 때만 쓴다). */
+export async function streamConsultationOpening(
+  sessionId: string,
+  handlers: OpeningHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  await streamSSE(
+    `${API}/consultation/sessions/${sessionId}/opening`,
+    {},
+    (event, payload) => {
+      if (event === "token") handlers.onToken(String(payload.delta ?? ""));
+      else if (event === "done") handlers.onDone(payload as Parameters<OpeningHandlers["onDone"]>[0]);
+      else if (event === "error") handlers.onError(payload as Parameters<OpeningHandlers["onError"]>[0]);
     },
     handlers.onError,
     signal,

@@ -164,11 +164,11 @@ export function extractCoursesFromSlots(slots: TimetableSlot[]) {
 export function createEmptyTimetable(
   grade: number = 1,
   semester: number = 1,
-  name: string = "기본 시간표"
+  name?: string
 ): TimetableConfig {
   return {
     id: `tt-${grade}-${semester}-main`,
-    name,
+    name: name || `${grade}학년 ${semester}학기 시간표`,
     grade,
     semester,
     isDefault: true,

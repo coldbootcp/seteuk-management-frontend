@@ -54,13 +54,8 @@ export function DashboardView({
     [roadmap.nodes],
   );
 
-  const completedPlanIds = useMemo(
-    () => new Set(activities.map((activity) => activity.planEventId).filter(Boolean)),
-    [activities],
-  );
-
-  /** 이번 학기 핵심 목표 — 로드맵이 "먼저 하라"고 표시한 주제만 앞세운다. */
-  const coreGoals = useMemo(() => {
+  /** 이번 학기 추천 탐구 주제 — 로드맵이 "먼저 하라"고 제안한 주제 상위 3개 */
+  const featuredTopics = useMemo(() => {
     const events = activeNode?.planEvents ?? [];
     const core = events.filter((event) => event.priority === "core");
     return (core.length ? core : events).slice(0, 3);
@@ -111,21 +106,16 @@ export function DashboardView({
 
   return (
     <div className="space-y-6">
-      {/* 이번 학기 핵심 목표 */}
+      {/* 이번 학기 목표 및 추천 탐구 주제 */}
       <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Icon className="text-brand-600" name="target" size={18} />
             <h2 className="text-base font-extrabold text-gray-950">
-              이번 학기({profile.grade}-{profile.semester}) 핵심 목표
+              이번 학기({profile.grade}-{profile.semester}) 목표 및 추천 탐구 주제
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            {coreGoals.length > 0 && (
-              <span className="text-[11px] font-bold text-brand-700 bg-blue-50 border border-blue-200/80 px-2.5 py-1 rounded-full whitespace-nowrap">
-                {coreGoals.filter((goal) => completedPlanIds.has(goal.id)).length}건 작성 완료 · 총 {coreGoals.length}건
-              </span>
-            )}
             <button
               className="text-xs font-bold text-brand-600 hover:text-brand-700 transition whitespace-nowrap"
               onClick={() => onNavigate("overview")}
@@ -139,21 +129,20 @@ export function DashboardView({
         {activeNode ? (
           <>
             <p className="text-sm font-semibold text-gray-800 leading-relaxed">{activeNode.objective}</p>
-            {coreGoals.length > 0 ? (
+            {featuredTopics.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {coreGoals.map((goal, index) => {
+                {featuredTopics.map((topic, index) => {
                   const tone = GOAL_TONES[index % GOAL_TONES.length];
-                  const done = completedPlanIds.has(goal.id);
                   return (
-                    <div className={`p-4 rounded-xl border ${tone.border} ${tone.bg} space-y-2`} key={goal.id}>
+                    <div className={`p-4 rounded-xl border ${tone.border} ${tone.bg} space-y-2`} key={topic.id}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`text-[11px] font-extrabold ${tone.label}`}>목표 {index + 1}</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${done ? "bg-emerald-100 text-emerald-700" : tone.chip}`}>
-                          {done ? "작성 완료" : goal.subject || "연계 과목 미정"}
+                        <span className={`text-[11px] font-extrabold ${tone.label}`}>추천 주제 {index + 1}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${tone.chip}`}>
+                          {topic.subject || "연계 과목 미정"}
                         </span>
                       </div>
-                      <strong className="block text-xs font-bold text-gray-950 leading-snug">{goal.title}</strong>
-                      <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-3">{goal.description}</p>
+                      <strong className="block text-xs font-bold text-gray-950 leading-snug">{topic.title}</strong>
+                      <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-3">{topic.description}</p>
                     </div>
                   );
                 })}

@@ -14,6 +14,7 @@
 import { api } from "./api-client";
 import type {
   ActivityAttachment,
+  ConsultationMessage,
   ConsultationSession,
   ConsultationStatus,
   DnaDiagnosis,
@@ -298,6 +299,18 @@ export async function createOrResumeConsultationSession(): Promise<ConsultationS
   return toConsultationSession(
     await api<Json>("/consultation/sessions", { method: "POST", body: {} }),
   );
+}
+
+/** 세션을 재개할 때 지난 대화를 되불러온다. 새로 만든 세션은 빈 배열이 온다 —
+ * 화면은 그때만 streamConsultationOpening으로 첫 인사를 새로 짓는다. */
+export async function getConsultationMessages(sessionId: string): Promise<ConsultationMessage[]> {
+  const rows = await api<Json[]>(`/consultation/sessions/${sessionId}/messages`);
+  return rows.map((row) => ({
+    id: row.id as string,
+    role: row.role as ConsultationMessage["role"],
+    content: row.content as string,
+    appliedActions: (row.applied_actions as ConsultationMessage["appliedActions"]) ?? null,
+  }));
 }
 
 export async function confirmFullReplan(

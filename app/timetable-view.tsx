@@ -25,7 +25,6 @@ interface TimetableViewProps {
   onTimetablesChange: (timetables: TimetableConfig[]) => void;
   onNavigateToGrades?: () => void;
   onNavigateToActivities?: (subjectName: string) => void;
-  onUpdateCurrentPeriod?: (grade: number, semester: number) => Promise<void> | void;
 }
 
 export function TimetableView({
@@ -36,11 +35,9 @@ export function TimetableView({
   onTimetablesChange,
   onNavigateToGrades,
   onNavigateToActivities,
-  onUpdateCurrentPeriod,
 }: TimetableViewProps) {
   const currentPeriod = `${currentGrade}-${currentSemester}`;
   const [selectedPeriod, setSelectedPeriod] = useState(currentPeriod);
-  const [isUpdatingPeriod, setIsUpdatingPeriod] = useState(false);
 
   // Sync selectedPeriod when currentGrade or currentSemester changes
   useEffect(() => {
@@ -48,22 +45,12 @@ export function TimetableView({
   }, [currentGrade, currentSemester]);
 
   const [selGrade, selSemester] = selectedPeriod.split("-").map(Number);
-  const periodTimetables = timetables.filter(
-    (t) => t.grade === selGrade && t.semester === selSemester
-  );
 
-  const [activeTimetableId, setActiveTimetableId] = useState<string>(() => {
-    const matching = timetables.filter((t) => t.grade === currentGrade && t.semester === currentSemester);
-    return matching.find((t) => t.isDefault)?.id || matching[0]?.id || timetables.find((t) => t.isDefault)?.id || timetables[0]?.id || "tt-main";
-  });
-
-  // 현재 활성 시간표 (선택된 학기 기준)
+  // 현재 활성 시간표 (선택된 학기 기준 단일 시간표 고정)
   const activeTimetable =
-    periodTimetables.find((t) => t.id === activeTimetableId) ||
-    periodTimetables.find((t) => t.isDefault) ||
-    periodTimetables[0] || {
+    timetables.find((t) => t.grade === selGrade && t.semester === selSemester) || {
       id: `tt-${selGrade}-${selSemester}-main`,
-      name: `${selGrade}학년 ${selSemester}학기 기본 시간표`,
+      name: `${selGrade}학년 ${selSemester}학기 시간표`,
       grade: selGrade,
       semester: selSemester,
       isDefault: true,
@@ -76,14 +63,11 @@ export function TimetableView({
   const handlePeriodChange = (newPeriod: string) => {
     setSelectedPeriod(newPeriod);
     const [g, s] = newPeriod.split("-").map(Number);
-    const matching = timetables.filter((t) => t.grade === g && t.semester === s);
-    if (matching.length > 0) {
-      const def = matching.find((t) => t.isDefault) || matching[0];
-      setActiveTimetableId(def.id);
-    } else {
+    const exists = timetables.some((t) => t.grade === g && t.semester === s);
+    if (!exists) {
       const newTt: TimetableConfig = {
-        id: `tt-${g}-${s}-${Date.now()}`,
-        name: `${g}학년 ${s}학기 기본 시간표`,
+        id: `tt-${g}-${s}-main`,
+        name: `${g}학년 ${s}학기 시간표`,
         grade: g,
         semester: s,
         isDefault: true,
@@ -91,7 +75,6 @@ export function TimetableView({
         updatedAt: "방금 전",
       };
       onTimetablesChange([...timetables, newTt]);
-      setActiveTimetableId(newTt.id);
     }
     setSelectedSlot(null);
   };
@@ -110,16 +93,6 @@ export function TimetableView({
     return acc + (found?.units || 4);
   }, 0);
 
-  // 기본 시간표로 설정 핸들러 (학생의 공식 수강 과목으로 확정)
-  const handleSetAsDefault = (targetId: string) => {
-    const updated = timetables.map((t) => ({
-      ...t,
-      isDefault: t.id === targetId,
-      updatedAt: t.id === targetId ? "방금 전 (기본 설정)" : t.updatedAt,
-    }));
-    onTimetablesChange(updated);
-  };
-
   // 슬롯 추가 핸들러
   const handleAddSlot = (newSlot: TimetableSlot) => {
     const updated = {
@@ -127,8 +100,9 @@ export function TimetableView({
       slots: [...activeTimetable.slots, newSlot],
       updatedAt: "방금 전",
     };
-    const updatedAll = timetables.some((t) => t.id === activeTimetable.id)
-      ? timetables.map((t) => (t.id === activeTimetable.id ? updated : t))
+    const exists = timetables.some((t) => t.grade === selGrade && t.semester === selSemester);
+    const updatedAll = exists
+      ? timetables.map((t) => (t.grade === selGrade && t.semester === selSemester ? updated : t))
       : [...timetables, updated];
     onTimetablesChange(updatedAll);
   };
@@ -144,31 +118,29 @@ export function TimetableView({
       slots: activeTimetable.slots.filter((s) => s.id !== slotId),
       updatedAt: "방금 전",
     };
-    const updatedAll = timetables.map((t) => (t.id === activeTimetable.id ? updated : t));
+    const updatedAll = timetables.map((t) =>
+      t.grade === selGrade && t.semester === selSemester ? updated : t
+    );
     onTimetablesChange(updatedAll);
     if (selectedSlot?.id === slotId) setSelectedSlot(null);
   };
 
-  // 시간표 삭제 핸들러 (최소 1개 유지 및 확인)
-  const handleDeleteTimetable = (timetableId: string, name: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (periodTimetables.length <= 1) {
-      alert("해당 학기에는 최소 1개의 시간표가 유지되어야 합니다.");
+  // 시간표 전체 비우기 (초기화)
+  const handleClearSlots = () => {
+    if (slots.length === 0) return;
+    if (!window.confirm(`${selGrade}학년 ${selSemester}학기 시간표의 모든 수업을 삭제하시겠습니까?`)) {
       return;
     }
-    if (!window.confirm(`'${name}' 시간표를 정말 삭제하시겠습니까?`)) {
-      return;
-    }
-    const filtered = timetables.filter((t) => t.id !== timetableId);
-    const remainingPeriodTimetables = filtered.filter((t) => t.grade === selGrade && t.semester === selSemester);
-    if (activeTimetable.isDefault && remainingPeriodTimetables.length > 0) {
-      remainingPeriodTimetables[0].isDefault = true;
-    }
-    onTimetablesChange(filtered);
-    if (activeTimetableId === timetableId && remainingPeriodTimetables.length > 0) {
-      setActiveTimetableId(remainingPeriodTimetables[0].id);
-      setSelectedSlot(null);
-    }
+    const updated = {
+      ...activeTimetable,
+      slots: [],
+      updatedAt: "방금 전",
+    };
+    const updatedAll = timetables.map((t) =>
+      t.grade === selGrade && t.semester === selSemester ? updated : t
+    );
+    onTimetablesChange(updatedAll);
+    setSelectedSlot(null);
   };
 
   /**
@@ -272,7 +244,7 @@ export function TimetableView({
           <div className="flex items-center gap-2 mb-1 text-xs text-gray-500 font-medium flex-wrap">
             <span className="font-semibold text-brand-600">{selGrade}학년 {selSemester}학기</span>
             <span className="text-gray-300">·</span>
-            <span>{activeTimetable.name}</span>
+            <span>시간표</span>
             {selectedPeriod === currentPeriod && (
               <>
                 <span className="text-gray-300">·</span>
@@ -362,116 +334,51 @@ export function TimetableView({
                 </option>
               ))}
             </select>
-
-            {selectedPeriod !== currentPeriod && onUpdateCurrentPeriod && (
-              <button
-                className="w-full py-2.5 rounded-xl bg-blue-50 border border-brand-200 text-brand-600 text-xs font-bold hover:bg-blue-100 disabled:opacity-60 transition"
-                disabled={isUpdatingPeriod}
-                onClick={async () => {
-                  setIsUpdatingPeriod(true);
-                  try {
-                    await onUpdateCurrentPeriod(selGrade, selSemester);
-                  } finally {
-                    setIsUpdatingPeriod(false);
-                  }
-                }}
-                type="button"
-              >
-                {isUpdatingPeriod ? (
-                  "변경 중…"
-                ) : (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Icon name="map-pin" size={13} />
-                    {`현재 학기를 ${selGrade}학년 ${selSemester}학기로 설정`}
-                  </span>
-                )}
-              </button>
-            )}
           </div>
 
-          {/* 시간표 목록 */}
+          {/* 이 학기의 시간표 */}
           <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
               <span className="text-xs font-bold text-gray-900">이 학기의 시간표</span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-brand-600">
-                {periodTimetables.length || 1}개
+                단일 시간표
               </span>
             </div>
 
-            <div className="space-y-1.5">
-              {periodTimetables.map((t) => {
-                const isActive = t.id === activeTimetable.id;
-                return (
-                  <div
-                    className={`p-2.5 rounded-xl border transition flex items-center justify-between gap-2 ${
-                      isActive ? "border-brand-300 bg-blue-50/40" : "border-gray-100 hover:border-gray-200"
-                    }`}
-                    key={t.id}
-                  >
-                    <button
-                      className="flex-1 min-w-0 text-left"
-                      onClick={() => {
-                        setActiveTimetableId(t.id);
-                        setSelectedSlot(null);
-                      }}
-                      type="button"
-                    >
-                      <span className={`block text-xs font-bold truncate ${isActive ? "text-brand-700" : "text-gray-800"}`}>
-                        {t.name}
-                      </span>
-                      <span className="block text-[10px] text-gray-400 mt-0.5">{t.updatedAt} 변경</span>
-                    </button>
-
-                    {t.isDefault ? (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-900 text-white flex-none">기본</span>
-                    ) : (
-                      <button
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 flex-none"
-                        onClick={() => handleSetAsDefault(t.id)}
-                        title="이 시간표를 기본으로 설정"
-                        type="button"
-                      >
-                        기본으로
-                      </button>
-                    )}
-
-                    {periodTimetables.length > 1 && (
-                      <button
-                        className="text-gray-300 hover:text-red-500 text-xs font-bold flex-none"
-                        onClick={(e) => handleDeleteTimetable(t.id, t.name, e)}
-                        title="시간표 삭제"
-                        type="button"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="p-3 rounded-xl border border-brand-200/70 bg-blue-50/30 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-brand-900 truncate">
+                  {selGrade}학년 {selSemester}학기 시간표
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500 text-white flex-none">
+                  고정
+                </span>
+              </div>
+              <div className="text-[11px] text-gray-600 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">등록 과목</span>
+                  <span className="font-semibold text-gray-800">{uniqueCourses.length}개 과목</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">주당 시수</span>
+                  <span className="font-semibold text-gray-800">{slots.length}시수 ({totalUnits}단위)</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">최근 수정</span>
+                  <span className="text-gray-600">{activeTimetable.updatedAt || "방금 전"}</span>
+                </div>
+              </div>
             </div>
 
-            <button
-              className="w-full py-2.5 rounded-xl border border-dashed border-gray-300 text-gray-500 hover:border-brand-400 hover:text-brand-600 hover:bg-brand-50/40 text-xs font-semibold transition"
-              onClick={() => {
-                const name = prompt("새 시간표 이름을 입력하세요 (예: 2학기 이동수업안)");
-                if (name) {
-                  const newTt: TimetableConfig = {
-                    id: `tt-${Date.now()}`,
-                    name,
-                    grade: selGrade,
-                    semester: selSemester,
-                    isDefault: false,
-                    slots: [],
-                    updatedAt: "방금 전",
-                  };
-                  onTimetablesChange([...timetables, newTt]);
-                  setActiveTimetableId(newTt.id);
-                }
-              }}
-              type="button"
-            >
-              + 새 시간표 만들기
-            </button>
+            {slots.length > 0 && (
+              <button
+                className="w-full py-2 rounded-xl border border-gray-200 hover:border-rose-200 hover:bg-rose-50 text-gray-500 hover:text-rose-600 text-xs font-semibold transition flex items-center justify-center gap-1"
+                onClick={handleClearSlots}
+                type="button"
+              >
+                <span>시간표 전체 비우기</span>
+              </button>
+            )}
           </div>
 
           {/* 과목별 주당 시수 */}

@@ -28,6 +28,7 @@ export const tokens = {
   clear() {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem("seteuk.active_chat_id");
   },
 };
 

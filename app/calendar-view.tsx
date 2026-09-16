@@ -43,6 +43,7 @@ function buildMonthGrid(year: number, month: number): (Date | null)[] {
 }
 
 type FormState = {
+  id?: string;
   event_type: CalendarEventType;
   title: string;
   subject: string;
@@ -59,6 +60,18 @@ function emptyForm(dateIso?: string): FormState {
     start_date: dateIso ?? toIsoDate(new Date()),
     end_date: dateIso ?? toIsoDate(new Date()),
     memo: "",
+  };
+}
+
+function formFromEvent(event: CalendarEvent): FormState {
+  return {
+    id: event.id,
+    event_type: event.event_type,
+    title: event.title,
+    subject: event.subject ?? "",
+    start_date: event.start_date,
+    end_date: event.end_date,
+    memo: event.memo ?? "",
   };
 }
 
@@ -112,24 +125,36 @@ export function CalendarView() {
   async function submitForm(event: React.FormEvent) {
     event.preventDefault();
     if (!form) return;
-    if (form.end_date < form.start_date) {
-      setError("종료일은 시작일보다 빠를 수 없습니다.");
-      return;
-    }
+    const startDate = form.start_date;
+    const endDate = form.end_date < startDate ? startDate : form.end_date;
     setBusy(true);
     setError("");
     try {
-      await api("/calendar-events", {
-        method: "POST",
-        body: {
-          event_type: form.event_type,
-          title: form.title.trim(),
-          subject: form.subject.trim() || null,
-          start_date: form.start_date,
-          end_date: form.end_date,
-          memo: form.memo.trim() || null,
-        },
-      });
+      if (form.id) {
+        await api(`/calendar-events/${form.id}`, {
+          method: "PATCH",
+          body: {
+            event_type: form.event_type,
+            title: form.title.trim(),
+            subject: form.subject.trim() || null,
+            start_date: startDate,
+            end_date: endDate,
+            memo: form.memo.trim() || null,
+          },
+        });
+      } else {
+        await api("/calendar-events", {
+          method: "POST",
+          body: {
+            event_type: form.event_type,
+            title: form.title.trim(),
+            subject: form.subject.trim() || null,
+            start_date: startDate,
+            end_date: endDate,
+            memo: form.memo.trim() || null,
+          },
+        });
+      }
       setForm(null);
       await load();
     } catch (caught) {
@@ -143,6 +168,7 @@ export function CalendarView() {
     setBusy(true);
     try {
       await api(`/calendar-events/${id}`, { method: "DELETE" });
+      if (form?.id === id) setForm(null);
       await load();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "일정을 지우지 못했습니다.");
@@ -213,7 +239,13 @@ export function CalendarView() {
                   isToday ? "border-brand-400 bg-brand-50/60" : "border-gray-100 bg-gray-50/40"
                 }`}
                 key={dateIso}
-                onClick={() => setForm(emptyForm(dateIso))}
+                onClick={() => {
+                  if (dayEvents.length > 0) {
+                    setForm(formFromEvent(dayEvents[0]));
+                  } else {
+                    setForm(emptyForm(dateIso));
+                  }
+                }}
                 type="button"
               >
                 <span
@@ -267,11 +299,15 @@ export function CalendarView() {
                 const style = TYPE_STYLE[monthEvent.event_type];
                 return (
                   <li
-                    className={`rounded-xl border p-2.5 ${style.badge}`}
+                    className={`rounded-xl border p-2.5 transition hover:border-gray-300 ${style.badge}`}
                     key={monthEvent.id}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
+                      <button
+                        className="min-w-0 text-left flex-1 cursor-pointer"
+                        onClick={() => setForm(formFromEvent(monthEvent))}
+                        type="button"
+                      >
                         <span className={`text-[10px] font-bold ${style.text}`}>
                           {monthEvent.event_type}
                           {monthEvent.subject ? ` · ${monthEvent.subject}` : ""}
@@ -287,15 +323,25 @@ export function CalendarView() {
                         {monthEvent.memo && (
                           <p className="text-[10px] text-gray-500 mt-0.5">{monthEvent.memo}</p>
                         )}
-                      </div>
-                      <button
-                        className="text-[10px] text-gray-400 hover:text-red-500 font-bold flex-none"
-                        disabled={busy}
-                        onClick={() => void removeEvent(monthEvent.id)}
-                        type="button"
-                      >
-                        삭제
                       </button>
+                      <div className="flex items-center gap-1.5 flex-none pt-0.5">
+                        <button
+                          className="text-[10px] text-gray-400 hover:text-brand-600 font-bold"
+                          disabled={busy}
+                          onClick={() => setForm(formFromEvent(monthEvent))}
+                          type="button"
+                        >
+                          수정
+                        </button>
+                        <button
+                          className="text-[10px] text-gray-400 hover:text-red-500 font-bold"
+                          disabled={busy}
+                          onClick={() => void removeEvent(monthEvent.id)}
+                          type="button"
+                        >
+                          삭제
+                        </button>
+                      </div>
                     </div>
                   </li>
                 );
@@ -315,7 +361,20 @@ export function CalendarView() {
       {form && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-5">
-            <h3 className="text-sm font-extrabold text-gray-950 mb-3">일정 추가</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-extrabold text-gray-950">
+                {form.id ? "일정 수정" : "일정 추가"}
+              </h3>
+              {form.id && (
+                <button
+                  className="text-[11px] text-brand-600 hover:text-brand-700 font-bold"
+                  onClick={() => setForm(emptyForm(form.start_date))}
+                  type="button"
+                >
+                  + 새 일정 추가
+                </button>
+              )}
+            </div>
             <form className="space-y-3" onSubmit={submitForm}>
               <div className="flex gap-1.5">
                 {EVENT_TYPES.map((type) => (
@@ -354,7 +413,21 @@ export function CalendarView() {
                   시작일
                   <input
                     className="w-full mt-1 px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                    onChange={(event) => setForm({ ...form, start_date: event.target.value })}
+                    onChange={(event) => {
+                      const nextStart = event.target.value;
+                      setForm((prev) => {
+                        if (!prev) return null;
+                        const shouldSyncEnd =
+                          !prev.end_date ||
+                          prev.end_date < nextStart ||
+                          prev.start_date === prev.end_date;
+                        return {
+                          ...prev,
+                          start_date: nextStart,
+                          end_date: shouldSyncEnd ? nextStart : prev.end_date,
+                        };
+                      });
+                    }}
                     required
                     type="date"
                     value={form.start_date}
@@ -364,7 +437,16 @@ export function CalendarView() {
                   종료일
                   <input
                     className="w-full mt-1 px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                    onChange={(event) => setForm({ ...form, end_date: event.target.value })}
+                    min={form.start_date}
+                    onChange={(event) => {
+                      const nextEnd = event.target.value;
+                      setForm((prev) => {
+                        if (!prev) return null;
+                        const adjustedEnd =
+                          prev.start_date && nextEnd < prev.start_date ? prev.start_date : nextEnd;
+                        return { ...prev, end_date: adjustedEnd };
+                      });
+                    }}
                     required
                     type="date"
                     value={form.end_date}
@@ -383,12 +465,24 @@ export function CalendarView() {
               {error && <p className="text-[11px] text-red-600 font-semibold">{error}</p>}
 
               <div className="flex gap-2 pt-1">
+                {form.id && (
+                  <button
+                    className="py-2 px-3 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold flex-none"
+                    disabled={busy}
+                    onClick={() => {
+                      if (form.id) void removeEvent(form.id);
+                    }}
+                    type="button"
+                  >
+                    삭제
+                  </button>
+                )}
                 <button
                   className="flex-1 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold disabled:opacity-60"
                   disabled={busy || !form.title.trim()}
                   type="submit"
                 >
-                  {busy ? "저장 중…" : "저장"}
+                  {busy ? "저장 중…" : form.id ? "수정 완료" : "저장"}
                 </button>
                 <button
                   className="flex-1 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold"

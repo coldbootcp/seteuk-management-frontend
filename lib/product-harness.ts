@@ -281,6 +281,14 @@ export type ConsultationSession = {
   fullReplanConfirmed: boolean;
 };
 
+/** 상담 세션을 다시 열었을 때 불러오는 지난 대화 한 줄. */
+export type ConsultationMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  appliedActions: Array<{ tool: string; arguments?: Record<string, unknown>; result?: Record<string, unknown> }> | null;
+};
+
 function activeIndex(profile: ProfileInput) {
   return Math.max(0, Math.min(5, (profile.grade - 1) * 2 + (profile.semester - 1)));
 }

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api-client";
 import {
-  GENERAL_CONVERSATION_PURPOSE,
   streamMessage,
   type ChatMode,
   type Conversation,
@@ -34,31 +33,11 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
   // 통과해 메시지가 두 번 전송된다.
   const sendingRef = useRef(false);
 
-  const loadConversations = useCallback(async () => {
-    try {
-      const result = await api<{ items: Conversation[] }>("/conversations?limit=50");
-      // 상담 대화(initial_consultation/semester_review_consultation)는 진단·상담
-      // 관문 화면이 따로 열고 닫는다. 여기 같이 보이면 같은 대화가 두 군데서 도는
-      // 것처럼 보여 헷갈린다.
-      const general = result.items.filter((conversation) => conversation.purpose === GENERAL_CONVERSATION_PURPOSE);
-      setConversations(general);
-      return general;
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "대화를 불러오지 못했습니다.");
-      return [];
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadConversations();
-  }, [loadConversations]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [bubbles]);
-
   const open = useCallback(async (id: string) => {
     setActiveId(id);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("seteuk.active_chat_id", id);
+    }
     setError("");
     try {
       const messages = await api<StoredMessage[]>(`/conversations/${id}/messages`);
@@ -75,6 +54,37 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
     }
   }, []);
 
+  const loadConversations = useCallback(async () => {
+    try {
+      const result = await api<{ items: Conversation[] }>("/conversations?limit=50");
+      setConversations(result.items);
+      return result.items;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "대화를 불러오지 못했습니다.");
+      return [];
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const items = await loadConversations();
+      if (cancelled || items.length === 0) return;
+      const savedId = typeof window !== "undefined" ? localStorage.getItem("seteuk.active_chat_id") : null;
+      const target = items.find((c) => c.id === savedId) ?? items[0];
+      if (target) {
+        void open(target.id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadConversations, open]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [bubbles]);
+
   async function send() {
     const content = input.trim();
     if (!content || streaming || sendingRef.current) return;
@@ -84,8 +94,12 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
       let conversationId = activeId;
       if (!conversationId) {
         try {
-          conversationId = (await api<Conversation>("/conversations", { method: "POST" })).id;
+          const created = await api<Conversation>("/conversations", { method: "POST" });
+          conversationId = created.id;
           setActiveId(conversationId);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("seteuk.active_chat_id", conversationId);
+          }
           await loadConversations();
         } catch (caught) {
           setError(caught instanceof Error ? caught.message : "대화를 만들지 못했습니다.");
@@ -147,7 +161,20 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
     }
   }
 
-  const activeTitle = conversations.find((c) => c.id === activeId)?.title ?? "새 대화";
+  const currentConv = conversations.find((c) => c.id === activeId);
+  const activeTitle =
+    currentConv?.title?.trim() ||
+    (currentConv?.purpose === "initial_consultation"
+      ? "AI 입시 심층 컨설팅"
+      : currentConv?.purpose === "semester_review_consultation"
+      ? "학기 회고 컨설팅"
+      : "새 대화");
+  const activeSubtitle =
+    currentConv?.purpose === "initial_consultation"
+      ? "온보딩 진단 및 3개년 마스터 플랜 컨설팅 대화"
+      : currentConv?.purpose === "semester_review_consultation"
+      ? "학기말 점검 및 다음 학기 목표 조율 대화"
+      : "기록된 내 자료를 근거로 답합니다";
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-[640px]">
@@ -156,12 +183,19 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
         <div className="flex items-center justify-between flex-none">
           <span className="text-xs font-semibold text-gray-400">대화 목록</span>
           <button
-            className="text-xs text-brand-600 font-bold hover:text-brand-700 transition"
+            className="text-xs text-brand-600 font-bold hover:text-brand-700 transition cursor-pointer"
             onClick={async () => {
-              const created = await api<Conversation>("/conversations", { method: "POST" });
-              await loadConversations();
-              setActiveId(created.id);
-              setBubbles([]);
+              try {
+                const created = await api<Conversation>("/conversations", { method: "POST" });
+                await loadConversations();
+                setActiveId(created.id);
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("seteuk.active_chat_id", created.id);
+                }
+                setBubbles([]);
+              } catch (caught) {
+                setError(caught instanceof Error ? caught.message : "새 대화를 생성하지 못했습니다.");
+              }
             }}
             type="button"
           >
@@ -169,24 +203,53 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 -mx-1 px-1">
           {conversations.length === 0 ? (
             <p className="text-xs text-gray-400 py-2">아직 대화가 없습니다.</p>
           ) : (
-            conversations.map((conversation) => (
-              <button
-                className={`w-full text-left p-2 rounded-lg text-xs transition truncate ${
-                  conversation.id === activeId
-                    ? "bg-gray-100 text-gray-950 font-bold"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-                key={conversation.id}
-                onClick={() => void open(conversation.id)}
-                type="button"
-              >
-                {conversation.title ?? "새 대화"}
-              </button>
-            ))
+            conversations.map((conversation) => {
+              const isConsultation =
+                conversation.purpose === "initial_consultation" ||
+                conversation.purpose === "semester_review_consultation";
+              const defaultTitle =
+                conversation.purpose === "initial_consultation"
+                  ? "AI 입시 심층 컨설팅"
+                  : conversation.purpose === "semester_review_consultation"
+                  ? "학기 회고 컨설팅"
+                  : "새 대화";
+              const displayTitle = conversation.title?.trim() || defaultTitle;
+              const isSelected = conversation.id === activeId;
+
+              return (
+                <button
+                  className={`w-full text-left p-2.5 rounded-xl text-xs transition flex flex-col gap-1 border cursor-pointer ${
+                    isSelected
+                      ? "bg-blue-50/80 text-brand-950 font-bold border-blue-200/80 shadow-xs"
+                      : "text-gray-600 hover:bg-gray-50/80 border-gray-100 hover:border-gray-200/70"
+                  }`}
+                  key={conversation.id}
+                  onClick={() => void open(conversation.id)}
+                  type="button"
+                >
+                  <div className="flex items-center justify-between gap-1.5 w-full">
+                    <span className="truncate flex-1 font-semibold">{displayTitle}</span>
+                    {isConsultation && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100/70 text-brand-700 flex-none">
+                        {conversation.purpose === "initial_consultation" ? "입시 컨설팅" : "학기 컨설팅"}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-gray-400 font-normal">
+                    {new Date(conversation.updated_at).toLocaleDateString("ko-KR", {
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </button>
+              );
+            })
           )}
         </div>
       </aside>
@@ -195,8 +258,15 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
       <section className="md:col-span-3 bg-white rounded-xl border border-gray-200/80 flex flex-col overflow-hidden min-h-0">
         <header className="p-3.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-none">
           <div className="min-w-0">
-            <h4 className="text-xs font-bold text-gray-950 truncate">{activeTitle}</h4>
-            <p className="text-[11px] text-gray-400 mt-0.5">기록된 내 자료를 근거로 답합니다</p>
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs font-bold text-gray-950 truncate">{activeTitle}</h4>
+              {currentConv?.purpose && currentConv.purpose !== "general" && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100/70 text-brand-700 flex-none">
+                  {currentConv.purpose === "initial_consultation" ? "입시 컨설팅" : "학기 컨설팅"}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-0.5">{activeSubtitle}</p>
           </div>
           {/* 이 토글이 곧 동의다 — 켜면 확인 단계 없이 도구가 바로 실행된다. */}
           <button

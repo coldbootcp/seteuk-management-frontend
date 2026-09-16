@@ -60,6 +60,8 @@ test("the consultation gate starts with record-based diagnosis, not a generated 
   assert.match(gate, /const created = await api<\{ diagnosis_id: string \}>\("\/diagnosis"/);
   assert.doesNotMatch(gate, /\/diagnosis\/pre-questions/);
   assert.doesNotMatch(gate, /진단 전 확인/);
+  assert.match(gate, /hasUserChatted/);
+  assert.match(gate, /h-\[740px\] md:h-\[820px\]/);
 });
 
 test("the onboarding clarification adapter preserves answer keys", async () => {
@@ -149,8 +151,7 @@ test("grades follow the student's verified education policy", async () => {
   assert.match(grades, /rankGradeScale/);
   assert.match(grades, /rankOptions\.map/);
   assert.match(grades, /입학 연도 확인 필요/);
-  assert.match(grades, /대입 지원 관련 기준/);
-  assert.match(grades, /decision_scope === "track_specific"/);
+  assert.doesNotMatch(grades, /대입 지원 관련 기준/);
   assert.match(types, /EducationPolicyResolutionRead/);
 });
 

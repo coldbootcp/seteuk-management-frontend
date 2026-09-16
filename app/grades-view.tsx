@@ -133,7 +133,6 @@ export function GradesView({
   /** 백엔드 조회가 끝나기 전에는 "성적이 없다"고 단정하지 않는다. */
   const [recordsLoaded, setRecordsLoaded] = useState(false);
   const [educationPolicy, setEducationPolicy] = useState<EducationPolicyResolution | null>(null);
-  const [educationPolicyLoaded, setEducationPolicyLoaded] = useState(false);
   const [prevDefaultTimetable, setPrevDefaultTimetable] = useState(defaultTimetable);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<"synced" | "saving" | "error" | null>(null);
@@ -191,9 +190,6 @@ export function GradesView({
       .catch(() => {
         // 성적 기록 자체를 막지는 않는다. 정책을 불러오지 못한 상태는 별도 안내로
         // 남기고, 서버가 저장 시점에 최종 검증한다.
-      })
-      .finally(() => {
-        if (isMounted) setEducationPolicyLoaded(true);
       });
     return () => {
       isMounted = false;
@@ -573,79 +569,6 @@ export function GradesView({
 
   return (
     <div className="space-y-6">
-      <section className="bg-white px-5 py-4 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col md:flex-row md:items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-extrabold tracking-wide text-brand-600">적용 중인 교육 제도 기준</p>
-          {educationPolicy?.policy ? (
-            <>
-              <h2 className="mt-1 text-sm font-extrabold text-gray-950">
-                {educationPolicy.policy.curriculum_name} · 석차 {educationPolicy.policy.rank_grade_scale}등급제
-              </h2>
-              <p className="mt-1 text-xs leading-relaxed text-gray-500">{educationPolicy.policy.summary}</p>
-            </>
-          ) : (
-            <>
-              <h2 className="mt-1 text-sm font-extrabold text-gray-950">
-                {educationPolicyLoaded ? "입학 연도 확인 필요" : "교육 제도 기준 확인 중"}
-              </h2>
-              <p className="mt-1 text-xs leading-relaxed text-gray-500">
-                {educationPolicy?.message ?? "입학 연도를 확인하면 5등급제·9등급제와 학생부 기준을 정확히 적용합니다."}
-              </p>
-            </>
-          )}
-        </div>
-        {educationPolicy?.policy && (
-          <a
-            className="shrink-0 text-xs font-bold text-brand-600 hover:underline"
-            href={educationPolicy.policy.source_url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {educationPolicy.policy.source_label} ↗
-          </a>
-        )}
-      </section>
-
-      {educationPolicy && educationPolicy.admission_rules.length > 0 && (
-        <section className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-xs">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <div>
-              <p className="text-[11px] font-extrabold tracking-wide text-brand-600">대입 지원 관련 기준</p>
-              <h2 className="mt-1 text-sm font-extrabold text-gray-950">등급제와 별도로 확인할 사항</h2>
-            </div>
-            <p className="text-[11px] text-gray-400">공식 원문 기준 · 전형별 조건은 지원 카드에서 다시 대조합니다</p>
-          </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {educationPolicy.admission_rules.map((rule) => {
-              const admissionYear = rule.admission_year_start
-                ? `${rule.admission_year_start}학년도${rule.admission_year_end && rule.admission_year_end !== rule.admission_year_start ? `~${rule.admission_year_end}학년도` : ""}`
-                : "대입 연도별 확인";
-              const requiresTrackCheck = rule.decision_scope === "track_specific";
-              return (
-                <article key={rule.id} className="rounded-xl border border-gray-100 bg-gray-50/70 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-sm font-bold text-gray-900">{rule.title}</h3>
-                    <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-bold text-gray-500 ring-1 ring-gray-200">
-                      {requiresTrackCheck ? "지원 전형별 확인" : admissionYear}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-600">{rule.summary}</p>
-                  {rule.action_required && <p className="mt-2 text-xs font-semibold leading-relaxed text-brand-700">확인 방법 · {rule.action_required}</p>}
-                  <a
-                    className="mt-3 inline-flex text-xs font-bold text-brand-600 hover:underline"
-                    href={rule.source_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {rule.source_label} ↗
-                  </a>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
       {/* ──────────────────────────────────────────
           상단 학점계산기 대시보드 카드 (에타 스타일)
           ────────────────────────────────────────── */}

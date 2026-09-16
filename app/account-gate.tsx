@@ -221,9 +221,9 @@ export function AccountSection() {
   ].filter(Boolean) as string[];
 
   return (
-    <div className="data-priority-card">
-      <span className="kicker">ACCOUNT</span>
-      <h2>계정 관리</h2>
+    <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs">
+      <span className="text-[10px] font-mono font-bold tracking-widest text-gray-400 block mb-1">ACCOUNT</span>
+      <h3 className="text-sm font-bold text-gray-950">계정 관리</h3>
       <div className="mt-3 space-y-2 text-xs text-gray-600">
         <div className="flex items-center justify-between">
           <span>이메일</span>

@@ -46,6 +46,8 @@ const PATHS = {
     </>
   ),
   check: <polyline points="20 6 9 17 4 12" />,
+  "chevron-left": <polyline points="15 18 9 12 15 6" />,
+  "chevron-right": <polyline points="9 18 15 12 9 6" />,
   "check-circle": (
     <>
       <path d="M21.5 11.1V12a9.5 9.5 0 1 1-5.6-8.7" />
