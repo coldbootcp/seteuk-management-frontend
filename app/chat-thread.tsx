@@ -52,25 +52,37 @@ export function ChatThread({
               {bubble.streaming && !bubble.content && <em className="text-gray-400 not-italic">생각하는 중…</em>}
             </div>
 
-            {bubble.actions.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {bubble.actions.map((action, index) => {
-                  const failed = Boolean(action.result && "error" in action.result);
-                  return (
+            {(() => {
+              const visibleActions = bubble.actions.filter((action) => {
+                // 실패한 내부 도구 호출(✕)은 사용자에게 혼란을 주므로 숨김
+                if (action.result && "error" in action.result) return false;
+                // 내부 계획/신호/메모리 도구는 뱃지로 노출하지 않음
+                if (
+                  action.tool === "propose_draft_plan" ||
+                  action.tool === "signal_ready_to_conclude" ||
+                  action.tool === "propose_full_replan_exception" ||
+                  action.tool === "remember"
+                ) {
+                  return false;
+                }
+                return true;
+              });
+
+              if (visibleActions.length === 0) return null;
+
+              return (
+                <div className="flex flex-wrap gap-1.5">
+                  {visibleActions.map((action, index) => (
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        failed
-                          ? "bg-red-50 text-red-700 border-red-200/80"
-                          : "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                      }`}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200/80"
                       key={index}
                     >
-                      {failed ? "✕" : "✓"} {TOOL_LABELS[action.tool] ?? action.tool}
+                      ✓ {TOOL_LABELS[action.tool] ?? action.tool}
                     </span>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         ))
       )}

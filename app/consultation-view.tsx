@@ -691,14 +691,19 @@ export function ConsultationGate({
                             <div className="flex flex-wrap gap-1.5">
                               {msg.actions.map((action, idx) => {
                                 const failed = Boolean(action.result && "error" in action.result);
+                                const errorMsg =
+                                  failed && typeof action.result?.error === "string"
+                                    ? action.result.error
+                                    : undefined;
                                 return (
                                   <span
                                     key={idx}
-                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-help ${
                                       failed
                                         ? "bg-red-50 text-red-700 border-red-200/80"
                                         : "bg-emerald-50 text-emerald-700 border-emerald-200/80"
                                     }`}
+                                    title={errorMsg ?? (failed ? "도구 실행 중 오류가 발생했습니다." : "정상 처리되었습니다.")}
                                   >
                                     {failed ? "✕" : "✓"} {TOOL_LABELS[action.tool] ?? action.tool}
                                   </span>

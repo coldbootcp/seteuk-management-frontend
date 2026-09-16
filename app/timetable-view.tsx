@@ -109,12 +109,8 @@ export function TimetableView({
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
   const [editingSlot, setEditingSlot] = useState<TimetableSlot | null>(null);
 
-  // 총 이수 단위 계산 (고유 과목명 기준)
+  // 등록된 고유 과목 목록
   const uniqueCourses = Array.from(new Set(slots.map((s) => s.courseName)));
-  const totalUnits = uniqueCourses.reduce((acc, courseName) => {
-    const found = slots.find((s) => s.courseName === courseName);
-    return acc + (found?.units || 0);
-  }, 0);
 
   // 슬롯 추가 핸들러
   const handleAddSlot = (newSlot: TimetableSlot) => {
@@ -178,40 +174,6 @@ export function TimetableView({
     onTimetablesChange(updatedAll);
     if (selectedSlot?.id === slotId) setSelectedSlot(null);
   };
-
-  // 시간표 전체 비우기 (초기화)
-  const handleClearSlots = () => {
-    if (slots.length === 0) return;
-    if (!window.confirm(`${selGrade}학년 ${selSemester}학기 시간표의 모든 수업을 삭제하시겠습니까?`)) {
-      return;
-    }
-    const updated = {
-      ...activeTimetable,
-      slots: [],
-      updatedAt: "방금 전",
-    };
-    const updatedAll = timetables.map((t) =>
-      t.grade === selGrade && t.semester === selSemester ? updated : t
-    );
-    onTimetablesChange(updatedAll);
-    setSelectedSlot(null);
-  };
-
-  /**
-   * 과목별 요약. 예전 서랍은 "2건 진행 중 · D-12" 같은 값을 하드코딩해 보여줬는데,
-   * 그건 어디에도 없는 숫자였다. 이제 실제 활동 기록에서 센다.
-   */
-  const courseSummary = uniqueCourses
-    .map((name) => {
-      const courseSlots = slots.filter((s) => s.courseName === name);
-      return {
-        name,
-        slot: courseSlots[0],
-        hours: courseSlots.reduce((sum, s) => sum + s.periodSpan, 0),
-        recordCount: activities.filter((activity) => activity.subject === name).length,
-      };
-    })
-    .sort((a, b) => b.hours - a.hours);
 
   const drawerRecords = selectedSlot
     ? activities.filter((activity) => activity.subject === selectedSlot.courseName).slice(0, 8)
@@ -404,14 +366,7 @@ export function TimetableView({
             )}
           </div>
 
-          <div className="p-4 px-5 bg-gray-50/70 border-t border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-600 font-medium">
-            <div className="flex items-center gap-4 flex-wrap">
-              <span>수강 과목 <strong className="text-gray-900">{uniqueCourses.length}개</strong></span>
-              <span className="text-gray-300">·</span>
-              <span>주당 <strong className="text-gray-900">{slots.length}시수</strong></span>
-              <span className="text-gray-300">·</span>
-              <span className="text-brand-600 font-bold">총 {totalUnits > 0 ? `${totalUnits}단위` : "단위수 미입력"}</span>
-            </div>
+          <div className="p-3 px-5 bg-gray-50/70 border-t border-gray-200/80 flex items-center justify-end text-xs text-gray-500">
             <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
               <Icon className="flex-none" name="lightbulb" size={13} />
               <span>과목 카드를 누르면 그 과목의 기록이 열립니다.</span>
@@ -464,7 +419,7 @@ export function TimetableView({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">주당 시수</span>
-                  <span className="font-semibold text-gray-800">{slots.length}시수 ({totalUnits}단위)</span>
+                  <span className="font-semibold text-gray-800">{slots.length}시수</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">최근 수정</span>
@@ -472,58 +427,6 @@ export function TimetableView({
                 </div>
               </div>
             </div>
-
-            {slots.length > 0 && (
-              <button
-                className="w-full py-2 rounded-xl border border-gray-200 hover:border-rose-200 hover:bg-rose-50 text-gray-500 hover:text-rose-600 text-xs font-semibold transition flex items-center justify-center gap-1"
-                onClick={handleClearSlots}
-                type="button"
-              >
-                <span>시간표 전체 비우기</span>
-              </button>
-            )}
-          </div>
-
-          {/* 과목별 주당 시수 */}
-          <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <span className="text-xs font-bold text-gray-900">과목별 주당 시수</span>
-              <span className="text-[11px] text-gray-400">누르면 상세</span>
-            </div>
-
-            {courseSummary.length === 0 ? (
-              <p className="text-xs text-gray-400 py-4 text-center break-keep">
-                아직 등록한 과목이 없습니다. 위의 [과목 직접 등록]으로 시작하세요.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-                {courseSummary.map((course) => {
-                  const palette = getGroupColor(course.slot.group, courseColorMap.get(course.name) ?? courseColorIndex(course.name));
-                  return (
-                    <button
-                      className="w-full p-3 rounded-xl border border-gray-100 hover:border-brand-200 hover:bg-blue-50/30 transition flex items-center justify-between gap-2 text-left"
-                      key={course.name}
-                      onClick={() => setSelectedSlot(course.slot)}
-                      type="button"
-                    >
-                      <span className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: palette.border }} />
-                        <span className="min-w-0">
-                          <span className="block font-bold text-xs text-gray-900 truncate">{course.name}</span>
-                          <span className="block text-[10px] text-gray-500 truncate">
-                            {[course.slot.teacher, course.slot.room].filter(Boolean).join(" · ") || course.slot.group}
-                          </span>
-                        </span>
-                      </span>
-                      <span className="text-right flex-none">
-                        <span className="block text-xs font-bold text-gray-900 font-mono">주 {course.hours}시수</span>
-                        <span className="block text-[10px] font-semibold text-brand-600">기록 {course.recordCount}건</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
       </div>
