@@ -5,18 +5,27 @@
  * 않는다. 학생과 학부모의 첫 화면은 기능과 현재 제공 범위를 정확히 설명해야 한다.
  */
 
+import type { IconName } from "./icons";
+
 export const HERO_PRINCIPLES = [
   { value: "기록 기반", label: "확인된 사실만 분석" },
   { value: "학생 주도", label: "계획과 연결은 직접 확정" },
   { value: "학기 중심", label: "현재 상황에 맞춰 이어가기" },
 ];
 
-export const FEATURE_ENGINES = [
+export const FEATURE_ENGINES: Array<{
+  tag: string;
+  tagTone: string;
+  iconBg: string;
+  icon: IconName;
+  title: string;
+  body: string;
+}> = [
   {
     tag: "01 · 기록 정리",
     tagTone: "text-brand-600",
     iconBg: "bg-brand-50 border-brand-200/70",
-    icon: "🔬",
+    icon: "microscope",
     title: "사실과 해석을 구분해 정리",
     body:
       "학생부와 학생이 직접 남긴 활동·성적을 근거로 읽습니다. 기록이 없으면 과거 강점이나 약점을 추정하지 않고, " +
@@ -26,7 +35,7 @@ export const FEATURE_ENGINES = [
     tag: "02 · 계획에서 기록까지",
     tagTone: "text-indigo-600",
     iconBg: "bg-indigo-50 border-indigo-200/70",
-    icon: "🗺️",
+    icon: "map",
     title: "이번 학기 주제를 실제 활동으로 연결",
     body:
       "학교에서 생긴 수행평가·수업·대회 등의 기회에 맞춰 주제를 골라 기록합니다. 활동을 저장할 때 어떤 계획과 연결되는지도 남겨, " +
@@ -36,7 +45,7 @@ export const FEATURE_ENGINES = [
     tag: "03 · 수시 준비",
     tagTone: "text-emerald-600",
     iconBg: "bg-emerald-50 border-emerald-200/70",
-    icon: "💬",
+    icon: "message",
     title: "지원처별 근거와 면접 준비",
     body:
       "대학·학과·전형을 고르면, 직접 설명할 수 있는 활동을 골라 지원 흐름과 면접 질문을 정리합니다. " +

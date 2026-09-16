@@ -17,6 +17,7 @@ import {
   FEATURE_ENGINES,
   HERO_PRINCIPLES,
 } from "./landing-content";
+import { Icon } from "./icons";
 
 const NAV_LINKS = [
   { href: "#features", label: "핵심 기능" },
@@ -233,8 +234,9 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
             </div>
 
             <div className="mt-6 pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <span className="text-xs text-gray-500 text-center sm:text-left">
-                💡 진단과 상담을 마치면 우리 학교 시간표 과목에 맞춘 이번 학기 탐구 주제가 만들어집니다.
+              <span className="text-xs text-gray-500 text-center sm:text-left inline-flex items-start gap-1.5">
+                <Icon className="mt-0.5 flex-none text-amber-500" name="lightbulb" size={14} />
+                <span>진단과 상담을 마치면 우리 학교 시간표 과목에 맞춘 이번 학기 탐구 주제가 만들어집니다.</span>
               </span>
               <button
                 className="w-full sm:w-auto px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
@@ -266,8 +268,8 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
                 className="p-7 rounded-3xl bg-surface-bg border border-gray-200/90 space-y-4 hover:border-brand-300 transition"
                 key={engine.tag}
               >
-                <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-xl ${engine.iconBg}`}>
-                  {engine.icon}
+                <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center ${engine.iconBg}`}>
+                  <Icon name={engine.icon} size={22} />
                 </div>
                 <div className="space-y-1">
                   <span className={`text-xs font-bold ${engine.tagTone}`}>{engine.tag}</span>

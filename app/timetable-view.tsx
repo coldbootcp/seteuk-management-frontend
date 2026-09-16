@@ -14,6 +14,7 @@ import {
   type SubjectGroup,
 } from "./types/academic";
 import type { StudentActivity } from "../lib/product-harness";
+import { Icon } from "./icons";
 
 interface TimetableViewProps {
   currentGrade: number;
@@ -296,7 +297,7 @@ export function TimetableView({
             onClick={() => setIsSearchModalOpen(true)}
             type="button"
           >
-            <span>🔍</span>
+            <Icon name="search" size={14} />
             <span>과목 검색·불러오기</span>
           </button>
         </div>
@@ -320,7 +321,7 @@ export function TimetableView({
           </div>
 
           <div className="bg-amber-50/70 border-y border-amber-200/70 py-2 px-4 flex items-center justify-center gap-2 text-xs font-semibold text-amber-900">
-            <span>🍽</span>
+            <Icon name="utensils" size={14} />
             <span>점심시간 &amp; 휴식 (12:50 ~ 13:50 · 60분)</span>
           </div>
 
@@ -336,7 +337,10 @@ export function TimetableView({
               <span className="text-gray-300">·</span>
               <span className="text-brand-600 font-bold">총 {totalUnits}단위</span>
             </div>
-            <div className="text-[11px] text-gray-500">💡 과목 카드를 누르면 그 과목의 기록이 열립니다.</div>
+            <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
+              <Icon className="flex-none" name="lightbulb" size={13} />
+              <span>과목 카드를 누르면 그 과목의 기록이 열립니다.</span>
+            </div>
           </div>
         </div>
 
@@ -345,7 +349,7 @@ export function TimetableView({
           {/* 학기 선택 */}
           <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
             <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
-              <span>🗓</span> 학기 선택
+              <Icon name="calendar" size={14} /> 학기 선택
             </span>
             <select
               className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold bg-gray-50/50 focus:bg-white focus:border-brand-500 focus:outline-none transition"
@@ -373,7 +377,14 @@ export function TimetableView({
                 }}
                 type="button"
               >
-                {isUpdatingPeriod ? "변경 중…" : `📍 현재 학기를 ${selGrade}학년 ${selSemester}학기로 설정`}
+                {isUpdatingPeriod ? (
+                  "변경 중…"
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon name="map-pin" size={13} />
+                    {`현재 학기를 ${selGrade}학년 ${selSemester}학기로 설정`}
+                  </span>
+                )}
               </button>
             )}
           </div>
@@ -584,18 +595,20 @@ export function TimetableView({
 
             <div className="p-5 border-t border-gray-100 space-y-2 flex-none">
               <button
-                className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition"
+                className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition inline-flex items-center justify-center gap-1.5"
                 onClick={() => onNavigateToActivities?.(selectedSlot.courseName)}
                 type="button"
               >
-                📝 이 과목으로 새 활동 기록하기
+                <Icon name="pen" size={14} />
+                이 과목으로 새 활동 기록하기
               </button>
               <button
-                className="w-full py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-100 transition"
+                className="w-full py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-100 transition inline-flex items-center justify-center gap-1.5"
                 onClick={onNavigateToGrades}
                 type="button"
               >
-                📊 이 과목 성적 입력 / 조회
+                <Icon name="chart" size={14} />
+                이 과목 성적 입력 / 조회
               </button>
             </div>
           </aside>

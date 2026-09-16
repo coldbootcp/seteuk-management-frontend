@@ -9,6 +9,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ApiError, verifyEmail } from "../../lib/api-client";
+import { Icon } from "../icons";
 
 function VerifyEmailContent() {
   const params = useSearchParams();
@@ -41,14 +42,14 @@ function VerifyEmailContent() {
         )}
         {state === "success" && (
           <>
-            <div className="text-3xl">✅</div>
+            <Icon className="mx-auto text-emerald-600" name="check-circle" size={32} />
             <h1 className="text-lg font-extrabold text-gray-950">이메일 인증이 완료되었습니다</h1>
             <p className="text-xs text-gray-500">이 창을 닫고 원래 탭으로 돌아가 로그인해주세요.</p>
           </>
         )}
         {state === "error" && (
           <>
-            <div className="text-3xl">⚠️</div>
+            <Icon className="mx-auto text-red-600" name="alert" size={32} />
             <h1 className="text-lg font-extrabold text-gray-950">인증에 실패했습니다</h1>
             <p className="text-xs text-gray-500">{message}</p>
           </>
