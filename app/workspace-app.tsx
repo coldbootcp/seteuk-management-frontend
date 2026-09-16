@@ -454,6 +454,13 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   const [error, setError] = useState("");
   const [onboardingRecordFile, setOnboardingRecordFile] = useState("");
   const [onboardingRecordBusy, setOnboardingRecordBusy] = useState(false);
+  /**
+   * "학생부 없이 새로 시작"을 눌렀는지. 이 경로에서는 기본 정보 화면에 학생부 PDF
+   * 업로드 칸을 아예 두지 않는다 — 학생부를 올릴 생각이 없다고 이미 밝힌 학생에게
+   * 굳이 같은 선택을 다시 들이밀지 않는다. 학생부는 나중에 [활동 & 세특] 화면에서
+   * 언제든 올릴 수 있다는 안내는 그대로 유지한다.
+   */
+  const [skippedRecord, setSkippedRecord] = useState(false);
   const [onboardingRecordMessage, setOnboardingRecordMessage] = useState("");
   const [onboardingRecordStage, setOnboardingRecordStage] = useState("업로드 대기");
   const [onboardingRecordParse, setOnboardingRecordParse] = useState<SchoolRecordParseResult | null>(null);
@@ -695,6 +702,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
   function startWithRecord(file: File | undefined) {
     if (!file) return;
+    setSkippedRecord(false);
     setStep("profile");
     void analyzeOnboardingRecord(file);
   }
@@ -859,7 +867,10 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               <div className="pt-6 mt-4 border-t border-gray-100">
                 <button
                   className="w-full py-3 rounded-xl bg-gray-900 text-white font-bold text-sm hover:bg-gray-800 transition flex items-center justify-center gap-2"
-                  onClick={() => setStep("profile")}
+                  onClick={() => {
+                    setSkippedRecord(true);
+                    setStep("profile");
+                  }}
                   type="button"
                 >
                   <span>기본 정보로 시작하기</span>
@@ -881,71 +892,79 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
         <div className="w-full max-w-3xl mx-auto space-y-6">
           {stepper()}
 
-          {/* 학생부 상태 — 분석은 이 화면을 막지 않고 뒤에서 돈다 */}
-          <div
-            className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-              onboardingRecordBusy
-                ? "bg-blue-50/60 border-brand-200"
-                : onboardingRecordFile
-                  ? "bg-emerald-50/50 border-emerald-200"
-                  : "bg-white border-gray-200/80"
-            }`}
-          >
-            <div className="flex items-start gap-3 min-w-0">
-              <span
-                className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-none ${
-                  onboardingRecordBusy ? "bg-brand-500 text-white animate-pulse" : onboardingRecordFile ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-500"
+          {/*
+            학생부 상태 — 분석은 이 화면을 막지 않고 뒤에서 돈다.
+            "학생부 없이 새로 시작"을 고른 학생에게는 이 칸 자체를 보이지 않는다.
+            이미 밝힌 선택을 여기서 다시 물으면 되돌리라는 뜻으로 읽히기 쉽다.
+          */}
+          {!skippedRecord && (
+            <>
+              <div
+                className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  onboardingRecordBusy
+                    ? "bg-blue-50/60 border-brand-200"
+                    : onboardingRecordFile
+                      ? "bg-emerald-50/50 border-emerald-200"
+                      : "bg-white border-gray-200/80"
                 }`}
               >
-                {onboardingRecordBusy ? (
-                  <Icon name="zap" size={16} />
-                ) : onboardingRecordFile ? (
-                  <Icon name="check" size={16} />
-                ) : (
-                  <Icon name="file" size={16} />
-                )}
-              </span>
-              <div className="min-w-0">
-                <strong className="block text-xs font-extrabold text-gray-900">
-                  {onboardingRecordBusy ? "학생부 분석 중" : onboardingRecordFile ? "학생부 분석 완료" : "학생부 없이 진행 중"}
-                </strong>
-                <span className="block text-[11px] text-gray-500 leading-relaxed mt-0.5">
-                  {onboardingRecordBusy
-                    ? "보통 1~2분 걸립니다. 기다리는 동안 아래 정보를 먼저 채워 주세요."
-                    : onboardingRecordFile || "지금 올려도 되고, 나중에 [활동 & 세특] 화면에서 올려도 됩니다."}
-                </span>
+                <div className="flex items-start gap-3 min-w-0">
+                  <span
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-none ${
+                      onboardingRecordBusy ? "bg-brand-500 text-white animate-pulse" : onboardingRecordFile ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {onboardingRecordBusy ? (
+                      <Icon name="zap" size={16} />
+                    ) : onboardingRecordFile ? (
+                      <Icon name="check" size={16} />
+                    ) : (
+                      <Icon name="file" size={16} />
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <strong className="block text-xs font-extrabold text-gray-900">
+                      {onboardingRecordBusy ? "학생부 분석 중" : onboardingRecordFile ? "학생부 분석 완료" : "학생부 없이 진행 중"}
+                    </strong>
+                    <span className="block text-[11px] text-gray-500 leading-relaxed mt-0.5">
+                      {onboardingRecordBusy
+                        ? "보통 1~2분 걸립니다. 기다리는 동안 아래 정보를 먼저 채워 주세요."
+                        : onboardingRecordFile || "지금 올려도 되고, 나중에 [활동 & 세특] 화면에서 올려도 됩니다."}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-none">
+                  <button
+                    className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-[11px] font-bold transition"
+                    disabled={onboardingRecordBusy}
+                    onClick={() => onboardingRecordRef.current?.click()}
+                    type="button"
+                  >
+                    {onboardingRecordBusy ? "분석 중…" : onboardingRecordFile ? "다른 PDF" : "PDF 올리기"}
+                  </button>
+                  {onboardingRecordBusy && (
+                    <button
+                      aria-label="학생부 분석 취소"
+                      className="w-7 h-7 rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-gray-700 text-xs font-bold transition"
+                      onClick={cancelOnboardingRecordAnalysis}
+                      title="분석 취소"
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 flex-none">
-              <button
-                className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-[11px] font-bold transition"
-                disabled={onboardingRecordBusy}
-                onClick={() => onboardingRecordRef.current?.click()}
-                type="button"
-              >
-                {onboardingRecordBusy ? "분석 중…" : onboardingRecordFile ? "다른 PDF" : "PDF 올리기"}
-              </button>
-              {onboardingRecordBusy && (
-                <button
-                  aria-label="학생부 분석 취소"
-                  className="w-7 h-7 rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-gray-700 text-xs font-bold transition"
-                  onClick={cancelOnboardingRecordAnalysis}
-                  title="분석 취소"
-                  type="button"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          </div>
 
-          {onboardingRecordBusy && (
-            <div className="h-1 w-full rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-1 w-1/3 rounded-full bg-brand-500 animate-pulse" />
-            </div>
-          )}
-          {onboardingRecordMessage && !onboardingRecordBusy && (
-            <div className="banner banner-success">{onboardingRecordMessage}</div>
+              {onboardingRecordBusy && (
+                <div className="h-1 w-full rounded-full bg-gray-200 overflow-hidden">
+                  <div className="h-1 w-1/3 rounded-full bg-brand-500 animate-pulse" />
+                </div>
+              )}
+              {onboardingRecordMessage && !onboardingRecordBusy && (
+                <div className="banner banner-success">{onboardingRecordMessage}</div>
+              )}
+            </>
           )}
 
           <div className="bg-white p-6 sm:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-6">
