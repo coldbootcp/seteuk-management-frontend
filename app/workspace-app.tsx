@@ -44,6 +44,7 @@ import {
   type SchoolRecordParseResult,
   type SchoolRecordPeriod,
 } from "../lib/school-record-parser";
+import { Icon } from "./icons";
 
 /* ──────────────────────────────────────────────
    Types
@@ -769,7 +770,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
 
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <span className="w-12 h-12 rounded-xl bg-blue-50 text-brand-600 flex items-center justify-center text-xl flex-none">📄</span>
+                  <span className="w-12 h-12 rounded-xl bg-blue-50 text-brand-600 flex items-center justify-center flex-none"><Icon name="file" size={22} /></span>
                   <span className="block">
                     <span className="block text-lg font-bold text-gray-900">학교생활기록부(PDF)로 시작</span>
                     <span className="block text-xs text-gray-500">정부24 · 나이스에서 내려받은 생기부 파일</span>
@@ -789,7 +790,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                     startWithRecord(event.dataTransfer.files?.[0]);
                   }}
                 >
-                  <span className="text-2xl block mb-1">📤</span>
+                  <span className="mb-1 flex justify-center"><Icon name="upload" size={24} /></span>
                   <span className="text-xs font-bold text-gray-800 block">PDF를 끌어다 놓거나 눌러서 선택</span>
                   <span className="text-[11px] text-gray-400 mt-0.5 block">{SCHOOL_RECORD_MAX_FILE_SIZE_LABEL} 이하 · 분석에 1~2분</span>
                 </div>
@@ -823,7 +824,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
             <div className="bg-white rounded-2xl border border-gray-200/90 p-7 shadow-xs flex flex-col justify-between">
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <span className="w-12 h-12 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center text-xl flex-none">🌱</span>
+                  <span className="w-12 h-12 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center flex-none"><Icon name="sprout" size={22} /></span>
                   <span className="block">
                     <span className="block text-lg font-bold text-gray-900">학생부 없이 새로 시작</span>
                     <span className="block text-xs text-gray-500">1학년이거나, 지금은 올리고 싶지 않은 경우</span>
@@ -873,7 +874,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
           </div>
 
           <div className="flex items-center justify-center gap-2 text-xs text-gray-500 bg-white/80 border border-gray-200/70 px-4 py-2 rounded-full mx-auto w-fit text-center">
-            <span>🔒</span>
+            <Icon className="flex-none" name="lock" size={13} />
             <span>업로드한 학생부는 본인 계정에만 보관되며, 다른 학생의 화면에서는 조회되지 않습니다.</span>
           </div>
         </div>
@@ -900,7 +901,13 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                   onboardingRecordBusy ? "bg-brand-500 text-white animate-pulse" : onboardingRecordFile ? "bg-emerald-500 text-white" : "bg-gray-100 text-gray-500"
                 }`}
               >
-                {onboardingRecordBusy ? "⚡" : onboardingRecordFile ? "✓" : "📄"}
+                {onboardingRecordBusy ? (
+                  <Icon name="zap" size={16} />
+                ) : onboardingRecordFile ? (
+                  <Icon name="check" size={16} />
+                ) : (
+                  <Icon name="file" size={16} />
+                )}
               </span>
               <div className="min-w-0">
                 <strong className="block text-xs font-extrabold text-gray-900">
@@ -956,7 +963,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
             {/* 1. 인적 사항 */}
             <div className="space-y-4 pt-2 border-t border-gray-100">
               <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
-                <span>👤</span>
+                <Icon name="user" size={14} />
                 <span>1. 학생 기본 정보</span>
               </h3>
 
@@ -1067,7 +1074,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
             <div className="space-y-4 pt-4 border-t border-gray-100">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
-                  <span>🎯</span>
+                  <Icon name="target" size={14} />
                   <span>2. 목표 진로와 탐구 관심 축</span>
                 </h3>
                 <span className="text-[10px] text-gray-400 font-semibold">적으면 AI가 후보를 제안합니다</span>
@@ -1160,7 +1167,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
             {/* 3. 진로 구체도 */}
             <div className="space-y-3 pt-4 border-t border-gray-100">
               <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
-                <span>🧭</span>
+                <Icon name="compass" size={14} />
                 <span>3. 진로가 어느 정도 정해졌나요?</span>
               </h3>
 
@@ -1204,7 +1211,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
             {/* 4. 제약 */}
             <div className="space-y-3 pt-4 border-t border-gray-100">
               <h3 className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
-                <span>⚠️</span>
+                <Icon name="alert" size={14} />
                 <span>4. 계획을 짤 때 반드시 피해야 할 제약 (선택 사항)</span>
               </h3>
               <input
@@ -1505,7 +1512,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
         <div className="pt-5 border-t border-gray-100 space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
-              <span className="text-base">💡</span>
+              <Icon className="text-amber-500" name="lightbulb" size={18} />
               <h3 className="text-sm font-bold text-gray-950">이번 학기 활동 주제 제안</h3>
               {active && (
                 <span className="text-xs text-gray-400">
@@ -1650,7 +1657,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
               onClick={() => void beginDiagnosis()}
               type="button"
             >
-              <span>{hasDiagnosis ? "🔄" : "✨"}</span>
+              {hasDiagnosis ? <Icon name="refresh" size={14} /> : <Icon name="sparkles" size={14} />}
               <span>{diagnosisBusy ? "진단 중…" : hasDiagnosis ? "다시 진단하기" : "AI 진단 실행"}</span>
             </button>
           </div>
@@ -2467,7 +2474,8 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
       <div className="flex items-end justify-between gap-4 pb-4 border-b border-gray-200/80 flex-wrap">
         <div>
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
-            🎓 공식 학적 프로필
+            <Icon name="graduation" size={13} />
+            공식 학적 프로필
           </span>
           <h2 className="text-xl font-bold text-gray-950 tracking-tight mt-1.5">학생 프로필 및 진로 설정</h2>
           <p className="text-xs text-gray-500 mt-1">
@@ -2599,32 +2607,32 @@ function ProfileView({ workspace, onWorkspace }: { workspace: ProductWorkspace; 
             </div>
 
             <div className="mt-5 space-y-2.5 text-left border-t border-gray-100 pt-4 text-xs">
-              {[
+              {([
                 {
-                  icon: "📄",
+                  icon: "file",
                   label: "생기부 연동",
                   ok: hasSchoolRecord,
                   okText: "연동됨",
                   noText: "미연결",
                 },
                 {
-                  icon: "🔬",
+                  icon: "microscope",
                   label: "AI 진단 리포트",
                   ok: hasDiagnosis,
                   okText: "완료",
                   noText: "미실행",
                 },
                 {
-                  icon: "🎯",
+                  icon: "target",
                   label: "활동 정합 검토",
                   ok: workspace.reconciliations.length > 0,
                   okText: `${workspace.reconciliations.length}건`,
                   noText: "없음",
                 },
-              ].map((row) => (
+              ] as const).map((row) => (
                 <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50/50" key={row.label}>
                   <div className="flex items-center gap-2">
-                    <span>{row.icon}</span>
+                    <Icon className="text-gray-400" name={row.icon} size={14} />
                     <span className="text-gray-700 font-medium">{row.label}</span>
                   </div>
                   <span
@@ -2679,6 +2687,65 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
 }) {
   const [tab, setTab] = useState<TabId>("overview");
   const [activityDraft, setActivityDraft] = useState<ActivityDraft | null>(null);
+
+  // 768px 이하에서는 사이드바가 화면 밖 서랍이 된다. 예전에는 사이드바를 그냥 숨겨서
+  // 휴대폰에서 탭을 바꿀 방법이 아예 없었다. 서랍은 데스크톱과 같은 메뉴를 그대로 쓴다.
+  const [navOpen, setNavOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
+
+  // 닫은 뒤 포커스를 메뉴 버튼으로 돌려준다. 버튼이 든 본문은 서랍이 열린 동안
+  // inert라서, 상태가 반영된 다음(아래 effect)에야 포커스를 받을 수 있다.
+  const restoreMenuFocus = useRef(false);
+  const closeNav = useCallback(() => {
+    restoreMenuFocus.current = true;
+    setNavOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (navOpen || !restoreMenuFocus.current) return;
+    restoreMenuFocus.current = false;
+    menuButtonRef.current?.focus();
+  }, [navOpen]);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    sidebarRef.current?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeNav();
+    };
+    // 서랍을 연 채 화면을 넓히면 데스크톱 사이드바로 돌아가야 한다.
+    const desktop = window.matchMedia("(min-width: 769px)");
+    const onViewportChange = () => {
+      if (desktop.matches) setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    desktop.addEventListener("change", onViewportChange);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+      desktop.removeEventListener("change", onViewportChange);
+    };
+  }, [navOpen, closeNav]);
+
+  useEffect(() => {
+    if (mobileSearchOpen) searchInputRef.current?.focus();
+  }, [mobileSearchOpen]);
+
+  function selectTab(id: TabId) {
+    setTab(id);
+    if (navOpen) {
+      closeNav();
+      window.scrollTo({ top: 0 });
+    }
+  }
+
   const studentId = workspace.profile.id;
   const storageKey = `seteuk-timetables-${studentId}`;
 
@@ -2869,8 +2936,10 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
 
   return (
     <div className="product-shell">
-      {/* Sidebar */}
-      <aside className="sidebar">
+      <div aria-hidden="true" className={`sidebar-scrim${navOpen ? " is-open" : ""}`} onClick={closeNav} />
+
+      {/* Sidebar — 768px 이하에서는 서랍 */}
+      <aside aria-label="주 메뉴" className={`sidebar${navOpen ? " is-open" : ""}`} id="app-sidebar" ref={sidebarRef}>
         <div className="flex-1 flex flex-col justify-between p-4 md:p-5 min-h-0">
           <div>
             <div className="flex items-center gap-3 px-2 py-2 mb-3 pb-4 border-b border-gray-100">
@@ -2882,11 +2951,17 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
                 </div>
                 <div className="text-[11px] text-gray-400 font-medium leading-none mt-1.5">Personal Coach</div>
               </div>
+              <button aria-label="메뉴 닫기" className="shell-icon-btn sidebar-close" onClick={closeNav} type="button">
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
 
             <button
               className="w-full flex items-center gap-3 p-2.5 mb-4 rounded-xl bg-gray-50/80 border border-gray-200/70 hover:border-brand-300 hover:bg-gray-100/70 transition cursor-pointer group text-left"
-              onClick={() => setTab("profile")}
+              onClick={() => selectTab("profile")}
               type="button"
             >
               <span className="w-9 h-9 rounded-full bg-brand-500 text-white font-bold text-xs flex items-center justify-center flex-none">
@@ -2908,6 +2983,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
                 const isActive = tab === item.id;
                 return (
                   <button
+                    aria-current={isActive ? "page" : undefined}
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                       isActive
                         ? "bg-brand-50 text-brand-600 font-bold border border-brand-200/60"
@@ -2915,7 +2991,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
                     }`}
                     id={`nav-${item.id}`}
                     key={item.id}
-                    onClick={() => setTab(item.id)}
+                    onClick={() => selectTab(item.id)}
                     type="button"
                   >
                     <span className="flex items-center gap-3">
@@ -2944,7 +3020,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               onClick={onNewStudent}
               type="button"
             >
-              <span>🚪</span>
+              <Icon name="logout" size={14} />
               <span>로그아웃</span>
             </button>
             <div className="flex items-center justify-between text-[11px] text-gray-400 px-1 pt-0.5">
@@ -2957,20 +3033,47 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       </aside>
 
       {/* Main */}
-      <section className="product-main">
+      {/* 서랍이 열려 있는 동안 본문은 포커스·클릭을 받지 않는다. */}
+      <section className="product-main" inert={navOpen}>
         <header className="product-topbar">
-          <div className="flex items-center gap-3">
-            <span className="font-extrabold text-base text-gray-950 tracking-tight">Academic Hub</span>
-            <span className="text-gray-300">/</span>
-            <span className="text-xs font-semibold text-gray-500">{currentTabLabel}</span>
+          <div className="topbar-context flex items-center gap-3 min-w-0">
+            <button
+              aria-controls="app-sidebar"
+              aria-expanded={navOpen}
+              aria-label="메뉴 열기"
+              className="shell-icon-btn topbar-menu-btn"
+              onClick={() => {
+                setMobileSearchOpen(false);
+                setNavOpen(true);
+              }}
+              ref={menuButtonRef}
+              type="button"
+            >
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="18" x2="20" y2="18" />
+              </svg>
+            </button>
+            <span className="topbar-hub font-extrabold text-base text-gray-950 tracking-tight whitespace-nowrap">Academic Hub</span>
+            <span className="topbar-hub text-gray-300">/</span>
+            <span className="topbar-current text-xs font-semibold text-gray-500 truncate">{currentTabLabel}</span>
           </div>
 
-          <div className="relative w-80 max-w-[38%]">
-            <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 text-xs pointer-events-none">🔍</span>
+          <div className={`topbar-search relative w-80 max-w-[38%]${mobileSearchOpen ? " is-open" : ""}`} id="topbar-search">
+            <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none"><Icon name="search" size={14} /></span>
             <input
+              aria-label="기록 검색"
               className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-gray-200/90 text-xs bg-gray-50/60 focus:bg-white focus:border-brand-500 focus:outline-none transition"
               onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && mobileSearchOpen) {
+                  setMobileSearchOpen(false);
+                  searchToggleRef.current?.focus();
+                }
+              }}
               placeholder="과목, 탐구 키워드, 활동 검색…"
+              ref={searchInputRef}
               type="search"
               value={searchQuery}
             />
@@ -2983,6 +3086,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
                       key={activity.id}
                       onClick={() => {
                         setSearchQuery("");
+                        setMobileSearchOpen(false);
                         setTab("activities");
                       }}
                       type="button"
@@ -3000,19 +3104,33 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200/80">
+          <div className="flex items-center gap-3 flex-none">
+            <button
+              aria-controls="topbar-search"
+              aria-expanded={mobileSearchOpen}
+              aria-label={mobileSearchOpen ? "검색 닫기" : "기록 검색"}
+              className="shell-icon-btn topbar-search-toggle"
+              onClick={() => setMobileSearchOpen((open) => !open)}
+              ref={searchToggleRef}
+              type="button"
+            >
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </button>
+            <span className="topbar-status flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200/80">
               <span className="w-2 h-2 rounded-full bg-brand-500" />
-              <span className="text-[11px] font-bold text-brand-700">학기 계획 연동 · 학생별 데이터 격리</span>
+              <span className="text-[11px] font-bold text-brand-700 whitespace-nowrap">학기 계획 연동 · 학생별 데이터 격리</span>
             </span>
-            <span className="h-4 w-px bg-gray-200" />
+            <span className="topbar-status h-4 w-px bg-gray-200" />
             <button
               aria-label="프로필 설정"
-              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition"
+              className="topbar-settings w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition"
               onClick={() => setTab("profile")}
               type="button"
             >
-              <span className="text-sm">⚙️</span>
+              <Icon name="settings" size={16} />
             </button>
           </div>
         </header>

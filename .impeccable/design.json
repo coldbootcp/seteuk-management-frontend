@@ -1,0 +1,727 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-16T10:33:17+00:00",
+  "title": "Design System: 세특연구소 (Seteuk Lab)",
+  "extensions": {
+    "colorMeta": {
+      "action-blue": {
+        "role": "primary",
+        "displayName": "액션 블루 (Action Blue)",
+        "canonical": "#3182F6 · brand-500 · --primary",
+        "tonalRamp": [
+          "#133572",
+          "#113E8D",
+          "#134EB2",
+          "#1B64DA",
+          "#3182F6",
+          "#4D9EFF",
+          "#C0DEFF",
+          "#F0F7FF"
+        ]
+      },
+      "action-blue-deep": {
+        "role": "primary",
+        "displayName": "깊은 액션 블루 (Action Blue Deep)",
+        "canonical": "#1B64DA · brand-600",
+        "tonalRamp": [
+          "#133572",
+          "#113E8D",
+          "#134EB2",
+          "#1B64DA",
+          "#3182F6",
+          "#4D9EFF",
+          "#C0DEFF",
+          "#F0F7FF"
+        ]
+      },
+      "action-blue-deeper": {
+        "role": "primary",
+        "displayName": "더 깊은 액션 블루 (Action Blue Deeper)",
+        "canonical": "#134EB2 · brand-700",
+        "tonalRamp": [
+          "#133572",
+          "#113E8D",
+          "#134EB2",
+          "#1B64DA",
+          "#3182F6",
+          "#4D9EFF",
+          "#C0DEFF",
+          "#F0F7FF"
+        ]
+      },
+      "blue-haze": {
+        "role": "primary",
+        "displayName": "블루 헤이즈 (Blue Haze)",
+        "canonical": "#C0DEFF · brand-200",
+        "tonalRamp": [
+          "#133572",
+          "#113E8D",
+          "#134EB2",
+          "#1B64DA",
+          "#3182F6",
+          "#4D9EFF",
+          "#C0DEFF",
+          "#F0F7FF"
+        ]
+      },
+      "blue-mist": {
+        "role": "primary",
+        "displayName": "블루 미스트 (Blue Mist)",
+        "canonical": "#F0F7FF · brand-50",
+        "tonalRamp": [
+          "#133572",
+          "#113E8D",
+          "#134EB2",
+          "#1B64DA",
+          "#3182F6",
+          "#4D9EFF",
+          "#C0DEFF",
+          "#F0F7FF"
+        ]
+      },
+      "legacy-blue-wash": {
+        "role": "primary",
+        "displayName": "옛 블루 워시 (Legacy Blue Wash)",
+        "canonical": "#E8F3FF · --primary-subtle",
+        "tonalRamp": [
+          "#133572",
+          "#113E8D",
+          "#134EB2",
+          "#1B64DA",
+          "#3182F6",
+          "#4D9EFF",
+          "#C0DEFF",
+          "#F0F7FF"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "잉크 (Ink)",
+        "canonical": "gray-950",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "부드러운 잉크 (Ink Soft)",
+        "canonical": "gray-900",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "slate-700": {
+        "role": "neutral",
+        "displayName": "슬레이트 700",
+        "canonical": "gray-700",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "slate-600": {
+        "role": "neutral",
+        "displayName": "슬레이트 600",
+        "canonical": "gray-600",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "slate-500": {
+        "role": "neutral",
+        "displayName": "슬레이트 500",
+        "canonical": "gray-500",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "slate-400": {
+        "role": "neutral",
+        "displayName": "슬레이트 400",
+        "canonical": "gray-400",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "헤어라인 (Hairline)",
+        "canonical": "gray-200",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "디바이더 (Divider)",
+        "canonical": "gray-100",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "tile": {
+        "role": "neutral",
+        "displayName": "타일 (Tile)",
+        "canonical": "gray-50",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "card-white": {
+        "role": "neutral",
+        "displayName": "카드 화이트 (Card White)",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "종이 (Paper)",
+        "canonical": "#F8F9FA · surface-bg",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "legacy-ink": {
+        "role": "neutral",
+        "displayName": "옛 잉크 (Legacy Ink)",
+        "canonical": "#191F28 · --text",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "legacy-muted": {
+        "role": "neutral",
+        "displayName": "옛 뮤트 (Legacy Muted)",
+        "canonical": "#4E5968 · --muted",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "legacy-subtle": {
+        "role": "neutral",
+        "displayName": "옛 서틀 (Legacy Subtle)",
+        "canonical": "#8B95A1 · --subtle",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "legacy-border": {
+        "role": "neutral",
+        "displayName": "옛 경계 (Legacy Border)",
+        "canonical": "#E5E8EB · --border",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "legacy-surface-2": {
+        "role": "neutral",
+        "displayName": "옛 표면 2 (Legacy Surface 2)",
+        "canonical": "#F2F4F6 · --surface-2",
+        "tonalRamp": [
+          "oklch(13% 0.028 261.692)",
+          "oklch(21% 0.034 264.665)",
+          "oklch(37.3% 0.034 259.733)",
+          "oklch(44.6% 0.03 256.802)",
+          "oklch(55.1% 0.027 264.364)",
+          "oklch(70.7% 0.022 261.325)",
+          "oklch(92.8% 0.006 264.531)",
+          "oklch(98.5% 0.002 247.839)"
+        ]
+      },
+      "success-text": {
+        "role": "success",
+        "displayName": "성공 글자 (Success)",
+        "canonical": "emerald-700",
+        "tonalRamp": [
+          "oklch(26.2% 0.051 172.552)",
+          "oklch(37.8% 0.077 168.94)",
+          "oklch(50.8% 0.118 165.612)",
+          "oklch(59.6% 0.145 163.225)",
+          "oklch(69.6% 0.17 162.48)",
+          "oklch(84.5% 0.143 164.978)",
+          "oklch(95% 0.052 163.051)",
+          "oklch(97.9% 0.021 166.113)"
+        ]
+      },
+      "success-wash": {
+        "role": "success",
+        "displayName": "성공 워시 (Success Wash)",
+        "canonical": "emerald-50",
+        "tonalRamp": [
+          "oklch(26.2% 0.051 172.552)",
+          "oklch(37.8% 0.077 168.94)",
+          "oklch(50.8% 0.118 165.612)",
+          "oklch(59.6% 0.145 163.225)",
+          "oklch(69.6% 0.17 162.48)",
+          "oklch(84.5% 0.143 164.978)",
+          "oklch(95% 0.052 163.051)",
+          "oklch(97.9% 0.021 166.113)"
+        ]
+      },
+      "warning-text": {
+        "role": "warning",
+        "displayName": "주의 글자 (Warning)",
+        "canonical": "amber-900",
+        "tonalRamp": [
+          "oklch(27.9% 0.077 45.635)",
+          "oklch(41.4% 0.112 45.904)",
+          "oklch(55.5% 0.163 48.998)",
+          "oklch(66.6% 0.179 58.318)",
+          "oklch(76.9% 0.188 70.08)",
+          "oklch(87.9% 0.169 91.605)",
+          "oklch(96.2% 0.059 95.617)",
+          "oklch(98.7% 0.022 95.277)"
+        ]
+      },
+      "warning-wash": {
+        "role": "warning",
+        "displayName": "주의 워시 (Warning Wash)",
+        "canonical": "amber-50",
+        "tonalRamp": [
+          "oklch(27.9% 0.077 45.635)",
+          "oklch(41.4% 0.112 45.904)",
+          "oklch(55.5% 0.163 48.998)",
+          "oklch(66.6% 0.179 58.318)",
+          "oklch(76.9% 0.188 70.08)",
+          "oklch(87.9% 0.169 91.605)",
+          "oklch(96.2% 0.059 95.617)",
+          "oklch(98.7% 0.022 95.277)"
+        ]
+      },
+      "danger-text": {
+        "role": "danger",
+        "displayName": "위험 글자 (Danger)",
+        "canonical": "red-600",
+        "tonalRamp": [
+          "oklch(25.8% 0.092 26.042)",
+          "oklch(39.6% 0.141 25.723)",
+          "oklch(50.5% 0.213 27.518)",
+          "oklch(57.7% 0.245 27.325)",
+          "oklch(63.7% 0.237 25.331)",
+          "oklch(80.8% 0.114 19.571)",
+          "oklch(93.6% 0.032 17.717)",
+          "oklch(97.1% 0.013 17.38)"
+        ]
+      },
+      "danger-wash": {
+        "role": "danger",
+        "displayName": "위험 워시 (Danger Wash)",
+        "canonical": "red-50",
+        "tonalRamp": [
+          "oklch(25.8% 0.092 26.042)",
+          "oklch(39.6% 0.141 25.723)",
+          "oklch(50.5% 0.213 27.518)",
+          "oklch(57.7% 0.245 27.325)",
+          "oklch(63.7% 0.237 25.331)",
+          "oklch(80.8% 0.114 19.571)",
+          "oklch(93.6% 0.032 17.717)",
+          "oklch(97.1% 0.013 17.38)"
+        ]
+      },
+      "legacy-green": {
+        "role": "success",
+        "displayName": "옛 초록 (Legacy Green)",
+        "canonical": "#00A881 · --green",
+        "tonalRamp": [
+          "oklch(26.2% 0.051 172.552)",
+          "oklch(37.8% 0.077 168.94)",
+          "oklch(50.8% 0.118 165.612)",
+          "oklch(59.6% 0.145 163.225)",
+          "oklch(69.6% 0.17 162.48)",
+          "oklch(84.5% 0.143 164.978)",
+          "oklch(95% 0.052 163.051)",
+          "oklch(97.9% 0.021 166.113)"
+        ]
+      },
+      "legacy-red": {
+        "role": "danger",
+        "displayName": "옛 빨강 (Legacy Red)",
+        "canonical": "#E42939 · --red",
+        "tonalRamp": [
+          "oklch(25.8% 0.092 26.042)",
+          "oklch(39.6% 0.141 25.723)",
+          "oklch(50.5% 0.213 27.518)",
+          "oklch(57.7% 0.245 27.325)",
+          "oklch(63.7% 0.237 25.331)",
+          "oklch(80.8% 0.114 19.571)",
+          "oklch(93.6% 0.032 17.717)",
+          "oklch(97.1% 0.013 17.38)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "비로그인 랜딩 히어로 제목 전용. 1.875rem → sm 3rem → md 3.75rem."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "화면 제목. 랜딩 섹션 제목은 1.5rem → md 2.25rem."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "카드 제목(text-base font-bold text-gray-950)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "body 기본값. 시맨틱 레이어 화면과 챗봇 말풍선(1.65)."
+      },
+      "body-compact": {
+        "displayName": "Body Compact",
+        "purpose": "Tailwind 레이어 화면의 실제 본문(카드 설명, 목록, 리포트 항목)."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "버튼, 내비 항목, 폼 라벨."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "날짜·학기·출처 같은 보조 정보, 배지 글자."
+      },
+      "eyebrow": {
+        "displayName": "Eyebrow",
+        "purpose": "카드 위 분류 라벨. UPPERCASE, 깊은 액션 블루."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-rest",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "모든 흰 카드의 기본(Tailwind shadow-xs)."
+      },
+      {
+        "name": "floating",
+        "value": "0 12px 32px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.04)",
+        "purpose": "상단바 검색 결과 드롭다운(@theme --shadow-floating)."
+      },
+      {
+        "name": "dialog",
+        "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+        "purpose": "확인 모달, 로그인 카드(shadow-xl)."
+      },
+      {
+        "name": "dialog-deep",
+        "value": "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+        "purpose": "상담 확인 모달, 과목 서랍, 랜딩 미리보기(shadow-2xl)."
+      },
+      {
+        "name": "featured-choice",
+        "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "purpose": "온보딩 추천 경로 카드(shadow-lg, 2px 액션 블루 경계와 함께)."
+      },
+      {
+        "name": "drawer",
+        "value": "12px 0 32px rgb(25 31 40 / 0.12)",
+        "purpose": "768px 이하에서 열린 사이드바 서랍."
+      },
+      {
+        "name": "user-bubble",
+        "value": "0 2px 6px rgba(49,130,246,0.2)",
+        "purpose": "사용자 말풍선 아래 파란 기운."
+      },
+      {
+        "name": "focus-ring-legacy",
+        "value": "0 0 0 3px rgba(49,130,246,0.12)",
+        "purpose": ".form-field 입력칸 포커스."
+      }
+    ],
+    "motion": [
+      {
+        "name": "tailwind-default",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Tailwind `transition` 기본. 새 화면의 hover·focus 색 전환."
+      },
+      {
+        "name": "t-fast",
+        "value": "120ms ease",
+        "purpose": "시맨틱 레이어 --t-fast. 버튼·입력칸 전환."
+      },
+      {
+        "name": "t-base",
+        "value": "200ms ease",
+        "purpose": "시맨틱 레이어 --t-base."
+      },
+      {
+        "name": "t-spring",
+        "value": "380ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "시맨틱 레이어 --t-spring. 패널 등장."
+      },
+      {
+        "name": "drawer-slide",
+        "value": "280ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "모바일 사이드바 서랍이 밀려 들어오는 전환. 스크림은 200ms ease-out. prefers-reduced-motion에서는 전환 없음."
+      },
+      {
+        "name": "pulse",
+        "value": "animate-pulse",
+        "purpose": "로딩·분석 중 표시. prefers-reduced-motion 처리는 서랍 외에는 없다."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px — 이하에서 사이드바가 서랍, 상단바 한 줄, 본문 패딩 16px"
+      },
+      {
+        "name": "topbar-status",
+        "value": "1100px — 이하에서 상단바 상태 알약 숨김"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      },
+      {
+        "name": "legacy-960",
+        "value": "960px — 사이드바 224px"
+      },
+      {
+        "name": "legacy-others",
+        "value": "560 · 880 · 900 · 1080px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "화면의 기본 행동. 폼 제출은 보통 전체 폭.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">상담 결과로 계획 확정</button>",
+      "css": ".ds-btn-primary { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; background: var(--color-brand-600, #1B64DA); color: #fff; padding: 10px 16px; border: 0; border-radius: 12px; font-size: 12px; font-weight: 800; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-primary:hover { background: var(--color-brand-700, #134EB2); } .ds-btn-primary:focus-visible { outline: 2px solid var(--color-brand-500, #3182F6); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "보조 행동. 흰 바탕 + 헤어라인.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">나중에 하기</button>",
+      "css": ".ds-btn-secondary { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; background: #fff; color: var(--color-gray-700, #364153); padding: 8px 12px; border: 1px solid var(--color-gray-200, #E5E7EB); border-radius: 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-secondary:hover { background: var(--color-gray-50, #F9FAFB); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--color-brand-500, #3182F6); outline-offset: 2px; }"
+    },
+    {
+      "name": "Legacy Button (.btn)",
+      "kind": "button",
+      "refersTo": "button-legacy-primary",
+      "description": "시맨틱 레이어의 옛 버튼. 프로필·활동 기록·수시 준비 화면에 남아 있다. 새로 쓰지 않는다.",
+      "html": "<div class=\"ds-legacy-row\"><button class=\"ds-btn-legacy ds-btn-legacy-primary\" type=\"button\">저장</button><button class=\"ds-btn-legacy ds-btn-legacy-secondary\" type=\"button\">취소</button><button class=\"ds-btn-legacy ds-btn-legacy-danger\" type=\"button\">삭제</button></div>",
+      "css": ".ds-legacy-row { display: flex; gap: 8px; } .ds-btn-legacy { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; display: inline-flex; align-items: center; height: 46px; padding: 0 18px; border-radius: var(--r-sm, 8px); font-size: 14px; font-weight: 700; border: 1px solid transparent; cursor: pointer; transition: background var(--t-fast, 120ms ease); } .ds-btn-legacy-primary { background: var(--primary, #3182F6); color: #fff; } .ds-btn-legacy-primary:hover { background: var(--primary-dark, #2272EB); } .ds-btn-legacy-secondary { background: var(--surface-2, #F2F4F6); color: var(--text-2, #333D4B); } .ds-btn-legacy-secondary:hover { background: var(--surface-3, #E5E8EB); } .ds-btn-legacy-danger { background: var(--red-subtle, #FEF2F2); border-color: var(--red-200, #FFD3D7); color: var(--red, #E42939); } .ds-btn-legacy:focus-visible { outline: 2px solid var(--primary, #3182F6); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "12px 모서리, 타일 바탕, 포커스에서 흰 바탕 + 파란 경계.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">활동 제목</span><input class=\"ds-input\" placeholder=\"예: 로지스틱 모델로 감염 확산 다시 보기\" /></label>",
+      "css": ".ds-field { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; display: flex; flex-direction: column; gap: 6px; } .ds-field-label { font-size: 11px; font-weight: 700; color: var(--muted, #4E5968); } .ds-input { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; width: 100%; padding: 8px 14px; border-radius: 12px; border: 1px solid var(--color-gray-200, #E5E7EB); background: rgb(249 250 251 / 0.5); color: var(--color-gray-900, #101828); font-size: 12px; font-weight: 600; outline: none; transition: background-color 150ms, border-color 150ms; } .ds-input::placeholder { color: var(--color-gray-400, #99A1AF); font-weight: 500; } .ds-input:hover { border-color: var(--color-gray-300, #D1D5DC); } .ds-input:focus { background: #fff; border-color: var(--color-brand-500, #3182F6); }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "248px 사이드바의 탭 목록. 활성은 블루 미스트 + 점.",
+      "html": "<nav class=\"ds-nav\"><button class=\"ds-nav-item is-active\" type=\"button\"><span class=\"ds-nav-lead\"><span class=\"ds-nav-icon\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"6\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/></svg></span>이번 학기</span><span class=\"ds-nav-trail\"><span class=\"ds-nav-badge\">2-1</span><span class=\"ds-nav-dot\"></span></span></button><button class=\"ds-nav-item\" type=\"button\"><span class=\"ds-nav-lead\"><span class=\"ds-nav-icon\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"18\" y1=\"20\" x2=\"18\" y2=\"10\"/><line x1=\"12\" y1=\"20\" x2=\"12\" y2=\"4\"/><line x1=\"6\" y1=\"20\" x2=\"6\" y2=\"14\"/></svg></span>성적 관리</span></button><button class=\"ds-nav-item\" type=\"button\"><span class=\"ds-nav-lead\"><span class=\"ds-nav-icon\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"/></svg></span>활동 &amp; 세특</span></button></nav>",
+      "css": ".ds-nav { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; display: flex; flex-direction: column; gap: 4px; width: 216px; } .ds-nav-item { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px solid transparent; background: transparent; color: var(--color-gray-600, #4A5565); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 150ms cubic-bezier(0.4,0,0.2,1); } .ds-nav-item:hover { background: var(--color-gray-50, #F9FAFB); color: var(--color-gray-950, #030712); } .ds-nav-item:focus-visible { outline: 2px solid var(--color-brand-500, #3182F6); outline-offset: 1px; } .ds-nav-lead { display: flex; align-items: center; gap: 12px; } .ds-nav-icon { display: flex; color: var(--color-gray-400, #99A1AF); } .ds-nav-trail { display: flex; align-items: center; gap: 6px; } .ds-nav-item.is-active { background: var(--color-brand-50, #F0F7FF); border-color: rgb(192 222 255 / 0.6); color: var(--color-brand-600, #1B64DA); font-weight: 700; } .ds-nav-item.is-active .ds-nav-icon { color: var(--color-brand-600, #1B64DA); } .ds-nav-badge { font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 4px; background: var(--color-brand-500, #3182F6); color: #fff; } .ds-nav-dot { width: 6px; height: 6px; border-radius: 9999px; background: var(--color-brand-500, #3182F6); }"
+    },
+    {
+      "name": "Badges",
+      "kind": "chip",
+      "refersTo": "badge-brand",
+      "description": "워시 바탕 + 진한 글자. 브랜드·성공·위험·옛 상태 알약.",
+      "html": "<div class=\"ds-badges\"><span class=\"ds-badge ds-badge-brand\">수학 · 확률과 통계</span><span class=\"ds-badge ds-badge-success\">준비됨</span><span class=\"ds-badge ds-badge-danger\">생기부 값과 다릅니다</span><span class=\"ds-pill-legacy\">진행 중</span></div>",
+      "css": ".ds-badges { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; } .ds-badge { font-size: 11px; font-weight: 600; line-height: 1.4; } .ds-badge-brand { background: var(--color-brand-50, #F0F7FF); color: var(--color-brand-600, #1B64DA); padding: 2px 8px; border-radius: 4px; } .ds-badge-success { background: var(--color-emerald-50, #ECFDF5); color: var(--color-emerald-700, #007A55); border: 1px solid rgb(164 244 207 / 0.8); padding: 4px 10px; border-radius: 8px; } .ds-badge-danger { background: var(--color-red-50, #FEF2F2); color: var(--color-red-700, #C10007); border: 1px solid rgb(255 201 201 / 0.8); padding: 4px 10px; border-radius: 8px; } .ds-pill-legacy { background: var(--primary-subtle, #E8F3FF); color: var(--primary, #3182F6); padding: 3px 9px; border-radius: 9999px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.01em; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "흰 바탕 + 헤어라인 + 16px 모서리 + shadow-xs. 안에 12px 타일.",
+      "html": "<article class=\"ds-card\"><span class=\"ds-eyebrow\">AI 진단 요약</span><h3 class=\"ds-card-title\">이번 학기 탐구 주제</h3><p class=\"ds-card-body\">지난 학기 보고서에서 지수 모델의 한계를 적었습니다. 이번에는 그 한계를 출발점으로 삼을 수 있습니다.</p><div class=\"ds-tile\"><strong>근거</strong><span>수학Ⅱ 수행평가 · 1학기 기록</span></div></article>",
+      "css": ".ds-card { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; background: #fff; border: 1px solid rgb(229 231 235 / 0.8); border-radius: 16px; padding: 24px; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); display: flex; flex-direction: column; gap: 12px; max-width: 360px; transition: border-color 150ms; } .ds-card:hover { border-color: var(--color-brand-300, #8BC3FF); } .ds-eyebrow { font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-brand-600, #1B64DA); } .ds-card-title { margin: 0; font-size: 16px; font-weight: 800; color: var(--color-gray-950, #030712); letter-spacing: -0.025em; } .ds-card-body { margin: 0; font-size: 12px; line-height: 1.625; color: var(--color-gray-600, #4A5565); } .ds-tile { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--color-gray-50, #F9FAFB); border: 1px solid rgb(229 231 235 / 0.8); font-size: 11px; color: var(--color-gray-500, #6A7282); } .ds-tile strong { font-size: 12px; font-weight: 800; color: var(--color-gray-900, #101828); }"
+    },
+    {
+      "name": "Chat Bubbles",
+      "kind": "custom",
+      "refersTo": "chat-bubble-user",
+      "description": "상담 관문과 AI 컨설턴트가 함께 쓰는 말풍선. 18px 모서리, 꼬리 쪽 4px.",
+      "html": "<div class=\"ds-chat\"><div class=\"ds-chat-row is-assistant\"><div class=\"ds-bubble\">지난 학기에 지수 모델의 한계에 부딪혔다고 적어 두셨습니다. 로지스틱 모델로 더 밀어볼지, 넓혀볼지 정해 보시겠어요?</div></div><div class=\"ds-chat-row is-user\"><div class=\"ds-bubble\">로지스틱 모델로 해 볼래요.</div></div></div>",
+      "css": ".ds-chat { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; display: flex; flex-direction: column; gap: 10px; max-width: 420px; } .ds-chat-row { display: flex; max-width: 80%; } .ds-chat-row.is-user { align-self: flex-end; } .ds-chat-row.is-assistant { align-self: flex-start; } .ds-bubble { padding: 11px 16px; border-radius: 18px; font-size: 14px; line-height: 1.65; word-break: keep-all; } .is-user .ds-bubble { background: var(--primary, #3182F6); color: #fff; border-bottom-right-radius: 4px; box-shadow: 0 2px 6px rgba(49,130,246,0.2); } .is-assistant .ds-bubble { background: #fff; color: var(--text, #191F28); border: 1px solid var(--border, #E5E8EB); border-bottom-left-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }"
+    },
+    {
+      "name": "Diagnosis Report Grid",
+      "kind": "custom",
+      "refersTo": "tile",
+      "description": "진단 리포트 2열 4칸: 강점·약점·기회·반복되는 패턴. 워시 + 200 경계 + 상태 점.",
+      "html": "<div class=\"ds-report\"><div class=\"ds-report-cell is-success\"><div class=\"ds-report-head\"><span class=\"ds-dot\"></span><strong>강점 (Strengths)</strong></div><ul><li>· 수행평가마다 데이터를 직접 모아 분석했습니다.</li></ul></div><div class=\"ds-report-cell is-danger\"><div class=\"ds-report-head\"><span class=\"ds-dot\"></span><strong>약점 (Weaknesses)</strong></div><ul><li>· 활동끼리 이어지는 설명이 적습니다.</li></ul></div><div class=\"ds-report-cell is-brand\"><div class=\"ds-report-head\"><span class=\"ds-dot\"></span><strong>기회 (Opportunities)</strong></div><p class=\"ds-empty\">해당 항목이 없습니다.</p></div><div class=\"ds-report-cell is-warning\"><div class=\"ds-report-head\"><span class=\"ds-dot\"></span><strong>반복되는 패턴 (Threats)</strong></div><ul><li>· 보고서가 조사 요약에서 끝나는 경우가 많습니다.</li></ul></div></div>",
+      "css": ".ds-report { font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: 560px; } .ds-report-cell { padding: 16px; border-radius: 12px; border: 1px solid; display: flex; flex-direction: column; gap: 8px; } .ds-report-head { display: flex; align-items: center; gap: 6px; } .ds-report-head strong { font-size: 12px; font-weight: 800; color: var(--color-gray-900, #101828); } .ds-dot { width: 8px; height: 8px; border-radius: 9999px; } .ds-report-cell ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; } .ds-report-cell li { font-size: 12px; line-height: 1.625; color: var(--color-gray-600, #4A5565); } .ds-empty { margin: 0; font-size: 12px; color: var(--color-gray-400, #99A1AF); } .is-success { background: rgb(236 253 245 / 0.5); border-color: rgb(164 244 207 / 0.7); } .is-success .ds-dot { background: var(--color-emerald-500, #00BC7D); } .is-danger { background: rgb(254 242 242 / 0.4); border-color: rgb(255 201 201 / 0.7); } .is-danger .ds-dot { background: var(--color-red-500, #FB2C36); } .is-brand { background: rgb(239 246 255 / 0.5); border-color: rgb(190 219 255 / 0.7); } .is-brand .ds-dot { background: var(--color-brand-500, #3182F6); } .is-warning { background: rgb(255 251 235 / 0.5); border-color: rgb(254 230 133 / 0.7); } .is-warning .ds-dot { background: var(--color-amber-500, #FE9A00); } @media (max-width: 560px) { .ds-report { grid-template-columns: 1fr; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Desk (조용한 책상)",
+    "overview": "학기 중에 학생이 혼자 앉아 자기 기록을 정리하는 책상. 화면은 그 책상 위처럼 조용해야 한다 — 흰 바탕, 파란색 하나, 머리카락처럼 얇은 경계선, 거의 느껴지지 않는 그림자. 시선을 끄는 것은 장식이 아니라 학생 자신의 기록과 그 근거다. 이 담담함은 제품 목소리 (\"과장 없이, 판단은 학생이\")를 시각으로 옮긴 것이다.\n\n밀도는 높은 편이다. 메인 앱은 248px 사이드바와 끈적한 상단바 아래에 흰 카드를 격자로 깔고, 카드 안은 12px 굵은 글씨와 11px 보조 글씨로 촘촘하게 채운다. 위계는 글자 크기 차이보다 **굵기(700/800)와 색 명도(ink ↔ slate-400)**로 만든다. 컴포넌트의 성격은 **또렷하고 절제된** 것이다: 둥근 12px 모서리, 1px 경계, 채도 높은 파랑은 행동에만.\n\n시스템은 현재 **두 겹**으로 되어 있다. 목업(preview-3200)에서 옮겨 온 **Tailwind 레이어** (`@theme`의 brand 스케일 + Tailwind 기본 gray)가 대부분의 화면을 그리고, 그 이전의 **시맨틱 CSS 레이어**(`:root`의 Toss 계열 토큰과 `.btn`·`.form-field`·`.chat-bubble` 같은 의미 클래스)가 수시 지원 준비, 성적표 입력 셀, 시간표 모달, 챗봇 말풍선에 남아 있다. 마이그레이션 방향은 Tailwind 레이어다(`docs/DESIGN_MIGRATION.md`). 라이트 테마만 있고 다크 모드는 없다.",
+    "keyCharacteristics": [
+      "흰 캔버스 위 흰 카드, 경계선으로 분리하는 평면 구성",
+      "행동 색은 액션 블루 하나, 상태 색(초록·호박·빨강)은 옅은 워시 + 진한 글자로만",
+      "Pretendard 한 가족, 굵기로 만드는 위계, 12px 중심의 촘촘한 본문",
+      "12px 모서리가 버튼·입력칸·내비·내부 타일의 공통 언어, 카드는 16px",
+      "그림자는 쉬는 상태에서 거의 없음, 떠 있는 것(모달·드롭다운·시트)만 뚜렷하게"
+    ],
+    "rules": [
+      {
+        "name": "The One Blue Rule",
+        "body": "화면의 기본 행동은 액션 블루 계열로만 칠한다. 초록·호박·보라는 행동이 아니라 상태와 분류를 말한다. 예외는 둘이다: 파괴적 행동(삭제 확인은 `red-600` 채움, 옛 `.btn-danger`는 빨강 워시)과, 주의 배너 안에서 그 배너를 해결하는 작은 버튼(흰 바탕 + `amber-300` 경계 + `amber-800` 글자).",
+        "section": "colors"
+      },
+      {
+        "name": "The Wash, Not Fill Rule",
+        "body": "상태 색은 50단계 워시 위에 700~900단계 글자로 쓴다. 채도 높은 상태 색으로 넓은 면을 채우지 않는다.",
+        "section": "colors"
+      },
+      {
+        "name": "The Weight-Not-Size Rule",
+        "body": "위계는 굵기와 명도로 만든다. 카드 안에서 제목과 본문의 크기 차이는 보통 4px 이하이고, 그 대신 800 대 400, ink 대 slate-500으로 가른다.",
+        "section": "typography"
+      },
+      {
+        "name": "The Card Grid Rule",
+        "body": "메인 앱 화면은 흰 카드들의 격자로 짓는다. 카드 밖에는 화면 제목과 짧은 안내만 선다(비로그인 랜딩은 이 규칙 밖이다).",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-At-Rest Rule",
+        "body": "페이지에 붙어 있는 것은 경계선으로, 페이지 위에 떠 있는 것만 그림자로 말한다. hover에서 카드를 들어 올리지 않고 경계선 색을 브랜드 쪽(brand-300/400)으로 바꾼다.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** 새 화면은 Tailwind 레이어로 짓는다: brand 스케일과 Tailwind `gray`, 12px/16px 모서리, `shadow-xs` 카드.",
+      "**Do** 카드를 흰 바탕 + 1px 헤어라인(`gray-200` 80%) + 16px 모서리 + 20~24px 패딩으로 만든다.",
+      "**Do** 버튼·입력칸·내비·내부 타일은 12px 모서리로 맞춘다.",
+      "**Do** 아이콘은 `app/icons.tsx`의 `<Icon />`으로 넣는다. 기본 16px이고, 12~14px 글자 옆에서는 13~14px, 카드 머리의 원형 칸에서는 18~22px, 안내 화면 한가운데에서는 28~32px로 쓴다.",
+      "**Do** 상태는 워시 바탕 + 200단계 경계 + 700~900단계 글자로 표현한다.",
+      "**Do** 떠 있는 것(모달·드롭다운·서랍)에만 뚜렷한 그림자를 쓰고, 나머지는 경계선과 명도 층으로 깊이를 만든다.",
+      "**Do** 데이터가 없는 자리는 슬레이트 400의 짧은 안내 문장으로 비워 둔다."
+    ],
+    "donts": [
+      "**Don't** 이모지를 아이콘으로 쓰지 않는다. 아이콘은 `app/icons.tsx`의 `<Icon name=\"…\" />`로만 그린다. 새 그림이 필요하면 같은 규격(24 좌표계, 선 굵기 2, 둥근 끝, `currentColor`)으로 그 파일에 추가한다. 화살표·체크·별(→ ✓ ★ ▾) 같은 글자 기호는 아직 곳곳에 남아 있다.",
+      "**Don't** 그라데이션 텍스트(`bg-clip-text`)와 장식용 블러 배경(`blur-3xl` 원 등)을 쓰지 않는다 (현재 랜딩 히어로가 둘 다 어긋나 있다).",
+      "**Don't** 실체 없는 배지를 달지 않는다. 배지는 실제 상태나 데이터를 나타낼 때만 쓴다(현재 사이드바와 관문 상단바의 'Pro' 배지가 어긋나 있다 — 결제·구독은 범위 밖이다).",
+      "**Don't** 기본 행동 버튼에 액션 블루 외의 색을 쓰지 않는다(삭제와 주의 배너 안 해결 버튼만 예외 — The One Blue Rule).",
+      "**Don't** 상태 색으로 넓은 면을 채우지 않는다.",
+      "**Don't** 시맨틱 CSS 레이어(`:root`의 `--primary`·`--muted` 등, `.btn` 계열)에 새 토큰이나 새 의미 클래스를 더하지 않는다. 옮기는 중인 레이어다.",
+      "**Don't** Tailwind preflight를 켜지 않는다. `globals.css`의 자체 리셋과 겹쳐 기존 규칙의 기본값이 조용히 어긋난다."
+    ]
+  }
+}

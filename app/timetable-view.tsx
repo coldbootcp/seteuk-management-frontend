@@ -12,6 +12,7 @@ import {
   type PresetCourse,
 } from "./types/academic";
 import type { StudentActivity } from "../lib/product-harness";
+import { Icon } from "./icons";
 
 interface TimetableViewProps {
   currentGrade: number;
@@ -364,7 +365,7 @@ export function TimetableView({
             onClick={() => setIsSearchModalOpen(true)}
             type="button"
           >
-            <span>🔍</span>
+            <Icon name="search" size={14} />
             <span>과목 검색·불러오기</span>
           </button>
         </div>
@@ -439,7 +440,10 @@ export function TimetableView({
               <span className="text-gray-300">·</span>
               <span className="text-brand-600 font-bold">총 {totalUnits > 0 ? `${totalUnits}단위` : "단위수 미입력"}</span>
             </div>
-            <div className="text-[11px] text-gray-500">💡 과목 카드를 누르면 그 과목의 기록이 열립니다.</div>
+            <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
+              <Icon className="flex-none" name="lightbulb" size={13} />
+              <span>과목 카드를 누르면 그 과목의 기록이 열립니다.</span>
+            </div>
           </div>
         </div>
 
@@ -448,7 +452,7 @@ export function TimetableView({
           {/* 학기 선택 */}
           <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
             <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
-              <span>🗓</span> 학기 선택
+              <Icon name="calendar" size={14} /> 학기 선택
             </span>
             <select
               className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold bg-gray-50/50 focus:bg-white focus:border-brand-500 focus:outline-none transition"
@@ -476,7 +480,14 @@ export function TimetableView({
                 }}
                 type="button"
               >
-                {isUpdatingPeriod ? "변경 중…" : `📍 현재 학기를 ${selGrade}학년 ${selSemester}학기로 설정`}
+                {isUpdatingPeriod ? (
+                  "변경 중…"
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon name="map-pin" size={13} />
+                    {`현재 학기를 ${selGrade}학년 ${selSemester}학기로 설정`}
+                  </span>
+                )}
               </button>
             )}
           </div>

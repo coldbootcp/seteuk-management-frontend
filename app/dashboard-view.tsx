@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ProductWorkspace } from "../lib/product-harness";
 import { backendRecordToGradeItem, fetchAcademicRecords } from "../lib/academic-records-api";
 import type { HighSchoolGradeItem } from "./types/academic";
+import { Icon } from "./icons";
 
 type TabTarget = "overview" | "grades" | "activities" | "profile" | "chat";
 
@@ -114,7 +115,7 @@ export function DashboardView({
       <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="text-base">🎯</span>
+            <Icon className="text-brand-600" name="target" size={18} />
             <h2 className="text-base font-extrabold text-gray-950">
               이번 학기({profile.grade}-{profile.semester}) 핵심 목표
             </h2>
@@ -179,11 +180,12 @@ export function DashboardView({
             활동 기록 보기
           </button>
           <button
-            className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition"
             onClick={() => onNavigate("chat")}
             type="button"
           >
-            ✨ AI 컨설턴트에게 묻기
+            <Icon name="sparkles" size={14} />
+            <span>AI 컨설턴트에게 묻기</span>
           </button>
         </div>
       </div>
@@ -250,7 +252,7 @@ export function DashboardView({
         <section className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2 pb-3 border-b border-gray-100">
             <h3 className="text-base font-extrabold text-gray-950">내신 성적 요약</h3>
-            <span className="text-sm">📈</span>
+            <Icon className="text-gray-400" name="trending-up" size={18} />
           </div>
 
           {gradeItems === null ? (

@@ -42,3 +42,9 @@ next-env.d.ts
 /outputs/
 /work/
 tsconfig.tsbuildinfo
+
+# claude code (local settings + vendored impeccable install)
+/.claude/settings.local.json
+/.claude/skills/impeccable/
+/.claude/agents/impeccable-*.md
+/.impeccable/config.local.json

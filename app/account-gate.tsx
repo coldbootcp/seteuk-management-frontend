@@ -10,6 +10,7 @@ import {
   type AccountStatus,
 } from "../lib/api-client";
 import { GateFrame } from "./gate-frame";
+import { Icon } from "./icons";
 
 /** 인증 여부를 몇 초 간격으로 조용히 확인하는 주기(ms). 사용자가 다른
  * 탭에서 메일의 링크를 누르면, 이 화면을 새로고침하지 않아도 자동으로
@@ -59,7 +60,7 @@ export function EmailVerificationGate({
   return (
     <GateFrame badge="이메일 인증" onSignOut={onSignOut}>
       <div className="max-w-md mx-auto bg-white rounded-2xl border border-gray-200/80 p-8 text-center space-y-4">
-        <div className="text-3xl">📩</div>
+        <Icon className="mx-auto text-brand-600" name="mail" size={32} />
         <h2 className="text-lg font-extrabold text-gray-950">이메일 인증을 완료해주세요</h2>
         <p className="text-xs text-gray-600 leading-relaxed">
           <strong className="text-gray-950">{email}</strong>로 인증 메일을 보냈습니다. 메일함(스팸함
@@ -147,7 +148,7 @@ export function WithdrawalPendingGate({
   return (
     <GateFrame badge="탈퇴 예정" onSignOut={onSignOut}>
       <div className="max-w-md mx-auto bg-white rounded-2xl border border-gray-200/80 p-8 text-center space-y-4">
-        <div className="text-3xl">⏳</div>
+        <Icon className="mx-auto text-amber-600" name="timer" size={32} />
         <h2 className="text-lg font-extrabold text-gray-950">탈퇴가 예약되어 있습니다</h2>
         <p className="text-xs text-gray-600 leading-relaxed">
           {scheduledDate && (

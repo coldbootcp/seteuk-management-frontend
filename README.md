@@ -187,7 +187,7 @@ Two rules keep the split clean:
 | Styling | Tailwind CSS v4 utilities over a hand‑written design system (Pretendard, Toss‑inspired tokens) |
 | API | FastAPI · Python 3.12 · SQLAlchemy 2.0 (async) · Alembic |
 | Database | PostgreSQL |
-| Auth | JWT access + refresh, Kakao social login |
+| Auth | JWT access + refresh, Google social login |
 | Streaming | Server‑Sent Events for the chatbot (parsed from `fetch`, so the request can carry an auth header) |
 | LLM | Chosen per environment behind a provider boundary in the backend — the same call sites serve parsing, diagnosis, planning, recommendations and chat |
 
@@ -204,7 +204,7 @@ Create `.env.local` if your backend is not on the default origin:
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
-NEXT_PUBLIC_KAKAO_JS_KEY=          # optional — no key means no Kakao button
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=      # optional — no key means no Google button
 ```
 
 Then:

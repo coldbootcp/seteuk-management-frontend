@@ -14,6 +14,7 @@ import {
 } from "../lib/academic-records-api";
 import { api } from "../lib/api-client";
 import type { components } from "../lib/api-types";
+import { Icon } from "./icons";
 
 type EducationPolicyResolution = components["schemas"]["EducationPolicyResolutionRead"];
 
@@ -865,7 +866,7 @@ export function GradesView({
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            {syncStatus === "saving" && <span className="text-[11px] text-gray-400 font-semibold">☁️ 저장 중…</span>}
+            {syncStatus === "saving" && <span className="text-[11px] text-gray-400 font-semibold inline-flex items-center gap-1"><Icon name="cloud" size={13} />저장 중…</span>}
             {syncStatus === "synced" && <span className="text-[11px] text-emerald-600 font-semibold">✓ 동기화 완료</span>}
             {importNotice && <span className="text-[11px] text-brand-600 font-semibold">{importNotice}</span>}
             <button
@@ -873,7 +874,7 @@ export function GradesView({
               onClick={handleImportFromTimetable}
               type="button"
             >
-              <span>📅</span> 시간표에서 불러오기
+              <Icon name="calendar" size={14} /> 시간표에서 불러오기
             </button>
             <button
               className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-xs font-bold transition"

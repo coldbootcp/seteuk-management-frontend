@@ -10,6 +10,7 @@
  */
 
 import type { ReactNode } from "react";
+import { Icon } from "./icons";
 
 export function GateFrame({
   badge,
@@ -44,7 +45,7 @@ export function GateFrame({
             onClick={onSignOut}
             type="button"
           >
-            <span>🚪</span>
+            <Icon name="logout" size={14} />
             <span>로그아웃</span>
           </button>
         </div>

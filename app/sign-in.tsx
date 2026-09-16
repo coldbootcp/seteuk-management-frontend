@@ -4,10 +4,8 @@ import { useState } from "react";
 import {
   ApiError,
   GOOGLE_CLIENT_ID,
-  KAKAO_JS_KEY,
   login,
   loginWithGoogle,
-  loginWithKakao,
   requestPasswordReset,
   resendVerificationEmail,
   signup,
@@ -21,9 +19,7 @@ import { PasswordHints } from "./password-hints";
  * ChatGPT 안에서 돌지 않기로 했다(통합 결정 P-4). 인증은 백엔드 JWT가 맡는다.
  *
  * 화면은 목업(preview-3200)의 로그인 카드를 따르되, **백엔드가 받쳐주지 않는 것은
- * 눌리는 버튼으로 두지 않는다.** 애플 로그인은 아직 백엔드에 없으므로 '준비 중'으로
- * 비활성화한다 — 눌러도 아무 일이 없는 버튼은 사용자가 고장으로 읽는다. 구글·
- * 비밀번호 찾기는 이제 실제로 동작한다.
+ * 눌리는 버튼으로 두지 않는다.** 소셜 로그인은 구글 하나만 노출한다.
  */
 
 type Mode = "login" | "signup" | "forgot";
@@ -122,23 +118,6 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     }
   }
 
-  async function submitKakao() {
-    setError("");
-    setBusy(true);
-    try {
-      await loginWithKakao();
-      onSignedIn();
-    } catch (caught) {
-      // 사용자가 카카오 창을 그냥 닫은 것은 실패가 아니다 — 조용히 돌아온다.
-      const message = caught instanceof Error ? caught.message : "";
-      if (!/cancel|popup|closed/i.test(message)) {
-        setError(message || "카카오 로그인을 마치지 못했습니다.");
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function submitGoogle() {
     setError("");
     setBusy(true);
@@ -146,6 +125,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
       await loginWithGoogle();
       onSignedIn();
     } catch (caught) {
+      // 사용자가 구글 창을 그냥 닫은 것은 실패가 아니다 — 조용히 돌아온다.
       const message = caught instanceof Error ? caught.message : "";
       if (!/cancel|popup|closed/i.test(message)) {
         setError(message || "구글 로그인을 마치지 못했습니다.");
@@ -257,19 +237,6 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
           {/* 소셜 로그인 */}
           <div className="space-y-2.5">
             <button
-              className="w-full py-3 px-4 bg-[#FEE500] hover:bg-[#FDD800] text-[#381E1F] font-extrabold text-xs rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
-              disabled={busy || !KAKAO_JS_KEY}
-              onClick={submitKakao}
-              title={KAKAO_JS_KEY ? undefined : "카카오 로그인 키가 아직 설정되지 않았습니다"}
-              type="button"
-            >
-              <svg className="w-4 h-4 fill-current flex-none" viewBox="0 0 24 24">
-                <path d="M12 3c-4.97 0-9 3.185-9 7.115 0 2.557 1.708 4.8 4.27 6.054-.187.707-.677 2.56-.775 2.964-.122.506.186.499.392.363.162-.107 2.573-1.748 3.612-2.456.491.07 1.002.107 1.521.107 4.97 0 9-3.185 9-7.115S16.97 3 12 3z" />
-              </svg>
-              <span>{KAKAO_JS_KEY ? "카카오로 1초 만에 시작하기" : "카카오 로그인 (준비 중)"}</span>
-            </button>
-
-            <button
               className="w-full py-3 px-4 bg-white hover:bg-gray-50 text-gray-700 font-extrabold text-xs rounded-xl border border-gray-300 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={busy || !GOOGLE_CLIENT_ID}
               onClick={submitGoogle}
@@ -295,16 +262,6 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
                 />
               </svg>
               <span>{GOOGLE_CLIENT_ID ? "Google로 계속하기" : "Google 로그인 (준비 중)"}</span>
-            </button>
-
-            <button
-              className="w-full py-2.5 px-3 bg-white text-gray-400 font-bold text-xs rounded-xl border border-gray-200 flex items-center justify-center gap-1.5 cursor-not-allowed"
-              disabled
-              title="준비 중입니다"
-              type="button"
-            >
-              <span>Apple로 계속하기</span>
-              <span className="text-[10px] font-semibold">준비 중</span>
             </button>
           </div>
 

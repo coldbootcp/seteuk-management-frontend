@@ -11,6 +11,7 @@ import { streamConsultationMessage } from "../lib/chat";
 import type { ConsultationSession, ConsultationStatus } from "../lib/product-harness";
 import { GateFrame } from "./gate-frame";
 import { ChatComposer, ChatThread, type ChatBubble } from "./chat-thread";
+import { Icon } from "./icons";
 
 type DiagnosisResult = {
   status: "processing" | "done" | "failed";
@@ -267,8 +268,8 @@ export function ConsultationGate({
         {/* 진단 대기 — 몇 분 걸리므로 진행을 지어내지 않고 무엇을 하는 중인지만 말한다. */}
         {phase === "diagnosing" && !diagnosisError && (
           <section className="bg-white p-8 rounded-2xl border border-gray-200/80 shadow-xs max-w-lg mx-auto text-center space-y-5">
-            <span className="w-16 h-16 rounded-2xl bg-blue-50 text-brand-600 text-2xl flex items-center justify-center mx-auto animate-pulse">
-              ⚡
+            <span className="w-16 h-16 rounded-2xl bg-blue-50 text-brand-600 flex items-center justify-center mx-auto animate-pulse">
+              <Icon name="zap" size={28} />
             </span>
             <div>
               <h2 className="text-lg font-bold text-gray-900">지금까지의 기록을 정밀 분석하는 중…</h2>
@@ -298,8 +299,8 @@ export function ConsultationGate({
         {diagnosis && diagnosisIsEmpty && (
           <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs">
             <div className="flex items-start gap-3">
-              <span className="w-9 h-9 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center flex-none text-base">
-                ⌁
+              <span className="w-9 h-9 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center flex-none">
+                <Icon name="file" size={18} />
               </span>
               <div className="space-y-1.5">
                 <h2 className="text-base font-extrabold text-gray-950">아직 과거 기록 기반 진단은 만들지 않았어요</h2>
@@ -315,7 +316,7 @@ export function ConsultationGate({
         {diagnosis && !diagnosisIsEmpty && (
           <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-5">
             <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
-              <span className="text-base">🔬</span>
+              <Icon className="text-brand-600" name="microscope" size={18} />
               <h2 className="text-base font-extrabold text-gray-950">AI 정밀 진단 리포트</h2>
             </div>
 
@@ -358,7 +359,7 @@ export function ConsultationGate({
           <section className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden flex flex-col h-[560px]">
             <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 flex-none">
               <div className="flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center text-xs flex-none">🤖</span>
+                <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center flex-none"><Icon name="bot" size={15} /></span>
                 <div>
                   <strong className="block text-xs font-extrabold text-gray-950">AI 입시 컨설턴트 상담</strong>
                   <span className="block text-[11px] text-gray-400">대화를 마치면 이번 학기 목표와 탐구 주제가 정해집니다</span>
