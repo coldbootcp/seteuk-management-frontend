@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   DAYS_KR,
   PERIOD_TIMES,
@@ -10,8 +10,6 @@ import {
   type TimetableSlot,
   type TimetableConfig,
   type PresetCourse,
-  type HighSchoolCourseCategory,
-  type SubjectGroup,
 } from "./types/academic";
 import type { StudentActivity } from "../lib/product-harness";
 
@@ -25,6 +23,20 @@ interface TimetableViewProps {
   onNavigateToGrades?: () => void;
   onNavigateToActivities?: (subjectName: string) => void;
   onUpdateCurrentPeriod?: (grade: number, semester: number) => Promise<void> | void;
+}
+
+type CourseDraft = {
+  name: string;
+  teacher?: string;
+  room?: string;
+  units?: number;
+  preset?: PresetCourse;
+};
+
+type Placement = { day: number; period: number };
+
+function courseColorIndex(courseName: string) {
+  return Array.from(courseName).reduce((sum, character) => sum + character.charCodeAt(0), 0) % PALETTE_COLORS.length;
 }
 
 export function TimetableView({
@@ -70,6 +82,10 @@ export function TimetableView({
       updatedAt: "방금 전",
     };
   const slots = activeTimetable.slots;
+  const courseColorMap = useMemo(() => {
+    const names = Array.from(new Set(slots.map((slot) => slot.courseName))).sort((a, b) => a.localeCompare(b));
+    return new Map(names.map((name, index) => [name, index % PALETTE_COLORS.length]));
+  }, [slots]);
 
   // 학기 변경 핸들러
   const handlePeriodChange = (newPeriod: string) => {
@@ -101,12 +117,19 @@ export function TimetableView({
   // 모달 상태
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isDirectAddModalOpen, setIsDirectAddModalOpen] = useState(false);
+  const [placementCourse, setPlacementCourse] = useState<CourseDraft | null>(null);
+  const [directPlacement, setDirectPlacement] = useState<Placement | null>(null);
+  const [lunchAfterPeriod, setLunchAfterPeriod] = useState(4);
+  const [draggingLunch, setDraggingLunch] = useState(false);
+  const [lunchHoverAfterPeriod, setLunchHoverAfterPeriod] = useState<number | null>(null);
+  const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
+  const [editingSlot, setEditingSlot] = useState<TimetableSlot | null>(null);
 
   // 총 이수 단위 계산 (고유 과목명 기준)
   const uniqueCourses = Array.from(new Set(slots.map((s) => s.courseName)));
   const totalUnits = uniqueCourses.reduce((acc, courseName) => {
     const found = slots.find((s) => s.courseName === courseName);
-    return acc + (found?.units || 4);
+    return acc + (found?.units || 0);
   }, 0);
 
   // 기본 시간표로 설정 핸들러 (학생의 공식 수강 과목으로 확정)
@@ -121,15 +144,46 @@ export function TimetableView({
 
   // 슬롯 추가 핸들러
   const handleAddSlot = (newSlot: TimetableSlot) => {
+    handleAddSlots([newSlot]);
+  };
+
+  const handleAddSlots = (newSlots: TimetableSlot[]) => {
     const updated = {
       ...activeTimetable,
-      slots: [...activeTimetable.slots, newSlot],
+      slots: [...activeTimetable.slots, ...newSlots],
       updatedAt: "방금 전",
     };
     const updatedAll = timetables.some((t) => t.id === activeTimetable.id)
       ? timetables.map((t) => (t.id === activeTimetable.id ? updated : t))
       : [...timetables, updated];
     onTimetablesChange(updatedAll);
+  };
+
+  const handleMoveSlot = (slotId: string, day: number, period: number) => {
+    const dragged = slots.find((slot) => slot.id === slotId);
+    if (!dragged || (dragged.day === day && dragged.startPeriod === period)) return;
+    const target = slots.find((slot) => slot.id !== slotId && slot.day === day && slot.startPeriod === period);
+    const updatedSlots = slots.map((slot) => {
+      if (slot.id === slotId) return { ...slot, day, startPeriod: period };
+      if (target && slot.id === target.id) return { ...slot, day: dragged.day, startPeriod: dragged.startPeriod };
+      return slot;
+    });
+    const updated = { ...activeTimetable, slots: updatedSlots, updatedAt: "방금 전" };
+    onTimetablesChange(timetables.map((t) => (t.id === activeTimetable.id ? updated : t)));
+  };
+
+  const handleUpdateSlot = (updatedSlot: TimetableSlot) => {
+    const updated = { ...activeTimetable, slots: slots.map((slot) => slot.id === updatedSlot.id ? updatedSlot : slot), updatedAt: "방금 전" };
+    onTimetablesChange(timetables.map((t) => (t.id === activeTimetable.id ? updated : t)));
+    setSelectedSlot(updatedSlot);
+    setEditingSlot(null);
+  };
+
+  const updateLunchHover = (period: number, event: React.DragEvent<HTMLElement>) => {
+    if (!draggingLunch) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const afterPeriod = event.clientY < rect.top + rect.height / 2 ? period - 1 : period;
+    setLunchHoverAfterPeriod(Math.max(0, Math.min(7, afterPeriod)));
   };
 
   // 슬롯 삭제 핸들러 (확인 팝업 추가)
@@ -200,13 +254,20 @@ export function TimetableView({
   ];
 
   /** 한 교시 줄. 오전(1~4)과 오후(5~7)를 점심 배너로 나눠 그리려고 쪼개 뒀다. */
-  function periodRow(period: number, time: string) {
+  function periodRow(period: number) {
     return (
-      <div className="grid grid-cols-6 min-h-[78px]" key={period}>
-        <div className="flex flex-col items-center justify-center border-r border-gray-100 bg-gray-50/40 py-2">
-          <span className="font-extrabold text-sm text-gray-800">{period}</span>
-          <span className="text-[10px] text-gray-400 font-mono mt-0.5">{time.split(" - ")[0]}</span>
-        </div>
+      <div
+        className="grid grid-cols-6 min-h-[78px]"
+        key={period}
+      >
+          <div
+            className="flex flex-col items-center justify-center border-r border-gray-100 bg-gray-50/40 py-2 cursor-ns-resize"
+            onDragEnter={() => { if (draggingLunch) setLunchHoverAfterPeriod(period); }}
+            onDragOver={(event) => { if (draggingLunch) { event.preventDefault(); setLunchHoverAfterPeriod(period); } }}
+            onDrop={(event) => { event.preventDefault(); if (draggingLunch) setLunchAfterPeriod(lunchHoverAfterPeriod ?? period); setDraggingLunch(false); setLunchHoverAfterPeriod(null); }}
+          >
+            <span className="font-extrabold text-sm text-gray-800">{period}</span>
+          </div>
 
         {DAYS_KR.map((_, dayIdx) => {
           const slot = slots.find((s) => s.day === dayIdx && s.startPeriod === period);
@@ -214,15 +275,20 @@ export function TimetableView({
           const occupied = slots.some(
             (s) => s.day === dayIdx && s.startPeriod < period && s.startPeriod + s.periodSpan > period,
           );
-          const palette = slot ? getGroupColor(slot.group, slot.colorIndex) : null;
+          const palette = slot ? getGroupColor(slot.group, courseColorMap.get(slot.courseName) ?? courseColorIndex(slot.courseName)) : null;
           const isSelected = Boolean(slot && selectedSlot?.id === slot.id);
 
           return (
             <div className="p-1.5 border-r border-gray-100 last:border-r-0 flex flex-col" key={`${dayIdx}-${period}`}>
               {occupied ? null : slot && palette ? (
                 <button
+                  draggable
                   className="flex-1 w-full p-2 rounded-xl border text-left transition hover:shadow-md flex flex-col justify-between group"
                   onClick={() => setSelectedSlot(slot)}
+                  onDragStart={(event) => { event.stopPropagation(); setDraggingSlotId(slot.id); }}
+                  onDragEnd={() => setDraggingSlotId(null)}
+                  onDragOver={(event) => { if (draggingSlotId) event.preventDefault(); }}
+                  onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (draggingSlotId) handleMoveSlot(draggingSlotId, dayIdx, period); setDraggingSlotId(null); }}
                   style={{
                     backgroundColor: palette.bg,
                     borderColor: isSelected ? "#3182F6" : palette.border,
@@ -243,13 +309,15 @@ export function TimetableView({
                     </span>
                   </span>
                   <span className="text-[10px] opacity-80 font-medium mt-1 block truncate">
-                    {[slot.room, slot.teacher].filter(Boolean).join(" · ") || `${slot.units}단위`}
+                    {[slot.room, slot.teacher].filter(Boolean).join(" · ") || (slot.units > 0 ? `${slot.units}단위` : "단위수 추후 입력")}
                   </span>
                 </button>
               ) : (
                 <button
                   className="flex-1 w-full rounded-xl border border-dashed border-gray-200 hover:border-brand-400 hover:bg-blue-50/40 transition flex items-center justify-center text-gray-300 hover:text-brand-500 text-xs font-bold"
-                  onClick={() => setIsDirectAddModalOpen(true)}
+                  onClick={() => { setDirectPlacement({ day: dayIdx, period }); setIsDirectAddModalOpen(true); }}
+                  onDragOver={(event) => { if (draggingSlotId) event.preventDefault(); }}
+                  onDrop={(event) => { event.preventDefault(); if (draggingSlotId) handleMoveSlot(draggingSlotId, dayIdx, period); setDraggingSlotId(null); }}
                   title="과목 추가하기"
                   type="button"
                 >
@@ -285,7 +353,7 @@ export function TimetableView({
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             className="px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow transition flex items-center gap-1.5"
-            onClick={() => setIsDirectAddModalOpen(true)}
+            onClick={() => { setDirectPlacement(null); setIsDirectAddModalOpen(true); }}
             type="button"
           >
             <span>+</span>
@@ -306,7 +374,7 @@ export function TimetableView({
         {/* 시간표 그리드 */}
         <div className="xl:col-span-8 bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
           <div className="grid grid-cols-6 border-b border-gray-200/80 bg-gray-50/80 text-center text-xs font-bold text-gray-700 py-3">
-            <div className="text-gray-400 font-semibold">교시</div>
+            <div className="text-gray-400 font-semibold">순서</div>
             {DAYS_KR.map((day) => (
               <div className="flex items-center justify-center gap-1" key={day}>
                 <span>{day}</span>
@@ -316,16 +384,51 @@ export function TimetableView({
           </div>
 
           <div className="divide-y divide-gray-100 text-xs">
-            {PERIOD_TIMES.filter((p) => p.period <= 4).map(({ period, time }) => periodRow(period, time))}
-          </div>
-
-          <div className="bg-amber-50/70 border-y border-amber-200/70 py-2 px-4 flex items-center justify-center gap-2 text-xs font-semibold text-amber-900">
-            <span>🍽</span>
-            <span>점심시간 &amp; 휴식 (12:50 ~ 13:50 · 60분)</span>
-          </div>
-
-          <div className="divide-y divide-gray-100 text-xs">
-            {PERIOD_TIMES.filter((p) => p.period >= 5).map(({ period, time }) => periodRow(period, time))}
+            {PERIOD_TIMES.map(({ period }) => (
+              <div
+                key={period}
+                onDragEnter={() => { if (draggingLunch) setLunchHoverAfterPeriod(period); }}
+                onDragOver={(event) => { if (draggingLunch) { event.preventDefault(); updateLunchHover(period, event); } }}
+                onDrop={(event) => { if (!draggingLunch) return; event.preventDefault(); setLunchAfterPeriod(lunchHoverAfterPeriod ?? period); setDraggingLunch(false); setLunchHoverAfterPeriod(null); }}
+              >
+                {draggingLunch && lunchHoverAfterPeriod !== null && period === lunchHoverAfterPeriod + 1 && (
+                  <div className="pointer-events-none mx-2 h-1 rounded-full bg-gray-950" aria-hidden="true" />
+                )}
+                {period === lunchAfterPeriod + 1 && (
+                  <div
+                    className="relative bg-amber-50/70 border-y border-amber-200/70 py-2 px-4 flex items-center justify-center gap-2 text-xs font-semibold text-amber-900 cursor-ns-resize"
+                    draggable
+                    onDragStart={() => { setDraggingLunch(true); setLunchHoverAfterPeriod(null); }}
+                    onDragEnd={() => { setDraggingLunch(false); setLunchHoverAfterPeriod(null); }}
+                    title="왼쪽 교시 번호 위로 드래그해 점심시간 위치를 바꿀 수 있습니다"
+                  >
+                    <span aria-hidden="true" className="absolute left-4 inline-flex w-4 flex-col gap-1 opacity-60">
+                      <span className="h-0.5 w-4 rounded-full bg-amber-700" />
+                      <span className="h-0.5 w-4 rounded-full bg-amber-700" />
+                    </span>
+                    <span>🍽</span><span>점심시간 · 휴식</span>
+                  </div>
+                )}
+                {periodRow(period)}
+              </div>
+            ))}
+            {lunchAfterPeriod === 7 && (
+              <>
+                {draggingLunch && <div className="pointer-events-none mx-2 h-1 rounded-full bg-gray-950" aria-hidden="true" />}
+                <div
+                  className="relative bg-amber-50/70 border-y border-amber-200/70 py-2 px-4 flex items-center justify-center gap-2 text-xs font-semibold text-amber-900 cursor-ns-resize"
+                  draggable
+                  onDragStart={() => { setDraggingLunch(true); setLunchHoverAfterPeriod(null); }}
+                  onDragEnd={() => { setDraggingLunch(false); setLunchHoverAfterPeriod(null); }}
+                >
+                  <span aria-hidden="true" className="absolute left-4 inline-flex w-4 flex-col gap-1 opacity-60">
+                    <span className="h-0.5 w-4 rounded-full bg-amber-700" />
+                    <span className="h-0.5 w-4 rounded-full bg-amber-700" />
+                  </span>
+                  <span>🍽</span><span>점심시간 · 휴식</span>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="p-4 px-5 bg-gray-50/70 border-t border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-600 font-medium">
@@ -334,7 +437,7 @@ export function TimetableView({
               <span className="text-gray-300">·</span>
               <span>주당 <strong className="text-gray-900">{slots.length}시수</strong></span>
               <span className="text-gray-300">·</span>
-              <span className="text-brand-600 font-bold">총 {totalUnits}단위</span>
+              <span className="text-brand-600 font-bold">총 {totalUnits > 0 ? `${totalUnits}단위` : "단위수 미입력"}</span>
             </div>
             <div className="text-[11px] text-gray-500">💡 과목 카드를 누르면 그 과목의 기록이 열립니다.</div>
           </div>
@@ -477,7 +580,7 @@ export function TimetableView({
             ) : (
               <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
                 {courseSummary.map((course) => {
-                  const palette = getGroupColor(course.slot.group, course.slot.colorIndex);
+                  const palette = getGroupColor(course.slot.group, courseColorMap.get(course.name) ?? courseColorIndex(course.name));
                   return (
                     <button
                       className="w-full p-3 rounded-xl border border-gray-100 hover:border-brand-200 hover:bg-blue-50/30 transition flex items-center justify-between gap-2 text-left"
@@ -509,35 +612,28 @@ export function TimetableView({
 
       {/* 과목 상세 드로어 */}
       {selectedSlot && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-gray-900/30" onClick={() => setSelectedSlot(null)} role="presentation">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/30 p-4" onClick={() => setSelectedSlot(null)} role="presentation">
           <aside
-            className="w-full max-w-sm h-full bg-white shadow-2xl flex flex-col"
+            className="w-full max-w-lg max-h-[90vh] rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden"
             onClick={(event) => event.stopPropagation()}
             role="presentation"
           >
             <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3 flex-none">
               <div className="min-w-0">
-                <span className="text-[10px] font-bold text-gray-400 block">
-                  {selectedSlot.category} · {selectedSlot.group}
-                </span>
                 <h3 className="text-lg font-extrabold text-gray-950 tracking-tight truncate">{selectedSlot.courseName}</h3>
               </div>
-              <button
-                className="text-gray-400 hover:text-gray-700 text-sm flex-none"
-                onClick={() => setSelectedSlot(null)}
-                type="button"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2 flex-none">
+                <button className="px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700" onClick={() => setEditingSlot(selectedSlot)} type="button">수정</button>
+                <button className="text-gray-400 hover:text-gray-700 text-sm" onClick={() => setSelectedSlot(null)} type="button">✕</button>
+              </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5">
               <div className="grid grid-cols-2 gap-2.5">
                 {[
-                  { label: "이수 단위", value: `${selectedSlot.units}단위` },
+                  { label: "이수 단위", value: selectedSlot.units > 0 ? `${selectedSlot.units}단위` : "추후 입력" },
                   { label: "수업 장소", value: selectedSlot.room || "미지정" },
                   { label: "담당 교사", value: selectedSlot.teacher || "미지정" },
-                  { label: "교과 구분", value: selectedSlot.category },
                 ].map((item) => (
                   <div className="p-3 rounded-xl bg-gray-50/70 border border-gray-100" key={item.label}>
                     <span className="block text-[10px] font-bold text-gray-400">{item.label}</span>
@@ -582,43 +678,19 @@ export function TimetableView({
               </section>
             </div>
 
-            <div className="p-5 border-t border-gray-100 space-y-2 flex-none">
-              <button
-                className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition"
-                onClick={() => onNavigateToActivities?.(selectedSlot.courseName)}
-                type="button"
-              >
-                📝 이 과목으로 새 활동 기록하기
-              </button>
-              <button
-                className="w-full py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-100 transition"
-                onClick={onNavigateToGrades}
-                type="button"
-              >
-                📊 이 과목 성적 입력 / 조회
-              </button>
-            </div>
           </aside>
         </div>
+      )}
+
+      {editingSlot && (
+        <CourseEditModal slot={editingSlot} onClose={() => setEditingSlot(null)} onSave={handleUpdateSlot} />
       )}
 
       {isSearchModalOpen && (
         <CourseSearchModal
           onClose={() => setIsSearchModalOpen(false)}
-          onSelectCourse={(course, day, period) => {
-            const newSlot: TimetableSlot = {
-              id: `slot-${Date.now()}`,
-              courseName: course.name,
-              category: course.category,
-              group: course.group,
-              units: course.defaultUnits,
-              day,
-              startPeriod: period,
-              periodSpan: 1,
-              colorIndex: Math.floor(Math.random() * PALETTE_COLORS.length),
-              isCareerRelated: course.group === "과학" || course.group === "수학" || course.group === "기술가정/정보",
-            };
-            handleAddSlot(newSlot);
+          onSelectCourse={(course) => {
+            setPlacementCourse({ name: course.name, units: course.defaultUnits, preset: course });
             setIsSearchModalOpen(false);
           }}
         />
@@ -627,12 +699,85 @@ export function TimetableView({
       {isDirectAddModalOpen && (
         <DirectAddModal
           onClose={() => setIsDirectAddModalOpen(false)}
-          onAddSlot={(slot) => {
-            handleAddSlot(slot);
+          currentGrade={currentGrade}
+          currentSemester={currentSemester}
+          initialPlacement={directPlacement}
+          onAddCourse={(course, placement) => {
+            if (placement) {
+              const preset = course.preset;
+              handleAddSlot({
+                id: `slot-${Date.now()}`,
+                courseName: course.name,
+                teacher: course.teacher,
+                room: course.room,
+                category: preset?.category ?? "일반선택",
+                group: preset?.group ?? "기타",
+                units: course.units ?? 0,
+                day: placement.day,
+                startPeriod: placement.period,
+                periodSpan: 1,
+                colorIndex: courseColorIndex(course.name),
+                isCareerRelated: Boolean(preset && ["과학", "수학", "기술가정/정보"].includes(preset.group)),
+              });
+              setPlacementCourse(course);
+            } else {
+              setPlacementCourse({ ...course, units: course.units ?? course.preset?.defaultUnits ?? 0 });
+            }
+            setDirectPlacement(null);
             setIsDirectAddModalOpen(false);
           }}
         />
       )}
+
+      {placementCourse && (
+        <PlacementModal
+          course={placementCourse}
+          onClose={() => setPlacementCourse(null)}
+          existingSlots={slots}
+          onPlace={(placements) => {
+            const preset = placementCourse.preset;
+            const additions = placements.map(({ day, period }, index) => ({
+              id: `slot-${Date.now()}-${index}`,
+              courseName: placementCourse.name,
+              teacher: placementCourse.teacher,
+              room: placementCourse.room,
+              category: preset?.category ?? "일반선택",
+              group: preset?.group ?? "기타",
+              units: placementCourse.units ?? preset?.defaultUnits ?? 0,
+              day,
+              startPeriod: period,
+              periodSpan: 1,
+              colorIndex: courseColorIndex(placementCourse.name),
+              isCareerRelated: Boolean(preset && ["과학", "수학", "기술가정/정보"].includes(preset.group)),
+            }));
+            handleAddSlots(additions);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CourseEditModal({ slot, onClose, onSave }: { slot: TimetableSlot; onClose: () => void; onSave: (slot: TimetableSlot) => void }) {
+  const [courseName, setCourseName] = useState(slot.courseName);
+  const [teacher, setTeacher] = useState(slot.teacher ?? "");
+  const [room, setRoom] = useState(slot.room ?? "");
+  const [units, setUnits] = useState(slot.units > 0 ? String(slot.units) : "later");
+
+  return (
+    <div className="tt-modal-backdrop" onClick={onClose}>
+      <div className="tt-dialog-box" onClick={(event) => event.stopPropagation()}>
+        <div className="tt-dialog-header"><h3>과목 정보 수정</h3><button type="button" onClick={onClose}>✕</button></div>
+        <form className="tt-dialog-form" onSubmit={(event) => { event.preventDefault(); if (!courseName.trim()) return; onSave({ ...slot, courseName: courseName.trim(), teacher: teacher.trim() || undefined, room: room.trim() || undefined, units: units === "later" ? 0 : Number(units), colorIndex: courseColorIndex(courseName.trim()) }); }}>
+          <label><span>과목명 *</span><input required value={courseName} onChange={(event) => setCourseName(event.target.value)} /></label>
+          <div className="tt-form-row">
+            <label><span>교사명 <em>(선택)</em></span><input value={teacher} onChange={(event) => setTeacher(event.target.value)} /></label>
+            <label><span>강의실 <em>(선택)</em></span><input value={room} onChange={(event) => setRoom(event.target.value)} /></label>
+          </div>
+          <label><span>단위수 *</span><select required value={units} onChange={(event) => setUnits(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}단위</option>)}<option value="later">추후 입력</option></select></label>
+          <div className="tt-dialog-footer"><button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>취소</button><button type="submit" className="btn btn-primary btn-sm">저장</button></div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -645,12 +790,10 @@ function CourseSearchModal({
   onSelectCourse,
 }: {
   onClose: () => void;
-  onSelectCourse: (course: PresetCourse, day: number, period: number) => void;
+  onSelectCourse: (course: PresetCourse) => void;
 }) {
   const [filterGroup, setFilterGroup] = useState<string>("all");
   const [searchKeyword, setSearchKeyword] = useState<string>("");
-  const [selectedDay, setSelectedDay] = useState<number>(0);
-  const [selectedPeriod, setSelectedPeriod] = useState<number>(1);
 
   const filteredCourses = SUBJECT_PRESETS.filter((c) => {
     const matchGroup = filterGroup === "all" || c.group === filterGroup;
@@ -671,20 +814,7 @@ function CourseSearchModal({
           </button>
         </div>
 
-        {/* 시간대 선택기 */}
-        <div className="tt-slot-picker-row">
-          <label>추가할 시간:</label>
-          <select value={selectedDay} onChange={(e) => setSelectedDay(Number(e.target.value))}>
-            {DAYS_KR.map((day, idx) => (
-              <option key={day} value={idx}>{day}요일</option>
-            ))}
-          </select>
-          <select value={selectedPeriod} onChange={(e) => setSelectedPeriod(Number(e.target.value))}>
-            {PERIOD_TIMES.map(({ period }) => (
-              <option key={period} value={period}>{period}교시</option>
-            ))}
-          </select>
-        </div>
+        <p className="text-xs text-gray-500 mb-3">과목을 고른 뒤 요일과 교시를 한 번 더 선택합니다.</p>
 
         {/* 검색 필터 바 (에브리타임 스타일) */}
         <div className="tt-sheet-filters">
@@ -738,7 +868,7 @@ function CourseSearchModal({
                     <button
                       type="button"
                       className="tt-btn-add-course"
-                      onClick={() => onSelectCourse(course, selectedDay, selectedPeriod)}
+                      onClick={() => onSelectCourse(course)}
                     >
                       + 담기
                     </button>
@@ -758,20 +888,22 @@ function CourseSearchModal({
    ────────────────────────────────────────────── */
 function DirectAddModal({
   onClose,
-  onAddSlot,
+  onAddCourse,
+  currentGrade,
+  currentSemester,
+  initialPlacement,
 }: {
   onClose: () => void;
-  onAddSlot: (slot: TimetableSlot) => void;
+  onAddCourse: (course: CourseDraft, placement: Placement | null) => void;
+  currentGrade: number;
+  currentSemester: number;
+  initialPlacement: Placement | null;
 }) {
   const [courseName, setCourseName] = useState("");
   const [teacher, setTeacher] = useState("");
   const [room, setRoom] = useState("");
-  const [day, setDay] = useState(0);
-  const [startPeriod, setStartPeriod] = useState(1);
-  const [category, setCategory] = useState<HighSchoolCourseCategory>("일반선택");
-  const [group, setGroup] = useState<SubjectGroup>("과학");
-  const [units, setUnits] = useState(4);
-  const [isCareerRelated, setIsCareerRelated] = useState(true);
+  const [units, setUnits] = useState("");
+  const commonCourses = commonCoursesForSemester(currentGrade, currentSemester);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -779,21 +911,14 @@ function DirectAddModal({
       alert("과목명을 입력해주세요.");
       return;
     }
-    const newSlot: TimetableSlot = {
-      id: `slot-${Date.now()}`,
-      courseName: courseName.trim(),
+    const preset = SUBJECT_PRESETS.find((course) => course.name === courseName.trim());
+    onAddCourse({
+      name: courseName.trim(),
       teacher: teacher.trim() || undefined,
       room: room.trim() || undefined,
-      day,
-      startPeriod,
-      periodSpan: 1,
-      category,
-      group,
-      units,
-      colorIndex: Math.floor(Math.random() * PALETTE_COLORS.length),
-      isCareerRelated,
-    };
-    onAddSlot(newSlot);
+      units: units === "later" ? 0 : Number(units),
+      preset,
+    }, initialPlacement);
   };
 
   return (
@@ -814,9 +939,25 @@ function DirectAddModal({
               onChange={(e) => setCourseName(e.target.value)}
             />
           </label>
+          <div className="space-y-2">
+            <span className="block text-xs font-bold text-gray-700">이 학기에 많이 듣는 과목 예시</span>
+            <div className="flex flex-wrap gap-2">
+              {commonCourses.map((course) => (
+                <button
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${course.name === courseName ? "border-brand-400 bg-brand-50 text-brand-700" : "border-gray-200 bg-gray-50 text-gray-600 hover:border-brand-300 hover:bg-brand-50"}`}
+                  key={course.code}
+                  onClick={() => setCourseName(course.name)}
+                  type="button"
+                >
+                  {course.name}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400">학교마다 개설 과목이 다를 수 있어요. 목록에 없으면 직접 입력하세요.</p>
+          </div>
           <div className="tt-form-row">
             <label>
-              <span>교사명</span>
+              <span>교사명 <em>(선택)</em></span>
               <input
                 type="text"
                 placeholder="예: 박교사"
@@ -825,7 +966,7 @@ function DirectAddModal({
               />
             </label>
             <label>
-              <span>강의실</span>
+              <span>강의실 <em>(선택)</em></span>
               <input
                 type="text"
                 placeholder="예: 과학실"
@@ -836,64 +977,15 @@ function DirectAddModal({
           </div>
           <div className="tt-form-row">
             <label>
-              <span>요일</span>
-              <select value={day} onChange={(e) => setDay(Number(e.target.value))}>
-                {DAYS_KR.map((d, idx) => (
-                  <option key={d} value={idx}>{d}요일</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>교시</span>
-              <select value={startPeriod} onChange={(e) => setStartPeriod(Number(e.target.value))}>
-                {PERIOD_TIMES.map(({ period }) => (
-                  <option key={period} value={period}>{period}교시</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>단위수</span>
-              <input
-                type="number"
-                min="1"
-                max="8"
-                value={units}
-                onChange={(e) => setUnits(Number(e.target.value))}
-              />
-            </label>
-          </div>
-          <div className="tt-form-row">
-            <label>
-              <span>교과군</span>
-              <select value={group} onChange={(e) => setGroup(e.target.value as SubjectGroup)}>
-                <option value="과학">과학</option>
-                <option value="수학">수학</option>
-                <option value="기술가정/정보">기술가정/정보</option>
-                <option value="국어">국어</option>
-                <option value="영어">영어</option>
-                <option value="사회">사회</option>
-                <option value="체육/예술">체육/예술</option>
-                <option value="기타">기타</option>
-              </select>
-            </label>
-            <label>
-              <span>구분</span>
-              <select value={category} onChange={(e) => setCategory(e.target.value as HighSchoolCourseCategory)}>
-                <option value="공통">공통</option>
-                <option value="일반선택">일반선택</option>
-                <option value="진로선택">진로선택</option>
-                <option value="융합선택">융합선택</option>
+              <span>단위수 *</span>
+              <select required value={units} onChange={(e) => setUnits(e.target.value)}>
+                <option value="">단위수 선택</option>
+                {[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}단위</option>)}
+                <option value="later">추후 입력</option>
               </select>
             </label>
           </div>
-          <label className="tt-checkbox-label">
-            <input
-              type="checkbox"
-              checked={isCareerRelated}
-              onChange={(e) => setIsCareerRelated(e.target.checked)}
-            />
-            <span>내 희망 진로(목표 학과)와 관련된 전공 핵심 교과입니다</span>
-          </label>
+          <p className="text-[11px] text-gray-400">{initialPlacement ? "입력하면 위 위치에 바로 추가되고, 이후 다른 시간에도 추가할 수 있습니다." : "입력 후 시간표에서 배치 위치를 선택합니다."}</p>
           <div className="tt-dialog-footer">
             <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>
               취소
@@ -903,6 +995,68 @@ function DirectAddModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function commonCoursesForSemester(grade: number, semester: number): PresetCourse[] {
+  const names = grade === 1
+    ? ["공통국어", "공통수학", "공통영어", "통합사회", "통합과학", "과학탐구실험"]
+    : grade === 2
+      ? ["수학Ⅰ", "수학Ⅱ", "영어Ⅰ", "물리학Ⅰ", "화학Ⅰ", "확률과 통계"]
+      : semester === 1
+        ? ["미적분", "기하", "물리학Ⅱ", "화학Ⅱ", "영어 독해와 작문"]
+        : ["미적분", "확률과 통계", "인공지능 수학", "프로그래밍"];
+  return names.map((name) => SUBJECT_PRESETS.find((course) => course.name === name)).filter((course): course is PresetCourse => Boolean(course));
+}
+
+function PlacementModal({
+  course,
+  existingSlots,
+  onClose,
+  onPlace,
+}: {
+  course: CourseDraft;
+  existingSlots: TimetableSlot[];
+  onClose: () => void;
+  onPlace: (placements: Placement[]) => void;
+}) {
+  const [selected, setSelected] = useState<Placement[]>([]);
+  // 부모 시간표 갱신이 반영되기 전에도 방금 추가한 칸을 즉시 점유 상태로 표시한다.
+  const [addedPlacements, setAddedPlacements] = useState<Placement[]>([]);
+
+  const isOccupied = (day: number, period: number) =>
+    existingSlots.some((slot) => slot.day === day && slot.startPeriod === period) ||
+    addedPlacements.some((placement) => placement.day === day && placement.period === period);
+
+  return (
+    <div className="tt-modal-backdrop" onClick={onClose}>
+      <div className="tt-dialog-box" onClick={(event) => event.stopPropagation()}>
+        <div className="tt-dialog-header">
+          <div><h3>시간표에 배치</h3><p className="text-xs text-gray-500 mt-1">{course.name}을(를) 어느 시간에 넣을까요?</p></div>
+          <button type="button" onClick={onClose}>✕</button>
+        </div>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
+            <div className="grid grid-cols-6 bg-gray-50 border-b border-gray-200 text-[11px] font-bold text-gray-500 text-center">
+              <span className="py-2">교시</span>{DAYS_KR.map((day) => <span className="py-2" key={day}>{day}</span>)}
+            </div>
+            {PERIOD_TIMES.map(({ period }) => (
+              <div className="grid grid-cols-6 border-b last:border-b-0 border-gray-100" key={period}>
+                <span className="flex items-center justify-center py-2 text-[11px] font-bold text-gray-400 bg-gray-50/60">{period}</span>
+                {DAYS_KR.map((_, day) => {
+                  const occupied = existingSlots.find((slot) => slot.day === day && slot.startPeriod === period);
+                  const newlyAdded = addedPlacements.some((placement) => placement.day === day && placement.period === period);
+                  const isSelected = selected.some((placement) => placement.day === day && placement.period === period);
+                  return <button aria-label={`${DAYS_KR[day]}요일 ${period}교시`} className={`min-h-10 m-1 rounded-lg border text-[10px] font-bold transition ${isSelected ? "border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-100" : occupied || newlyAdded ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed" : "border-dashed border-gray-200 text-gray-300 hover:border-brand-300 hover:bg-brand-50/60 hover:text-brand-600"}`} disabled={Boolean(occupied || newlyAdded)} key={`${day}-${period}`} onClick={() => setSelected((current) => isSelected ? current.filter((placement) => !(placement.day === day && placement.period === period)) : [...current, { day, period }])} type="button">{occupied ? occupied.courseName : newlyAdded ? course.name : isSelected ? course.name : "+"}</button>;
+                })}
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400">원하는 칸을 누르면 파란색으로 표시됩니다. 같은 과목을 다른 칸에 추가하려면 배치를 반복하세요.</p>
+          <div className="tt-dialog-footer"><button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>닫기</button><button type="button" className="btn btn-primary btn-sm" disabled={selected.length === 0} onClick={() => { if (selected.length === 0) return; onPlace(selected); setAddedPlacements((current) => [...current, ...selected]); setSelected([]); }}>선택한 {selected.length || ""}곳에 추가</button></div>
+        </div>
       </div>
     </div>
   );
