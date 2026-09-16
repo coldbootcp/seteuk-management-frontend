@@ -187,64 +187,7 @@ export async function cancelWithdrawal(): Promise<AccountStatus> {
   return api<AccountStatus>("/account/cancel-withdrawal", { method: "POST" });
 }
 
-/** 카카오 JS 키가 있을 때만 소셜 로그인을 노출한다 — 키가 없으면 눌러도 되는 일이 없다. */
-export const KAKAO_JS_KEY = process.env.NEXT_PUBLIC_KAKAO_JS_KEY ?? "";
-
-type KakaoSdk = {
-  isInitialized: () => boolean;
-  init: (key: string) => void;
-  Auth: { login: (options: { scope?: string }) => Promise<{ access_token: string }> };
-};
-
-declare global {
-  interface Window {
-    Kakao?: KakaoSdk;
-  }
-}
-
-/**
- * 카카오 SDK를 처음 쓸 때 한 번만 불러온다. 앱을 열자마자 받아 두면 소셜 로그인을
- * 쓰지 않는 사용자에게까지 외부 스크립트를 받게 하는 셈이라 미룬다.
- */
-async function loadKakaoSdk(): Promise<KakaoSdk> {
-  if (!KAKAO_JS_KEY) throw new Error("카카오 로그인이 설정되어 있지 않습니다.");
-  if (!window.Kakao) {
-    await new Promise<void>((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js";
-      script.integrity =
-        "sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4";
-      script.crossOrigin = "anonymous";
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("카카오 로그인을 불러오지 못했습니다."));
-      document.head.appendChild(script);
-    });
-  }
-  const sdk = window.Kakao;
-  if (!sdk) throw new Error("카카오 로그인을 불러오지 못했습니다.");
-  if (!sdk.isInitialized()) sdk.init(KAKAO_JS_KEY);
-  return sdk;
-}
-
-/**
- * 카카오로 로그인한다.
- *
- * 백엔드는 카카오 access token만 받아 카카오 API로 직접 검증한다 — 프론트엔드는
- * 토큰을 받아 넘기기만 하고 사용자 정보를 스스로 해석하지 않는다.
- */
-export async function loginWithKakao(): Promise<{ isNewUser: boolean }> {
-  const sdk = await loadKakaoSdk();
-  const { access_token } = await sdk.Auth.login({ scope: "account_email" });
-  const body = await api<{
-    access_token: string;
-    refresh_token: string;
-    is_new_user: boolean;
-  }>("/auth/social/kakao", { method: "POST", body: { kakao_access_token: access_token } });
-  tokens.set(body.access_token, body.refresh_token);
-  return { isNewUser: body.is_new_user };
-}
-
-/** 구글 JS 키가 있을 때만 소셜 로그인을 노출한다 — 카카오와 같은 원칙. */
+/** 구글 클라이언트 ID가 있을 때만 소셜 로그인을 노출한다 — 키가 없으면 눌러도 되는 일이 없다. */
 export const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
 type GoogleTokenClient = { requestAccessToken: () => void };
@@ -268,7 +211,7 @@ declare global {
   }
 }
 
-/** 구글 SDK를 처음 쓸 때 한 번만 불러온다 — 카카오와 같은 이유(안 쓰는 사용자에게까지 외부 스크립트를 받게 하지 않는다). */
+/** 구글 SDK를 처음 쓸 때 한 번만 불러온다 — 안 쓰는 사용자에게까지 외부 스크립트를 받게 하지 않는다. */
 async function loadGoogleSdk(): Promise<GoogleSdk> {
   if (!GOOGLE_CLIENT_ID) throw new Error("구글 로그인이 설정되어 있지 않습니다.");
   if (!window.google) {
@@ -287,9 +230,9 @@ async function loadGoogleSdk(): Promise<GoogleSdk> {
 /**
  * 구글로 로그인한다.
  *
- * 카카오와 같은 패턴 — Google Identity Services의 OAuth2 토큰 클라이언트로
- * access token만 받아 백엔드에 넘기고, 사용자 정보 해석은 백엔드가 구글
- * userinfo API를 직접 불러 한다.
+ * Google Identity Services의 OAuth2 토큰 클라이언트로 access token만 받아
+ * 백엔드에 넘기고, 사용자 정보 해석은 백엔드가 구글 userinfo API를 직접
+ * 불러 한다.
  */
 export async function loginWithGoogle(): Promise<{ isNewUser: boolean }> {
   const sdk = await loadGoogleSdk();
