@@ -687,30 +687,36 @@ export function ConsultationGate({
                           </div>
 
                           {/* Tool action badges */}
-                          {msg.actions.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {msg.actions.map((action, idx) => {
-                                const failed = Boolean(action.result && "error" in action.result);
-                                const errorMsg =
-                                  failed && typeof action.result?.error === "string"
-                                    ? action.result.error
-                                    : undefined;
-                                return (
+                          {(() => {
+                            const visibleActions = msg.actions.filter((action) => {
+                              // 실패한 내부 도구 호출(✕) 및 내부 계획/신호/메모리 도구는 뱃지로 노출하지 않음
+                              if (action.result && "error" in action.result) return false;
+                              if (
+                                action.tool === "propose_draft_plan" ||
+                                action.tool === "signal_ready_to_conclude" ||
+                                action.tool === "propose_full_replan_exception" ||
+                                action.tool === "remember"
+                              ) {
+                                return false;
+                              }
+                              return true;
+                            });
+
+                            if (visibleActions.length === 0) return null;
+
+                            return (
+                              <div className="flex flex-wrap gap-1.5">
+                                {visibleActions.map((action, idx) => (
                                   <span
                                     key={idx}
-                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-help ${
-                                      failed
-                                        ? "bg-red-50 text-red-700 border-red-200/80"
-                                        : "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                    }`}
-                                    title={errorMsg ?? (failed ? "도구 실행 중 오류가 발생했습니다." : "정상 처리되었습니다.")}
+                                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200/80"
                                   >
-                                    {failed ? "✕" : "✓"} {TOOL_LABELS[action.tool] ?? action.tool}
+                                    ✓ {TOOL_LABELS[action.tool] ?? action.tool}
                                   </span>
-                                );
-                              })}
-                            </div>
-                          )}
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     );

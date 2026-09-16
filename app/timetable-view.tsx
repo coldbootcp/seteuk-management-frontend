@@ -365,13 +365,6 @@ export function TimetableView({
               </>
             )}
           </div>
-
-          <div className="p-3 px-5 bg-gray-50/70 border-t border-gray-200/80 flex items-center justify-end text-xs text-gray-500">
-            <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
-              <Icon className="flex-none" name="lightbulb" size={13} />
-              <span>과목 카드를 누르면 그 과목의 기록이 열립니다.</span>
-            </div>
-          </div>
         </div>
 
         {/* 우측 패널 */}
