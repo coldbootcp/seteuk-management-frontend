@@ -729,7 +729,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   }
 
   return (
-    <GateFrame badge={step === "select" ? "신규 온보딩" : "기본 정보"} onSignOut={onSignOut}>
+    <GateFrame onSignOut={onSignOut}>
       {/* 파일 선택기는 세 화면이 함께 쓴다 — 어느 걸음에서도 학생부를 올릴 수 있다. */}
       <input
         accept="application/pdf,.pdf"
@@ -745,10 +745,6 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       {step === "select" && (
         <div className="w-full space-y-10">
           <div className="text-center max-w-2xl mx-auto space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-brand-600 text-xs font-bold tracking-wide">
-              <span className="w-2 h-2 rounded-full bg-brand-500" />
-              세특연구소 AI 정밀 학업 진단 · 시작하기
-            </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-950 tracking-tight leading-tight">
               지금의 나에서 시작하는
               <br />
@@ -2945,10 +2941,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
             <div className="flex items-center gap-3 px-2 py-2 mb-3 pb-4 border-b border-gray-100">
               <img alt="세특연구소 로고" src="/logo.png?v=2" className="w-9 h-9 object-contain flex-none" />
               <div className="flex-1 min-w-0">
-                <div className="font-extrabold text-[15px] text-gray-950 tracking-tight flex items-center gap-1.5 leading-none">
-                  <span>세특연구소</span>
-                  <span className="text-brand-600 font-extrabold text-[11px] px-1.5 py-0.5 rounded bg-brand-50 border border-brand-200/80 leading-none">Pro</span>
-                </div>
+                <div className="font-extrabold text-[15px] text-gray-950 tracking-tight leading-none">세특연구소</div>
                 <div className="text-[11px] text-gray-400 font-medium leading-none mt-1.5">Personal Coach</div>
               </div>
               <button aria-label="메뉴 닫기" className="shell-icon-btn sidebar-close" onClick={closeNav} type="button">

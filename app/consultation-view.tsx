@@ -187,7 +187,6 @@ export function ConsultationGate({
     }
   }
 
-  const kindLabel = status.requiredKind === "semester_review" ? "학기말 재평가 상담" : "최초 진단 상담";
   const isReview = status.requiredKind === "semester_review";
   const targetLabel =
     status.targetGrade && status.targetSemester
@@ -235,13 +234,15 @@ export function ConsultationGate({
   );
 
   return (
-    <GateFrame badge={kindLabel} onSignOut={onSignOut} width="wide">
+    <GateFrame onSignOut={onSignOut} width="wide">
       <div className="space-y-6">
+        {/*
+          이 화면은 같은 사실을 세 번 말하고 있었다 — 상단바 배지 "최초 진단 상담",
+          제목 위 알약 "세특연구소 AI 정밀 학업 진단 · 최초 진단 상담", 그리고 제목.
+          알약은 변하지 않는 문구에 상태 점까지 달아 상태 표시처럼 보이기도 했다.
+          제목 하나면 무슨 화면인지 충분하다.
+        */}
         <header className="text-center max-w-3xl mx-auto space-y-3">
-          <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200/80 text-brand-600 text-xs font-bold">
-            <span className="w-2 h-2 rounded-full bg-brand-500" />
-            세특연구소 AI 정밀 학업 진단 · {kindLabel}
-          </span>
           <h1 className="text-2xl md:text-3xl font-extrabold text-gray-950 tracking-tight leading-snug">
             {status.requiredKind === "semester_review" ? (
               <>

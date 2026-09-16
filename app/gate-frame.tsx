@@ -13,13 +13,10 @@ import type { ReactNode } from "react";
 import { Icon } from "./icons";
 
 export function GateFrame({
-  badge,
   children,
   onSignOut,
   width = "narrow",
 }: {
-  /** 상단바 오른쪽에 붙는 현재 단계 표시. 없으면 그리지 않는다. */
-  badge?: string;
   children: ReactNode;
   onSignOut: () => void;
   width?: "narrow" | "wide";
@@ -31,14 +28,7 @@ export function GateFrame({
           <div className="flex items-center gap-2.5 min-w-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img alt="세특연구소" className="w-7 h-7 object-contain flex-none" src="/logo.png?v=2" />
-            <span className="font-extrabold text-sm text-gray-950 tracking-tight truncate">
-              세특연구소 <span className="text-brand-500">Pro</span>
-            </span>
-            {badge && (
-              <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200/80 text-brand-600 text-[11px] font-bold flex-none">
-                {badge}
-              </span>
-            )}
+            <span className="font-extrabold text-sm text-gray-950 tracking-tight truncate">세특연구소</span>
           </div>
           <button
             className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 text-[11px] font-bold transition flex items-center gap-1.5 flex-none"

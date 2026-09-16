@@ -58,7 +58,7 @@ export function EmailVerificationGate({
   }
 
   return (
-    <GateFrame badge="이메일 인증" onSignOut={onSignOut}>
+    <GateFrame onSignOut={onSignOut}>
       <div className="max-w-md mx-auto bg-white rounded-2xl border border-gray-200/80 p-8 text-center space-y-4">
         <Icon className="mx-auto text-brand-600" name="mail" size={32} />
         <h2 className="text-lg font-extrabold text-gray-950">이메일 인증을 완료해주세요</h2>
@@ -146,7 +146,7 @@ export function WithdrawalPendingGate({
   }
 
   return (
-    <GateFrame badge="탈퇴 예정" onSignOut={onSignOut}>
+    <GateFrame onSignOut={onSignOut}>
       <div className="max-w-md mx-auto bg-white rounded-2xl border border-gray-200/80 p-8 text-center space-y-4">
         <Icon className="mx-auto text-amber-600" name="timer" size={32} />
         <h2 className="text-lg font-extrabold text-gray-950">탈퇴가 예약되어 있습니다</h2>

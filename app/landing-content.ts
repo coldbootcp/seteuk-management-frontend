@@ -15,16 +15,12 @@ export const HERO_PRINCIPLES = [
 
 export const FEATURE_ENGINES: Array<{
   tag: string;
-  tagTone: string;
-  iconBg: string;
   icon: IconName;
   title: string;
   body: string;
 }> = [
   {
-    tag: "01 · 기록 정리",
-    tagTone: "text-brand-600",
-    iconBg: "bg-brand-50 border-brand-200/70",
+    tag: "기록 정리",
     icon: "microscope",
     title: "사실과 해석을 구분해 정리",
     body:
@@ -32,9 +28,7 @@ export const FEATURE_ENGINES: Array<{
       "상담으로 현재 관심사부터 함께 정리합니다.",
   },
   {
-    tag: "02 · 계획에서 기록까지",
-    tagTone: "text-indigo-600",
-    iconBg: "bg-indigo-50 border-indigo-200/70",
+    tag: "계획에서 기록까지",
     icon: "map",
     title: "이번 학기 주제를 실제 활동으로 연결",
     body:
@@ -42,9 +36,7 @@ export const FEATURE_ENGINES: Array<{
       "다음 탐구의 출발점으로 활용합니다.",
   },
   {
-    tag: "03 · 수시 준비",
-    tagTone: "text-emerald-600",
-    iconBg: "bg-emerald-50 border-emerald-200/70",
+    tag: "수시 준비",
     icon: "message",
     title: "지원처별 근거와 면접 준비",
     body:

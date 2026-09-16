@@ -38,12 +38,7 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
             type="button"
           >
             <img alt="세특연구소 로고" className="w-8 h-8 md:w-9 md:h-9 object-contain flex-none" src="/logo.png?v=2" />
-            <span className="flex items-center gap-1.5">
-              <span className="font-extrabold text-lg md:text-xl text-gray-950 tracking-tight">세특연구소</span>
-              <span className="text-brand-600 font-extrabold text-[11px] px-1.5 py-0.5 rounded bg-brand-50 border border-brand-200/80">
-                Pro
-              </span>
-            </span>
+            <span className="font-extrabold text-lg md:text-xl text-gray-950 tracking-tight">세특연구소</span>
           </button>
 
           <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-gray-600">
@@ -75,8 +70,6 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
 
       {/* 히어로 */}
       <section className="relative pt-12 pb-20 md:pt-20 md:pb-28 overflow-hidden bg-gradient-to-b from-white via-blue-50/20 to-surface-bg">
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-gradient-to-tr from-brand-200/30 via-indigo-100/20 to-purple-100/20 blur-3xl pointer-events-none rounded-full -z-10" />
-
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto space-y-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-50 border border-brand-200/80 text-brand-600 text-xs md:text-sm font-bold">
@@ -87,9 +80,7 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-gray-950 tracking-tight leading-[1.15]">
               산발적인 세특 기록을 넘어,
               <br />
-              <span className="bg-gradient-to-r from-brand-600 via-indigo-600 to-brand-500 bg-clip-text text-transparent">
-                나만의 탐구 흐름을 차분히 쌓아가세요
-              </span>
+              <span className="text-brand-600">나만의 탐구 흐름을 차분히 쌓아가세요</span>
             </h1>
 
             <p className="text-base sm:text-lg md:text-xl text-gray-600 leading-relaxed max-w-2xl mx-auto">
@@ -122,20 +113,16 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
           </div>
 
           {/* 워크스페이스 미리보기 — 실제 화면의 구성을 그대로 축소해 보여준다.
-              안의 내용은 예시다(로그인 후 자기 기록으로 채워진다). */}
+              안의 내용은 예시다(로그인 후 자기 기록으로 채워진다).
+
+              전에는 창 제어 버튼처럼 보이는 점 세 개와 모노스페이스 라벨로 브라우저
+              창을 흉내 냈고, 정적인 미리보기에 초록 점을 단 "화면 예시" 배지를 붙여
+              실시간 상태처럼 보이게 했다. 둘 다 이 카드가 실제로 하지 않는 것(창,
+              라이브 상태)을 흉내 내고 있어 없앤다. */}
           <div className="mt-14 max-w-5xl mx-auto rounded-3xl bg-white border border-gray-200/90 shadow-2xl p-4 sm:p-6 md:p-8 relative overflow-hidden">
             <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-4 mb-6 flex-wrap">
-              <div className="flex items-center gap-3">
-                <div className="flex gap-1.5">
-                  <span className="w-3 h-3 rounded-full bg-red-400" />
-                  <span className="w-3 h-3 rounded-full bg-amber-400" />
-                  <span className="w-3 h-3 rounded-full bg-emerald-400" />
-                </div>
-                <span className="text-xs font-bold text-gray-400 font-mono">SETEUK PRO WORKSPACE · PREVIEW</span>
-              </div>
-              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                ● 화면 예시
-              </span>
+              <span className="text-xs font-bold text-gray-500">이번 학기 화면 미리보기</span>
+              <span className="text-[11px] font-semibold text-gray-400">예시 데이터입니다</span>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start text-left">
@@ -262,17 +249,26 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
             </h2>
           </div>
 
+          {/*
+            전에는 카드마다 파랑·인디고·에메랄드로 색을 달리하고 "01 · 02 · 03"을
+            앞에 붙였다. 셋 다 같은 정도로 중요한 기능이라 색으로 위계를 만들 근거가
+            없었고, 번호는 실제 순서(학생이 이 순서대로 쓴다는 뜻)를 말하려던
+            것이었지만 숫자만으로는 그 뜻이 전달되지 않아 장식처럼 보였다. 하나의
+            액션 블루로 통일하고, 순서는 "먼저 → 그다음" 문구로 직접 말한다.
+          */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {FEATURE_ENGINES.map((engine) => (
+            {FEATURE_ENGINES.map((engine, index) => (
               <div
                 className="p-7 rounded-3xl bg-surface-bg border border-gray-200/90 space-y-4 hover:border-brand-300 transition"
                 key={engine.tag}
               >
-                <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center ${engine.iconBg}`}>
-                  <Icon name={engine.icon} size={22} />
+                <div className="w-12 h-12 rounded-2xl border bg-brand-50 border-brand-200/70 flex items-center justify-center">
+                  <Icon className="text-brand-600" name={engine.icon} size={22} />
                 </div>
                 <div className="space-y-1">
-                  <span className={`text-xs font-bold ${engine.tagTone}`}>{engine.tag}</span>
+                  <span className="text-xs font-bold text-brand-600">
+                    {index === 0 ? "먼저" : index === FEATURE_ENGINES.length - 1 ? "마지막" : "그다음"} · {engine.tag}
+                  </span>
                   <h3 className="text-xl font-extrabold text-gray-950 leading-snug">{engine.title}</h3>
                 </div>
                 <p className="text-sm text-gray-600 leading-relaxed">{engine.body}</p>
