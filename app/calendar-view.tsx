@@ -9,16 +9,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../lib/api-client";
 import type { components } from "../lib/api-types";
+import { Icon } from "./icons";
 
 type CalendarEvent = components["schemas"]["CalendarEventRead"];
 type CalendarEventType = components["schemas"]["CalendarEventType"];
 
 const EVENT_TYPES: CalendarEventType[] = ["시험", "수행평가", "기타"];
 
-const TYPE_STYLE: Record<CalendarEventType, { dot: string; badge: string; text: string }> = {
-  시험: { dot: "bg-rose-500", badge: "bg-rose-50 border-rose-200", text: "text-rose-700" },
-  수행평가: { dot: "bg-amber-500", badge: "bg-amber-50 border-amber-200", text: "text-amber-700" },
-  기타: { dot: "bg-gray-400", badge: "bg-gray-50 border-gray-200", text: "text-gray-600" },
+const TYPE_STYLE: Record<CalendarEventType, { badge: string; text: string }> = {
+  시험: { badge: "bg-rose-50 border-rose-200", text: "text-rose-700" },
+  수행평가: { badge: "bg-amber-50 border-amber-200", text: "text-amber-700" },
+  기타: { badge: "bg-gray-50 border-gray-200", text: "text-gray-600" },
 };
 
 const WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"];
@@ -187,11 +188,12 @@ export function CalendarView() {
           </h2>
           <div className="flex items-center gap-1">
             <button
-              className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center text-xs"
+              aria-label="지난달"
+              className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center"
               onClick={() => changeMonth(-1)}
               type="button"
             >
-              ‹
+              <Icon name="chevron-left" size={14} />
             </button>
             <button
               className="px-2.5 h-7 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-[11px] font-bold"
@@ -204,11 +206,12 @@ export function CalendarView() {
               오늘
             </button>
             <button
-              className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center text-xs"
+              aria-label="다음달"
+              className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center"
               onClick={() => changeMonth(1)}
               type="button"
             >
-              ›
+              <Icon name="chevron-right" size={14} />
             </button>
           </div>
         </div>
@@ -226,18 +229,27 @@ export function CalendarView() {
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1.5">
+        {/*
+          날짜 칸마다 테두리 상자를 두르고 그 안에 색깔 점만 찍던 전형적인
+          "달력 컴포넌트" 모양이었다 — 무슨 일정인지는 옆 목록을 봐야만 알 수
+          있었다. 칸을 상자로 두르지 않고 흰 배경 위에 띄우되, 그 대신 일정
+          이름이 보이는 칩을 날짜 밑에 직접 넣는다. 오늘은 칸 전체를 칠하는
+          대신 날짜 숫자에만 원을 둘러 표시한다.
+        */}
+        <div className="grid grid-cols-7 gap-x-1 gap-y-2">
           {grid.map((date, index) => {
-            if (!date) return <div className="aspect-square" key={`empty-${index}`} />;
+            if (!date) return <div key={`empty-${index}`} />;
             const dateIso = toIsoDate(date);
-            const dayEvents = events.filter((event) => isWithin(dateIso, event));
+            const dayEvents = events
+              .filter((event) => isWithin(dateIso, event))
+              .sort((a, b) => a.title.localeCompare(b.title));
             const isToday = dateIso === todayIso;
             const weekdayIndex = (date.getDay() + 6) % 7;
+            const visibleEvents = dayEvents.slice(0, 2);
+            const hiddenCount = dayEvents.length - visibleEvents.length;
             return (
               <button
-                className={`aspect-square rounded-xl border p-1.5 flex flex-col items-center gap-1 text-left transition hover:border-brand-300 ${
-                  isToday ? "border-brand-400 bg-brand-50/60" : "border-gray-100 bg-gray-50/40"
-                }`}
+                className="min-h-[64px] rounded-lg p-1 flex flex-col items-center gap-1 text-left transition hover:bg-gray-50"
                 key={dateIso}
                 onClick={() => {
                   if (dayEvents.length > 0) {
@@ -249,9 +261,9 @@ export function CalendarView() {
                 type="button"
               >
                 <span
-                  className={`text-[11px] font-bold ${
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${
                     isToday
-                      ? "text-brand-700"
+                      ? "bg-brand-500 text-white"
                       : weekdayIndex === 5
                         ? "text-blue-500"
                         : weekdayIndex === 6
@@ -261,13 +273,18 @@ export function CalendarView() {
                 >
                   {date.getDate()}
                 </span>
-                <div className="flex flex-wrap gap-0.5 justify-center">
-                  {dayEvents.slice(0, 3).map((dayEvent) => (
+                <div className="w-full space-y-0.5">
+                  {visibleEvents.map((dayEvent) => (
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${TYPE_STYLE[dayEvent.event_type].dot}`}
+                      className={`block truncate rounded px-1 py-px text-[9px] font-semibold leading-tight ${TYPE_STYLE[dayEvent.event_type].badge} ${TYPE_STYLE[dayEvent.event_type].text}`}
                       key={dayEvent.id}
-                    />
+                    >
+                      {dayEvent.title}
+                    </span>
                   ))}
+                  {hiddenCount > 0 && (
+                    <span className="block px-1 text-[9px] font-semibold text-gray-400">+{hiddenCount}</span>
+                  )}
                 </div>
               </button>
             );
