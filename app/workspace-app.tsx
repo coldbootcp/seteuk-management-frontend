@@ -2265,6 +2265,28 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             <div className="space-y-3">
               {workspace.activities.map((activity) => {
                 const match = workspace.reconciliations.find((log) => log.activityId === activity.id);
+                // 활동 계보(lineage): 이 활동이 이어받은 이전 활동과, 이 활동에서
+                // 이어진 다음 활동을 화면에서 잇는다. 입학사정관이 읽는 "하나의
+                // 이야기"를 학생이 직접 확인·관리하도록 돕는다. 이미 불러온 활동
+                // 배열 안에서 찾으므로 추가 요청이 없다.
+                const parentActivity = activity.parentActivityId
+                  ? workspace.activities.find((other) => other.id === activity.parentActivityId)
+                  : undefined;
+                const childActivities = workspace.activities.filter(
+                  (other) => other.parentActivityId === activity.id,
+                );
+                // 수시 때 이 활동을 설명하려면 채워져 있어야 할 것들 — 백엔드
+                // activity-flows의 readiness 판정과 같은 기준(과정 서술·배운 점·근거
+                // 파일)을 화면에서도 미리 짚어, 학생이 3년 뒤가 아니라 지금 채우게 한다.
+                // 교과 세특용 '활동'에만 의미가 있어 그 유형에만 보여준다.
+                const hasAttachment = workspace.attachments.some((a) => a.activityId === activity.id);
+                const activityGaps = activity.recordKind === "activity"
+                  ? [
+                      activity.summary.trim().length < 120 ? "무엇을 어떻게 했는지" : null,
+                      activity.reflection.trim().length < 30 ? "배운 점과 느낀 점" : null,
+                      !hasAttachment ? "발표자료·보고서 첨부" : null,
+                    ].filter((gap): gap is string => gap !== null)
+                  : [];
                 return (
                 <div className="bg-white p-4 rounded-xl border border-gray-200/80 hover:border-brand-300 transition space-y-2" key={activity.id}>
                   <div className="flex items-center justify-between gap-2">
@@ -2280,8 +2302,22 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
                     )}
                   </div>
                   <div className="history-info">
+                    {parentActivity && (
+                      <p className="text-[11px] font-semibold text-brand-600 flex items-center gap-1 mb-1">
+                        <span aria-hidden="true">↳</span>
+                        <span className="truncate">‘{parentActivity.title}’에서 이어진 탐구</span>
+                      </p>
+                    )}
                     <h3 className="text-sm font-semibold text-gray-900">{activity.title}</h3>
                     <p>{activity.summary}</p>
+                    {childActivities.length > 0 && (
+                      <p className="text-[11px] font-semibold text-violet-700 flex items-center gap-1 mt-1">
+                        <span aria-hidden="true">→</span>
+                        <span className="truncate">
+                          이 활동에서 이어짐: {childActivities.map((child) => `‘${child.title}’`).join(", ")}
+                        </span>
+                      </p>
+                    )}
                     {activity.reflection && <div className="activity-reflection"><strong>배운 점과 느낀 점</strong><p>{activity.reflection}</p></div>}
                     {activity.linkedPlanTitle && <small style={{ color: "var(--fg-muted)", display: "block", marginBottom: 8 }}>연결한 주제: {activity.linkedPlanTitle}</small>}
                     <div className="concept-tags">
@@ -2300,6 +2336,12 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
                         <button className="btn btn-ghost btn-sm" onClick={() => deleteAttachment(attachment.id)} type="button">삭제</button>
                       </div>
                     ))}
+                    {activityGaps.length > 0 && (
+                      <div className="mt-2 rounded-lg border border-amber-200/70 bg-amber-50/60 px-3 py-2">
+                        <p className="text-[11px] font-bold text-amber-800">수시 때 설명하려면 이것도 채워두면 좋아요</p>
+                        <p className="text-[11px] text-amber-700 mt-0.5">{activityGaps.join(" · ")}</p>
+                      </div>
+                    )}
                     {activity.recordKind === "activity" && (
                       <button
                         className="btn btn-secondary btn-sm"
