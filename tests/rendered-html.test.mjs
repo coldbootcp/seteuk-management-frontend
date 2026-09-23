@@ -62,15 +62,6 @@ test("the consultation gate starts with record-based diagnosis, not a generated 
   assert.doesNotMatch(gate, /진단 전 확인/);
 });
 
-test("the onboarding clarification adapter preserves answer keys", async () => {
-  const adapter = await source("lib/workspace-adapter.ts");
-
-  assert.match(adapter, /case path === "\/api\/onboarding\/clarify"/);
-  assert.match(adapter, /"\/profile\/clarify"/);
-  assert.match(adapter, /key: entry\.key \?\? entry\.id/);
-  assert.match(adapter, /id: question\.key/);
-});
-
 test("the school record review stays client-side and states the real storage policy", async () => {
   const [app, parser] = await Promise.all([
     source("app/workspace-app.tsx"),
@@ -129,7 +120,10 @@ test("the admissions workspace uses the catalog instead of free-text target data
 
   assert.match(app, /ApplicationPreparationView/);
   assert.match(preparation, /admission-catalog\/universities/);
-  assert.match(preparation, /\/programs\?admission_year=2027/);
+  // 대입 연도는 하드코딩이 아니라 학생 입학 연도로 계산한 admissionYear를 쓴다
+  // (freshmanAcademicYear + 3). 예전에는 2026/2027 상수를 박아 학생마다 어긋났다.
+  assert.match(preparation, /\/programs\?admission_year=\$\{admissionYear\}/);
+  assert.match(preparation, /freshmanAcademicYear/);
   assert.match(preparation, /admission-catalog\/programs\/\$\{programId\}\/tracks/);
   assert.match(preparation, /admission-catalog\/tracks\/\$\{trackId\}\/detail/);
   assert.match(preparation, /지원 자격·평가 방법·일정/);

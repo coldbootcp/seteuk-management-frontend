@@ -709,26 +709,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/profile/clarify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Clarify Onboarding
-         * @description 지금까지 채운 답변을 보고, 아직 비었거나 막연한 부분에 대해 확인 질문을 만든다.
-         */
-        post: operations["clarify_onboarding_api_v1_profile_clarify_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/education-policies/me": {
         parameters: {
             query?: never;
@@ -2804,6 +2784,8 @@ export interface components {
             name: string;
             /** Rank */
             rank?: string | null;
+            /** Participants */
+            participants?: string | null;
             /** Date */
             date?: string | null;
             /** Raw Date */
@@ -2869,6 +2851,8 @@ export interface components {
             name?: string | null;
             /** Rank */
             rank?: string | null;
+            /** Participants */
+            participants?: string | null;
             /** Date */
             date?: string | null;
             /** Raw Date */
@@ -3022,94 +3006,6 @@ export interface components {
          * @enum {string}
          */
         ChatMode: "normal" | "edit";
-        /**
-         * ClarifyAnswer
-         * @description 앞선 질문에 학생이 이미 준 답.
-         */
-        ClarifyAnswer: {
-            /** Key */
-            key: string;
-            /**
-             * Question
-             * @default
-             */
-            question: string;
-            /** Answer */
-            answer: string;
-        };
-        /** ClarifyQuestion */
-        ClarifyQuestion: {
-            /** Key */
-            key: string;
-            /** Label */
-            label: string;
-            /** Question */
-            question: string;
-            /**
-             * Why
-             * @default
-             */
-            why: string;
-            /**
-             * Selection Mode
-             * @default single
-             * @enum {string}
-             */
-            selection_mode: "single" | "multiple";
-            /**
-             * Options
-             * @default []
-             */
-            options: string[];
-        };
-        /**
-         * ClarifyRequest
-         * @description 지금까지 채운 값. 전부 선택이라 폼을 반쯤 채운 상태에서도 물어볼 수 있다.
-         *
-         *     `answers`가 중요하다 — 이걸 빼고 부르면 학생이 방금 답한 것을 모른 채 같은 질문을
-         *     다시 내서 온보딩이 끝나지 않는다.
-         */
-        ClarifyRequest: {
-            /** Name */
-            name?: string | null;
-            /** Grade */
-            grade?: number | null;
-            /** Semester */
-            semester?: number | null;
-            /** Freshman Academic Year */
-            freshman_academic_year?: number | null;
-            /** Career Goal */
-            career_goal?: string | null;
-            /** Target Department */
-            target_department?: string | null;
-            /**
-             * Interest Keywords
-             * @default []
-             */
-            interest_keywords: string[];
-            /** Self Assessed Strengths */
-            self_assessed_strengths?: string | null;
-            /** Self Assessed Weaknesses */
-            self_assessed_weaknesses?: string | null;
-            /**
-             * Answers
-             * @default []
-             */
-            answers: components["schemas"]["ClarifyAnswer"][];
-        };
-        /** ClarifyResponse */
-        ClarifyResponse: {
-            /**
-             * Questions
-             * @default []
-             */
-            questions: components["schemas"]["ClarifyQuestion"][];
-            /**
-             * Complete
-             * @default false
-             */
-            complete: boolean;
-        };
         /** ConfirmFullReplanRequest */
         ConfirmFullReplanRequest: {
             /** Confirmed */
@@ -5958,39 +5854,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuggestResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    clarify_onboarding_api_v1_profile_clarify_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ClarifyRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClarifyResponse"];
                 };
             };
             /** @description Validation Error */
