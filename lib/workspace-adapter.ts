@@ -162,6 +162,7 @@ function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentA
     // 학기를 아는 기록만 마디에 맨다. 학년 단위 기록(자율활동 등)은 어느 한 학기의
     // 것이 아니므로 여기서 고르지 않고, 화면이 그 학년의 학기들에 함께 보여준다.
     roadmapNodeId: semester == null ? null : locate(grade, semester),
+    parentActivityId: (raw.parent_activity_id as string) ?? null,
     planEventId: (raw.source_plan_event_id as string) ?? null,
     linkedPlanTitle: null,
     // 활동 시점의 정본은 grade/semester다. performed_on은 학생이 직접 입력했을

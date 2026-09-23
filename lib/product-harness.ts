@@ -92,6 +92,8 @@ export type StudentActivity = {
   outputs: string[];
   status: string;
   roadmapNodeId?: string | null;
+  /** 이 활동이 이어받은 이전 활동. 활동 계보(lineage)를 화면에서 잇는 근거다. */
+  parentActivityId?: string | null;
   /** 계획에서 전환된 실제 기록일 때만 원래 계획을 가리킨다. */
   planEventId?: string | null;
   linkedPlanTitle?: string | null;
