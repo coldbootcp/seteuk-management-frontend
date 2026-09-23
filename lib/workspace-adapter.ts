@@ -681,39 +681,6 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       });
       return { ...result, provider: "deepseek" };
     }
-    case path === "/api/onboarding/clarify": {
-      const form = body.form ?? {};
-      const answers = (body.answers ?? []) as { id?: string; key?: string; question?: string; answer?: unknown }[];
-      const result = await api<{ questions: Json[]; complete: boolean }>("/profile/clarify", {
-        method: "POST",
-        body: {
-          name: form.name || null,
-          grade: form.grade ? Number(form.grade) : null,
-          semester: form.semester ? Number(form.semester) : null,
-          freshman_academic_year: form.freshmanAcademicYear
-            ? Number(form.freshmanAcademicYear)
-            : null,
-          career_goal: form.targetCareer || null,
-          target_department: (form.targetMajors ?? [])[0] || null,
-          interest_keywords: form.interests ?? [],
-          answers: answers
-            .filter((entry) => entry.answer)
-            .map((entry) => ({
-              key: entry.key ?? entry.id ?? "",
-              question: entry.question ?? "",
-              answer: Array.isArray(entry.answer) ? entry.answer.join(", ") : String(entry.answer),
-            })),
-        },
-      });
-      return {
-        ...result,
-        questions: (result.questions ?? []).map((question) => ({
-          ...question,
-          id: question.key,
-          selectionMode: question.selection_mode,
-        })),
-      };
-    }
     case path === "/api/onboarding/preview": {
       // 미리보기는 draft 로드맵이다 — 확정 전이라 화면에서 고칠 수 있고, 다시 눌러도
       // 버전이 오르지 않는다.
@@ -784,23 +751,34 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       if (kindLabel === "상장" || kindLabel === "봉사" || kindLabel === "독서") {
         const ENDPOINTS = { 상장: "/awards", 봉사: "/volunteer-records", 독서: "/reading-activities" };
         const bodies: Record<string, Json> = {
+          // 수상 등급(rank)·주최(participants)는 예전엔 버려졌다 — 학생이 제목에
+          // 다 욱여넣어야 했다. 이제 각자의 칸으로 보낸다.
           상장: {
             name: activity.title,
+            rank: (activity.awardRank as string)?.trim() || null,
+            participants: (activity.awardHost as string)?.trim() || null,
             date: activity.completedAt || null,
             grade: period.grade,
             semester: period.semester,
           },
+          // 봉사 시간(hours)은 생기부 봉사활동의 핵심인데 담을 칸이 없었다.
           봉사: {
             grade: period.grade,
+            semester: period.semester,
             date: activity.completedAt || null,
             place: activity.title,
             content: activity.summary || null,
+            hours: Number.isInteger(Number(activity.volunteerHours)) && String(activity.volunteerHours).length
+              ? Number(activity.volunteerHours)
+              : null,
           },
+          // 저자(author)도 버려지던 값이다.
           독서: {
             grade: period.grade,
             semester: period.semester,
             subject: activity.subject || null,
             title: activity.title,
+            author: (activity.readingAuthor as string)?.trim() || null,
           },
         };
         await api(ENDPOINTS[kindLabel], { method: "POST", body: bodies[kindLabel] });

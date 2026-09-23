@@ -427,7 +427,7 @@ function summarizeOnboardingRecord(parsed: SchoolRecordParseResult, completedGra
 /* ──────────────────────────────────────────────
    Shared Components
    ────────────────────────────────────────────── */
-function StatusBadge({ status }: { status: RoadmapNode["status"] }) {
+function StatusBadge({ status, isCurrent = false }: { status: RoadmapNode["status"]; isCurrent?: boolean }) {
   const config: Record<RoadmapNode["status"], { label: string; cls: string }> = {
     planned:      { label: "예정",     cls: "badge-planned" },
     active:       { label: "진행 중",  cls: "badge-active"  },
@@ -440,6 +440,13 @@ function StatusBadge({ status }: { status: RoadmapNode["status"] }) {
     skipped:      { label: "건너뜀",   cls: "badge-muted"   },
     revised:      { label: "수정됨",   cls: "badge-muted"   },
   };
+  // 진행 중인 학기는 목표 주제 하나가 활동으로 연결되면 백엔드에서 done/partial이
+  // 되지만, 학생은 아직 그 학기에 있고 다른 주제도 남아 있다. "완료" 도장 대신
+  // "진행 중"으로 보여줘야 이번 학기가 이미 끝난 것처럼 오해하지 않는다. 활동이
+  // 연결됐다는 사실은 3개년 흐름의 '연결 기록' 수로 따로 드러난다.
+  if (isCurrent && (status === "done" || status === "partial" || status === "completed")) {
+    return <span className="status-badge badge-active">진행 중</span>;
+  }
   const { label, cls } = config[status];
   return <span className={`status-badge ${cls}`}>{label}</span>;
 }
@@ -1350,7 +1357,7 @@ function ThreeYearJourney({ workspace, onNavigate }: { workspace: ProductWorkspa
               <h3 className="text-lg font-extrabold text-gray-950 mt-1">{selectedNode.title}</h3>
               <p className="text-sm text-gray-600 leading-relaxed mt-2 max-w-3xl">{selectedNode.objective || "이 학기의 방향이 아직 정리되지 않았습니다."}</p>
             </div>
-            <StatusBadge status={selectedNode.status} />
+            <StatusBadge status={selectedNode.status} isCurrent={isCurrent} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-gray-100">
@@ -1812,7 +1819,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">ACTIVE ROADMAP NODE</span>
               <h3 className="text-base font-extrabold text-gray-950 mt-0.5 leading-snug">{active?.title ?? "이번 학기 회고"}</h3>
             </div>
-            {active && <StatusBadge status={active.status} />}
+            {active && <StatusBadge status={active.status} isCurrent />}
           </div>
           <p className="text-xs text-gray-600 leading-relaxed flex-1">
             {active?.objective ?? "이번 학기 목표가 아직 없습니다. 상담을 마치면 여기에 표시됩니다."}
@@ -1891,6 +1898,12 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
     concepts: "",
     outputs: "",
     completedAt: new Date().toISOString().slice(0, 10),
+    // 갈래별 고유 항목. 예전에는 이 값들을 담을 칸이 없어 봉사 시간·수상 등급·저자가
+    // 저장되지 않았다(백엔드는 받는데 화면이 안 보냈다).
+    awardRank: "",       // 상장: 수상 등급(예: 최우수상)
+    awardHost: "",       // 상장: 주최/주관
+    volunteerHours: "",  // 봉사: 봉사 시간(정수)
+    readingAuthor: "",   // 독서: 저자
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1972,7 +1985,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       onWorkspace(result.workspace);
       setLastReview(result.workspace.activityReviews.find((review) => review.activityId === result.reconciliation?.activityId) ?? null);
       clearDraft();
-      setPlanEventId(""); setFiles([]); setForm((cur) => ({ ...cur, title: "", summary: "", reflection: "", activityType: "" }));
+      setPlanEventId(""); setFiles([]); setForm((cur) => ({ ...cur, title: "", summary: "", reflection: "", activityType: "", awardRank: "", awardHost: "", volunteerHours: "", readingAuthor: "" }));
       setQualityNotice(null);
     } catch (e) { setError(e instanceof Error ? e.message : "활동을 저장하지 못했습니다."); }
     finally { setBusy(false); }
@@ -2154,14 +2167,41 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             </select>
           </div>
           <div className="form-field">
-            <label htmlFor="act-date">완료일</label>
+            <label htmlFor="act-date">{form.activityType === "독서" ? "읽은 날" : form.activityType === "봉사" ? "봉사한 날" : form.activityType === "상장(대회)" ? "수상일" : "완료일"}</label>
             <input id="act-date" type="date" value={form.completedAt} onChange={(e) => setForm({ ...form, completedAt: e.target.value })} />
           </div>
+          {/* 갈래별 고유 항목 — 유형을 고른 뒤에만 관련 칸을 보여준다. */}
+          {form.activityType === "상장(대회)" && (
+            <>
+              <div className="form-field">
+                <label htmlFor="act-award-rank">수상 등급 <em>(선택)</em></label>
+                <input id="act-award-rank" value={form.awardRank} onChange={(e) => setForm({ ...form, awardRank: e.target.value })} placeholder="예: 최우수상, 은상, 장려상" />
+              </div>
+              <div className="form-field">
+                <label htmlFor="act-award-host">주최·주관 <em>(선택)</em></label>
+                <input id="act-award-host" value={form.awardHost} onChange={(e) => setForm({ ...form, awardHost: e.target.value })} placeholder="예: ○○고등학교, ○○학회" />
+              </div>
+            </>
+          )}
+          {form.activityType === "봉사" && (
+            <div className="form-field">
+              <label htmlFor="act-volunteer-hours">봉사 시간 <em>(선택)</em></label>
+              <input id="act-volunteer-hours" type="number" min="0" inputMode="numeric" value={form.volunteerHours} onChange={(e) => setForm({ ...form, volunteerHours: e.target.value.replace(/[^0-9]/g, "") })} placeholder="예: 8 (시간 단위)" />
+            </div>
+          )}
+          {form.activityType === "독서" && (
+            <div className="form-field">
+              <label htmlFor="act-reading-author">저자 <em>(선택)</em></label>
+              <input id="act-reading-author" value={form.readingAuthor} onChange={(e) => setForm({ ...form, readingAuthor: e.target.value })} placeholder="예: 레이첼 카슨" />
+            </div>
+          )}
         </div>
-        {!currentSemesterCourseSubjects.length && <div className="banner banner-error" style={{ marginBottom: "14px" }}><strong>현재 학기 수강 과목을 먼저 등록해주세요.</strong><br />[성적 관리] 또는 [시간표] 화면에서 이번 학기 과목을 추가하면 여기에서 고를 수 있습니다.</div>}
+        {/* 수강 과목은 교과 세특(활동)에만 필요하다. 봉사·독서·교외 수상은 특정
+            과목과 무관한 경우가 많아 과목 미등록이 기록을 막지 않도록 한다. */}
+        {form.activityType === "활동" && !currentSemesterCourseSubjects.length && <div className="banner banner-error" style={{ marginBottom: "14px" }}><strong>현재 학기 수강 과목을 먼저 등록해주세요.</strong><br />[성적 관리] 또는 [시간표] 화면에서 이번 학기 과목을 추가하면 여기에서 고를 수 있습니다.</div>}
         <div className="form-field" style={{ marginBottom: "14px" }}>
-          <label htmlFor="act-title">활동 제목</label>
-          <input id="act-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="활동의 핵심을 한 문장으로" />
+          <label htmlFor="act-title">{form.activityType === "독서" ? "도서명" : form.activityType === "봉사" ? "봉사 기관·장소" : form.activityType === "상장(대회)" ? "대회·상장명" : "활동 제목"}</label>
+          <input id="act-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={form.activityType === "독서" ? "예: 침묵의 봄" : form.activityType === "봉사" ? "예: 지역아동센터" : form.activityType === "상장(대회)" ? "예: 교내 과학탐구대회" : "활동의 핵심을 한 문장으로"} />
         </div>
         <div className="form-field" style={{ marginBottom: "14px" }}>
           <label htmlFor="act-summary">무엇을 어떻게 했나요?</label>
@@ -2179,7 +2219,9 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
         {error && <div className="banner banner-error" style={{ marginBottom: "14px" }}>{error}</div>}
         <button
           className="btn btn-primary"
-          disabled={busy || !currentSemesterCourseSubjects.length || !form.activityType || !form.subject || !form.title.trim() || !form.summary.trim()}
+          // 과목은 교과 세특(활동)에만 필수다. 봉사·독서·상장은 과목 없이도 저장할 수 있어야
+          // 갓 온보딩한(시간표 미입력) 학생도 이 기록들을 남길 수 있다.
+          disabled={busy || !form.activityType || !form.title.trim() || !form.summary.trim() || (form.activityType === "활동" && (!currentSemesterCourseSubjects.length || !form.subject))}
           onClick={() => submit()}
           type="button"
         >
