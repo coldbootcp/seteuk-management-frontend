@@ -187,8 +187,16 @@ export function ConsultationGate({
     }
   }
 
-  const kindLabel = status.requiredKind === "semester_review" ? "학기말 재평가 상담" : "최초 진단 상담";
   const isReview = status.requiredKind === "semester_review";
+  // 3학년 2학기는 새 탐구 계획을 세우는 시기가 아니라 수시 원서·마무리 시기다.
+  // 신입생·저학년과 같은 "정밀 진단으로 계획을 세운다" 문구를 그대로 쓰면 시점에
+  // 맞지 않아, 이 학기에는 게이트 문구를 따로 둔다.
+  const isFinalSemester = status.targetGrade === 3 && status.targetSemester === 2;
+  const kindLabel = isFinalSemester
+    ? "3학년 2학기 점검"
+    : status.requiredKind === "semester_review"
+      ? "학기말 재평가 상담"
+      : "최초 진단 상담";
   const targetLabel =
     status.targetGrade && status.targetSemester
       ? `${status.targetGrade}학년 ${status.targetSemester}학기`
@@ -243,7 +251,13 @@ export function ConsultationGate({
             세특연구소 AI 정밀 학업 진단 · {kindLabel}
           </span>
           <h1 className="text-2xl md:text-3xl font-extrabold text-gray-950 tracking-tight leading-snug">
-            {status.requiredKind === "semester_review" ? (
+            {isFinalSemester ? (
+              <>
+                지금까지의 기록을 정리하고
+                <br />
+                <span className="text-brand-500">수시 지원을 준비해요</span>
+              </>
+            ) : status.requiredKind === "semester_review" ? (
               <>
                 이번 학기를 점검하고
                 <br />
@@ -258,7 +272,9 @@ export function ConsultationGate({
             )}
           </h1>
           <p className="text-sm text-gray-600">
-            이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요.
+            {isFinalSemester
+              ? "지금은 3학년 2학기예요. 남은 기록을 정리하고, 상담을 마치면 메인 화면으로 들어갈 수 있어요."
+              : "이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요."}
           </p>
         </header>
 
