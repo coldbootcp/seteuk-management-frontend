@@ -66,6 +66,20 @@ export function DashboardView({
     return (core.length ? core : events).slice(0, 3);
   }, [activeNode]);
 
+  const plannedTopicCount = activeNode?.planEvents?.length ?? 0;
+
+  // 진행률의 분자·분모 기준을 하나로 맞춘다. 예전에는 분자가 "이번 학기 활동 전체
+  // 수"(로드맵과 무관한 활동까지)이고 분모가 "제안 주제 수"라, 같은 활동 1건이
+  // 이 지표에는 세어지지만 아래 '핵심 목표 작성 완료'(planEventId 연결 기준)에는
+  // 안 세어져 두 숫자가 어긋났다. 이제 둘 다 "제안 주제 중 활동으로 연결된 수"로
+  // 계산한다 — 로드맵 제안을 얼마나 실행했는지가 진행률의 정의다.
+  const linkedTopicCount = useMemo(() => {
+    const events = activeNode?.planEvents ?? [];
+    return events.filter((event) => completedPlanIds.has(event.id)).length;
+  }, [activeNode, completedPlanIds]);
+
+  // 로드맵과 무관하게 이번 학기에 남긴 활동 수 — 진행률 분자가 아니라 별도 맥락으로만
+  // 쓴다(제안에 없던 활동도 기록 자체는 의미가 있으므로 캡션에 함께 보여준다).
   const semesterActivityCount = useMemo(
     () =>
       activities.filter(
@@ -73,8 +87,6 @@ export function DashboardView({
       ).length,
     [activities, profile.grade, profile.semester],
   );
-
-  const plannedTopicCount = activeNode?.planEvents?.length ?? 0;
 
   /** 단위 가중 평균 — 성적 화면과 같은 식이다(석차등급이 있는 과목만). */
   const gradeSummary = useMemo(() => {
@@ -223,12 +235,16 @@ export function DashboardView({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-4 border-t border-gray-100">
             <ProgressBlock
-              caption={plannedTopicCount ? `이번 학기 제안 ${plannedTopicCount}개 중 기록으로 남긴 수` : "이번 학기에 남긴 기록"}
+              caption={
+                plannedTopicCount
+                  ? `이번 학기 제안 ${plannedTopicCount}개 중 활동으로 연결한 수${semesterActivityCount > linkedTopicCount ? ` · 그 외 기록 ${semesterActivityCount - linkedTopicCount}건` : ""}`
+                  : "이번 학기에 남긴 기록"
+              }
               label="이번 학기 세특 탐구 진행"
               onClick={() => onNavigate("activities")}
               total={plannedTopicCount}
-              value={semesterActivityCount}
-              valueLabel={`${semesterActivityCount} / ${plannedTopicCount || "-"} 건`}
+              value={linkedTopicCount}
+              valueLabel={`${linkedTopicCount} / ${plannedTopicCount || "-"} 건`}
             />
             <ProgressBlock
               caption="지금까지 남긴 활동·수상·봉사·독서 기록 전체"
