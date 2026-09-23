@@ -36,6 +36,14 @@
   --color-surface-border: #EAECEF;
   --color-surface-subtle: #F1F3F5;
 
+  /* 회색 텍스트 대비 보정. 화면 곳곳의 보조 문구가 text-gray-400/300으로 쓰여
+     흰 배경 대비가 낮았다(작은 글씨는 특히 읽기 어려움). Tailwind 기본 gray-400/300을
+     한 단계씩 진하게 덮어, 92곳을 개별 수정하지 않고 대비를 함께 올린다. gray-400은
+     흰 배경 대비 약 4.5:1(WCAG AA)에 닿는 값으로 둔다. border/점 등 비텍스트 용도가
+     소폭 진해지지만 경계가 또렷해질 뿐 해롭지 않다. */
+  --color-gray-300: #9AA3AF;
+  --color-gray-400: #6B7280;
+
   --shadow-card:       0 2px 12px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
   --shadow-card-hover: 0 8px 24px rgba(49, 130, 246, 0.08), 0 2px 6px rgba(0, 0, 0, 0.03);
   --shadow-brand-glow: 0 4px 16px rgba(49, 130, 246, 0.25);
