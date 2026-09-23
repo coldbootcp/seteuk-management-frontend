@@ -121,8 +121,109 @@ export function DashboardView({
     };
   }, [gradeItems]);
 
+  /**
+   * "지금 할 일 하나" — 탭이 많아 16세가 "그래서 오늘 뭘 하지?"에서 막히는 것을 덜어
+   * 준다. 이미 가진 데이터(제안 주제, 연결된 활동, 성적)로만 판단하고, 근거 없이
+   * 채우지 않는다. 성적은 아직 로딩 중일 수 있으므로(gradeItems===null) 그때는
+   * 성적 관련 제안을 미룬다.
+   */
+  const nextStep = useMemo(() => {
+    // 상담 전이면 그 자체가 다음 걸음이다 — 이 화면 자체가 잘 안 보이지만 방어적으로.
+    if (!activeNode) {
+      return { label: "상담을 마치면 이번 학기 목표가 정해집니다", cta: "이번 학기 보기", tab: "overview" as const };
+    }
+    // 이번 학기 제안 주제 중 아직 활동으로 남기지 않은 것이 있으면 그것부터.
+    const unrecorded = (activeNode.planEvents ?? []).filter((event) => !completedPlanIds.has(event.id));
+    if (unrecorded.length > 0) {
+      const first = unrecorded.find((event) => event.priority === "core") ?? unrecorded[0];
+      return {
+        label: `이번 학기 제안 주제 ${unrecorded.length}개가 아직 기록으로 남지 않았어요`,
+        detail: `예: ${first.title}`,
+        cta: "활동 기록하기",
+        tab: "activities" as const,
+      };
+    }
+    // 주제는 다 기록했는데 성적이 비어 있으면 성적 입력을 권한다(로딩 끝난 뒤에만).
+    if (gradeItems !== null && gradeItems.length === 0) {
+      return { label: "이번 학기 성적을 입력하면 평점과 추이를 볼 수 있어요", cta: "성적 입력하기", tab: "grades" as const };
+    }
+    // 제안 주제를 모두 기록한 상태 — 다음 탐구를 이어갈 때다.
+    return {
+      label: "이번 학기 제안 주제를 모두 기록했어요. 다음 탐구를 이어가 볼까요?",
+      cta: "AI 컨설턴트에게 묻기",
+      tab: "chat" as const,
+    };
+  }, [activeNode, completedPlanIds, gradeItems]);
+
+  /**
+   * 학기 전환 확인. current_grade/semester는 학생이 직접 갱신하는 값이라, 학기가
+   * 바뀌었는데 프로필을 안 고치면 진단·필터·게이트가 모두 낡은 학기 기준으로
+   * 돈다. 바뀌지 않는 입학 연도로 "지금쯤 몇 학년 몇 학기여야 하는지"를 계산해,
+   * 프로필과 다르면 확인을 권한다. **자동으로 바꾸지는 않는다** — 학생 정보는
+   * 검증된 흐름(프로필 화면)으로만 고친다는 원칙을 지킨다.
+   */
+  const semesterCheck = useMemo(() => {
+    const freshman = profile.freshmanAcademicYear;
+    if (!freshman || freshman < 1990 || freshman > 2100) return null;
+    if (profile.grade == null || profile.semester == null) return null;
+    const now = new Date();
+    // 한국 학제: 3월에 새 학년도 시작. 3~8월=1학기, 그 외=2학기.
+    const academicYearNow = now.getMonth() >= 2 ? now.getFullYear() : now.getFullYear() - 1;
+    const rawGrade = academicYearNow - freshman + 1;
+    // 4학년 이상은 졸업 — 3학년으로 묶어, 재학 중 표시와 어긋나지 않게 한다.
+    const expectedGrade = Math.min(Math.max(rawGrade, 1), 3);
+    const expectedSemester = now.getMonth() >= 2 && now.getMonth() <= 7 ? 1 : 2;
+    // 졸업(계산상 4학년 이상)했는데 프로필이 아직 재학 중이면 그 사실만 짚는다.
+    const graduated = rawGrade > 3;
+    if (graduated) {
+      return { expectedGrade, expectedSemester, graduated: true } as const;
+    }
+    if (expectedGrade === profile.grade && expectedSemester === profile.semester) return null;
+    return { expectedGrade, expectedSemester, graduated: false } as const;
+  }, [profile.freshmanAcademicYear, profile.grade, profile.semester]);
+
   return (
     <div className="space-y-6">
+      {/* 지금 할 일 하나 — 탭이 많은 화면에서 학생이 다음 한 걸음을 바로 잡도록 돕는다. */}
+      <section className="bg-gradient-to-r from-brand-500 to-brand-600 p-5 md:p-6 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/80">NEXT STEP · 지금 할 일</span>
+          <p className="text-sm md:text-base font-bold text-white mt-1 leading-snug">{nextStep.label}</p>
+          {"detail" in nextStep && nextStep.detail && (
+            <p className="text-xs text-white/85 mt-1 truncate">{nextStep.detail}</p>
+          )}
+        </div>
+        <button
+          className="flex-none px-4 py-2.5 rounded-xl bg-white text-brand-700 hover:bg-blue-50 text-sm font-bold shadow-xs transition whitespace-nowrap"
+          onClick={() => onNavigate(nextStep.tab)}
+          type="button"
+        >
+          {nextStep.cta} →
+        </button>
+      </section>
+
+      {/* 학기 전환 확인 — 입학 연도로 계산한 시점이 프로필과 다르면 갱신을 권한다. */}
+      {semesterCheck && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <span className="text-[11px] font-extrabold text-amber-700">학기 확인</span>
+            <p className="text-sm font-semibold text-amber-900 mt-0.5 leading-snug">
+              {semesterCheck.graduated
+                ? `입학 연도 기준으로는 이미 졸업 시점이에요. 현재 프로필은 ${profile.grade}학년 ${profile.semester}학기입니다.`
+                : `지금은 ${semesterCheck.expectedGrade}학년 ${semesterCheck.expectedSemester}학기일 텐데, 프로필은 ${profile.grade}학년 ${profile.semester}학기로 되어 있어요.`}
+            </p>
+            <p className="text-xs text-amber-700 mt-1">학년·학기가 바뀌었다면 프로필에서 갱신해 주세요. 진단과 이번 학기 안내가 정확해집니다.</p>
+          </div>
+          <button
+            className="flex-none px-4 py-2.5 rounded-xl border border-amber-300 bg-white text-amber-800 hover:bg-amber-100 text-sm font-bold transition whitespace-nowrap"
+            onClick={() => onNavigate("profile")}
+            type="button"
+          >
+            프로필 확인하기 →
+          </button>
+        </section>
+      )}
+
       {/* 이번 학기 핵심 목표 */}
       <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
