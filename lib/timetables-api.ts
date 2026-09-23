@@ -62,8 +62,23 @@ function fromRead(timetable: TimetableRead): TimetableConfig {
     semester: timetable.semester,
     isDefault: timetable.is_default,
     slots: (timetable.slots ?? []).map(fromSlot),
-    updatedAt: timetable.updated_at,
+    updatedAt: formatUpdatedAt(timetable.updated_at),
   };
+}
+
+function formatUpdatedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "저장됨";
+  const minutesAgo = Math.floor((Date.now() - date.getTime()) / 60_000);
+  if (minutesAgo < 1) return "방금 전";
+  if (minutesAgo < 60) return `${minutesAgo}분 전`;
+  if (minutesAgo < 24 * 60) return `${Math.floor(minutesAgo / 60)}시간 전`;
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 export async function fetchTimetables(): Promise<TimetableConfig[]> {
