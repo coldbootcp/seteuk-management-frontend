@@ -12,6 +12,7 @@ import {
 } from "../lib/api-client";
 import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
+import { fetchTimetables, saveTimetables } from "../lib/timetables-api";
 import { SignIn } from "./sign-in";
 import { LandingView } from "./landing-view";
 import { ConsultationGate } from "./consultation-view";
@@ -2748,40 +2749,83 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
 
   const studentId = workspace.profile.id;
   const storageKey = `seteuk-timetables-${studentId}`;
+  // 기존 브라우저 시간표는 첫 동기화 때만 서버로 옮긴다. 이후 정본은 서버이며,
+  // localStorage는 네트워크 오류가 난 순간에도 학생 입력을 잃지 않기 위한 임시 백업이다.
+  const [timetables, setTimetables] = useState<TimetableConfig[]>([]);
+  const timetableSync = useRef<Promise<void>>(Promise.resolve());
 
-  const [timetables, setTimetables] = useState<TimetableConfig[]>(() => {
-    if (typeof window !== "undefined") {
+  useEffect(() => {
+    let cancelled = false;
+    async function hydrateTimetables() {
       try {
-        const saved = window.localStorage.getItem(storageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
-          }
+        const saved = await fetchTimetables();
+        if (cancelled) return;
+        if (saved.length > 0) {
+          setTimetables(saved);
+          return;
         }
+
+        let local: TimetableConfig[] = [];
+        try {
+          const backup = window.localStorage.getItem(storageKey);
+          const parsed = backup ? JSON.parse(backup) : null;
+          if (Array.isArray(parsed)) local = parsed;
+        } catch {
+          // 손상된 과거 임시본은 무시하고 빈 시간표로 시작한다.
+        }
+        const initial = local.length
+          ? local
+          : [createEmptyTimetable(workspace.profile.grade, workspace.profile.semester)];
+        const synced = await saveTimetables(initial);
+        if (!cancelled) setTimetables(synced);
       } catch {
-        // ignore parse error
+        // 서버가 일시적으로 닿지 않으면 과거 임시본을 보여 주되, 다음 변경 때 다시 저장한다.
+        try {
+          const backup = window.localStorage.getItem(storageKey);
+          const parsed = backup ? JSON.parse(backup) : null;
+          if (!cancelled) {
+            setTimetables(Array.isArray(parsed) && parsed.length ? parsed : [
+              createEmptyTimetable(workspace.profile.grade, workspace.profile.semester),
+            ]);
+          }
+        } catch {
+          if (!cancelled) setTimetables([createEmptyTimetable(workspace.profile.grade, workspace.profile.semester)]);
+        }
       }
     }
-    return [createEmptyTimetable(workspace.profile.grade, workspace.profile.semester)];
-  });
+    void hydrateTimetables();
+    return () => { cancelled = true; };
+  }, [storageKey, workspace.profile.grade, workspace.profile.semester]);
 
   const handleTimetablesChange = (updated: TimetableConfig[]) => {
     setTimetables(updated);
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify(updated));
-      } catch {
-        // ignore storage error
-      }
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(updated));
+    } catch {
+      // localStorage는 보조 백업이라 실패해도 서버 동기화는 계속한다.
     }
+    // 연속 클릭·드래그가 이전 저장을 나중에 덮어쓰지 않도록 순서대로 저장한다.
+    timetableSync.current = timetableSync.current
+      .catch(() => undefined)
+      .then(async () => {
+        const saved = await saveTimetables(updated);
+        setTimetables(saved);
+        try {
+          window.localStorage.setItem(storageKey, JSON.stringify(saved));
+        } catch {
+          // 서버 저장은 이미 끝났으므로 무시한다.
+        }
+      })
+      .catch(() => {
+        // 다음 사용자 조작에서는 다시 저장을 시도한다. 화면의 임시본은 남겨 둔다.
+      });
   };
 
   useEffect(() => {
     const hasCurrent = timetables.some(
       (t) => t.grade === workspace.profile.grade && t.semester === workspace.profile.semester
     );
-    if (!hasCurrent) {
+    if (timetables.length > 0 && !hasCurrent) {
       const newTt = createEmptyTimetable(workspace.profile.grade, workspace.profile.semester);
       handleTimetablesChange([...timetables, newTt]);
     }
