@@ -99,14 +99,12 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
 
             <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-3.5">
               <button
-                className="w-full sm:w-auto px-8 py-4 text-base font-extrabold text-gray-950 bg-[#FEE500] hover:bg-[#FDD800] rounded-2xl transition flex items-center justify-center gap-2.5"
+                className="w-full sm:w-auto px-8 py-4 text-base font-extrabold text-white bg-brand-600 hover:bg-brand-700 rounded-2xl transition flex items-center justify-center gap-2.5"
                 onClick={onGoToLogin}
                 type="button"
               >
-                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                  <path d="M12 3c-4.97 0-9 3.185-9 7.115 0 2.557 1.708 4.8 4.27 6.054-.187.707-.677 2.56-.775 2.964-.122.506.186.499.392.363.162-.107 2.573-1.748 3.612-2.456.491.07 1.002.107 1.521.107 4.97 0 9-3.185 9-7.115S16.97 3 12 3z" />
-                </svg>
                 <span>무료로 시작하기</span>
+                <span aria-hidden="true">→</span>
               </button>
             </div>
 
