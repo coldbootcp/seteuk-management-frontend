@@ -145,6 +145,31 @@ function profileSemesterValue(form: ProfileForm) {
   return isGraduatedGrade(form.grade) ? 2 : Number(form.semester);
 }
 
+/**
+ * 입학 연도와 오늘로 "지금 몇 학년 몇 학기인지"를 계산한다. 졸업 여부도 여기서
+ * 갈린다 — 생기부에 3학년 기록이 있다는 사실이 아니라, 입학 연도가 3년을 넘겼는지로
+ * 판단한다. 그래서 3학년 1학기까지만 담긴 현역 고3 생기부를 졸업자로 오해하지 않는다.
+ * (대시보드 semesterCheck와 같은 학제 규칙: 3월 새 학년, 3~8월 1학기.)
+ */
+function expectedPeriodFromFreshmanYear(
+  freshmanAcademicYear: number | null,
+): { grade: string; semester: string } | null {
+  if (!freshmanAcademicYear || freshmanAcademicYear < 1990 || freshmanAcademicYear > 2100) {
+    return null;
+  }
+  const now = new Date();
+  const academicYearNow = now.getMonth() >= 2 ? now.getFullYear() : now.getFullYear() - 1;
+  const rawGrade = academicYearNow - freshmanAcademicYear + 1;
+  if (rawGrade > 3) return { grade: "graduated", semester: "" };
+  if (rawGrade < 1) return null; // 아직 입학 전 — 알 수 없으니 채우지 않는다.
+  const semester = now.getMonth() >= 2 && now.getMonth() <= 7 ? 1 : 2;
+  return { grade: String(rawGrade), semester: String(semester) };
+}
+
+/**
+ * 생기부 마지막 기록만으로 현재 학년을 되짚는 폴백. 입학 연도를 모를 때만 쓴다.
+ * 입학 연도가 있으면 expectedPeriodFromFreshmanYear가 우선한다.
+ */
 function currentGradeValueFromCompletedRecord(completedGrade: number) {
   if (completedGrade === 2) return "2";
   return completedGrade >= 3 ? "graduated" : String(completedGrade + 1);
@@ -152,7 +177,10 @@ function currentGradeValueFromCompletedRecord(completedGrade: number) {
 
 function expectedCurrentPeriodFromRecord(period: SchoolRecordPeriod | null): { grade: string; semester: string } | null {
   if (!period) return null;
-  if (period.grade >= 3) return { grade: "graduated", semester: "" };
+  // 마지막 기록이 3학년이어도 졸업으로 단정하지 않는다 — 3학년 재학 중일 수 있다.
+  // 졸업 여부는 입학 연도로만 판단하며(expectedPeriodFromFreshmanYear), 여기서는
+  // 입학 연도를 모를 때의 학년 추정만 한다.
+  if (period.grade >= 3) return { grade: "3", semester: "2" };
   if (period.grade === 2) {
     return { grade: "2", semester: "2" };
   }
@@ -590,7 +618,11 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       const initialParsed = parseSchoolRecordJson(resultJson, freshmanAcademicYear);
       const latestPeriod = getLatestSchoolRecordPeriod(initialParsed);
       const completedGrade = latestPeriod?.grade;
-      const expectedPeriod = expectedCurrentPeriodFromRecord(latestPeriod);
+      // 현재 학년·학기·졸업은 입학 연도로 판단하는 것을 우선한다 — 생기부에 3학년
+      // 기록이 있다는 사실만으로 졸업으로 단정하면, 3학년 1학기까지만 담긴 현역
+      // 고3을 졸업자로 오해한다. 입학 연도를 모를 때만 마지막 기록으로 되짚는다.
+      const periodFromYear = expectedPeriodFromFreshmanYear(freshmanAcademicYear ?? null);
+      const expectedPeriod = periodFromYear ?? expectedCurrentPeriodFromRecord(latestPeriod);
       const expectedCurrentGrade = expectedPeriod?.grade ?? (completedGrade ? currentGradeValueFromCompletedRecord(completedGrade) : null);
       const expectedCurrentSemester = expectedPeriod?.semester ?? null;
       const studentName = typeof resultJson.student_name === "string" ? resultJson.student_name.trim() : "";
@@ -628,8 +660,11 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       setOnboardingRecordParse(parsed);
       setOnboardingRecordAutoFields(true);
       setOnboardingRecordContext({ expectedGrade: expectedCurrentGrade, studentName });
-      setOnboardingRecordMessage(completedGrade && completedGrade >= 3
-        ? "3학년까지 확정된 졸업자 학생부로 확인했습니다. 계획은 만들지 않고, 분석·정리한 학생부 기록을 보여드립니다."
+      // 졸업 여부는 입학 연도로만 판단한다. 생기부에 3학년 기록이 있어도 입학
+      // 연도상 재학 중이면(현역 고3) 졸업자로 안내하지 않는다.
+      const graduatedByYear = expectedCurrentGrade != null && isGraduatedGrade(expectedCurrentGrade);
+      setOnboardingRecordMessage(graduatedByYear
+        ? `입학 연도 기준으로 이미 졸업 시점으로 확인했습니다. 분석·정리한 학생부 기록을 보여드립니다.${nameMessage}${periodMessage}`
         : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}${policyMessage}`);
     } catch (e) {
       if (controller.signal.aborted) return;
@@ -638,6 +673,9 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       setOnboardingRecordParse(null);
       setOnboardingRecordAutoFields(false);
       setOnboardingRecordContext({});
+      // 실패 전 자동으로 채워 두었던 기본 정보를 비운다 — 잠금이 풀린 상태로
+      // 검증 안 된 값이 남지 않게 한다.
+      clearRecordAutofilledFields();
     } finally {
       if (onboardingRecordAbortRef.current === controller) {
         onboardingRecordAbortRef.current = null;
@@ -648,6 +686,21 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     }
   }
 
+  // 생기부 분석이 실패하거나 취소되면 "생기부로 시작" 상태가 풀려 잠금도 해제된다.
+  // 그때 분석이 자동으로 채워 두었던 기본 정보가 검증 없이 폼에 남지 않도록 비운다.
+  // 이 필드들은 생기부로 시작한 흐름에서 잠겨 있어 학생이 직접 넣은 값이 아니다.
+  function clearRecordAutofilledFields() {
+    setForm((cur) => ({
+      ...cur,
+      name: "",
+      grade: "",
+      semester: "",
+      freshmanAcademicYear: "",
+      preferredSubjects: "",
+      currentEngagement: "",
+    }));
+  }
+
   function cancelOnboardingRecordAnalysis() {
     onboardingRecordAbortRef.current?.abort();
     onboardingRecordAbortRef.current = null;
@@ -655,7 +708,10 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     setOnboardingRecordStage("업로드 대기");
     setOnboardingRecordFile("");
     setOnboardingRecordMessage("");
+    setOnboardingRecordParse(null);
+    setOnboardingRecordAutoFields(false);
     setOnboardingRecordContext({});
+    clearRecordAutofilledFields();
     setError("");
     if (onboardingRecordRef.current) onboardingRecordRef.current.value = "";
   }
@@ -687,19 +743,29 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   }
 
   const hasValidFreshmanYear = /^(19|20)\d{2}$/.test(form.freshmanAcademicYear);
-  // 진로가 아직 비어 있어도 상담에서 탐색할 수 있다. 가입 단계에서 억지로 분야를
-  // 정하게 하면 이후 모든 추천의 출발점이 부정확해진다.
-  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && hasValidFreshmanYear;
-  const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution;
-  // 생기부로 시작해 분석이 끝났다면, 기본 정보(학년·학기·입학 연도)는 문서에서
-  // 읽은 값으로 채우고 잠근다. 학생이 이 칸에서 임의로 바꾸면 문서가 밝힌 사실과
-  // 어긋나므로, 틀렸을 때는 이후 챗봇 상담에서 바로잡게 한다. 직접 시작(생기부
-  // 없이)한 경우에는 잠그지 않는다.
+  // 생기부로 시작했다면 기본 정보(학년·학기·입학 연도)는 문서에서 읽은 값으로
+  // 채우고 잠근다. 학생이 이 칸에서 임의로 바꾸면 문서가 밝힌 사실과 어긋나므로,
+  // 틀렸을 때는 이후 챗봇 상담에서 바로잡게 한다. 직접 시작(생기부 없이)한
+  // 경우에는 잠그지 않는다.
+  //
+  // 파싱이 끝난 시점(onboardingRecordParse)만이 아니라 분석이 도는 중
+  // (onboardingRecordBusy)이나 파일을 이미 고른 순간(onboardingRecordFile)부터
+  // 잠근다 — 안 그러면 분석하는 1~2분 동안 학생이 값을 바꿔 넣을 수 있었다.
+  const startedFromRecord =
+    onboardingRecordBusy || onboardingRecordParse != null || !!onboardingRecordFile;
   const recordStudentName = onboardingRecordContext.studentName?.trim() ?? "";
-  const recordLocked = onboardingRecordParse != null;
+  const recordLocked = startedFromRecord;
   // 이름은 파서가 실제로 읽었을 때만 잠근다. 인적사항에서 성명을 못 읽으면
   // (recordStudentName이 빈 값) 잠그지 않고 학생이 직접 입력하게 둔다.
   const nameLocked = recordLocked && !!recordStudentName;
+  // 진로가 아직 비어 있어도 상담에서 탐색할 수 있다. 가입 단계에서 억지로 분야를
+  // 정하게 하면 이후 모든 추천의 출발점이 부정확해진다.
+  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && hasValidFreshmanYear;
+  // 생기부로 시작했다면 분석이 끝나 그 값이 실제로 채워지기 전에는 다음으로
+  // 넘어가지 못하게 막는다. 분석 중(busy)이거나, 파일만 고르고 아직 결과가
+  // 없는 상태(실패·취소 포함)에서 넘어가면 잠근 정보가 비어 버린다.
+  const recordReadyIfStarted = !startedFromRecord || onboardingRecordParse != null;
+  const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution && recordReadyIfStarted;
   /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
   function startWithRecord(file: File | undefined) {
     if (!file) return;
@@ -1233,7 +1299,9 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                     ? "학생부 분석이 끝나면 진행할 수 있어요"
                     : busy
                       ? "저장하는 중…"
-                      : "AI 상담 시작하기 ➔"}
+                      : !recordReadyIfStarted
+                        ? "학생부를 먼저 분석해 주세요"
+                        : "AI 상담 시작하기 ➔"}
                 </span>
               </button>
             </div>
