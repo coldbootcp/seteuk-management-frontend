@@ -188,15 +188,20 @@ export function ConsultationGate({
   }
 
   const isReview = status.requiredKind === "semester_review";
+  // 졸업생(수시 재수생)은 생기부가 이미 확정되어 로드맵을 세우지 않는다. 확정된
+  // 기록과 목표 학과의 적합성·지원 전략만 상담하므로 문구와 마무리 흐름이 다르다.
+  const isGraduate = status.requiredKind === "graduate_fit";
   // 3학년 2학기는 새 탐구 계획을 세우는 시기가 아니라 수시 원서·마무리 시기다.
   // 신입생·저학년과 같은 "정밀 진단으로 계획을 세운다" 문구를 그대로 쓰면 시점에
   // 맞지 않아, 이 학기에는 게이트 문구를 따로 둔다.
   const isFinalSemester = status.targetGrade === 3 && status.targetSemester === 2;
-  const kindLabel = isFinalSemester
-    ? "3학년 2학기 점검"
-    : status.requiredKind === "semester_review"
-      ? "학기말 재평가 상담"
-      : "최초 진단 상담";
+  const kindLabel = isGraduate
+    ? "지원 전략 상담"
+    : isFinalSemester
+      ? "3학년 2학기 점검"
+      : status.requiredKind === "semester_review"
+        ? "학기말 재평가 상담"
+        : "최초 진단 상담";
   const targetLabel =
     status.targetGrade && status.targetSemester
       ? `${status.targetGrade}학년 ${status.targetSemester}학기`
@@ -220,24 +225,36 @@ export function ConsultationGate({
     <>
       <p>
         안녕하세요. <strong className="font-bold">세특연구소 AI 입시 컨설턴트</strong>입니다.
-        {isReview
-          ? " 지난 학기를 함께 돌아보고, 다음 학기에 무엇을 목표로 삼을지 정하는 상담이에요."
-          : " 학생의 기록을 처음 읽고, 앞으로 무엇을 목표로 삼고 어떤 탐구를 할지 함께 정하는 상담이에요."}
+        {isGraduate
+          ? " 확정된 학생부를 바탕으로, 목표 학과에 얼마나 맞는지와 어떻게 지원 전략을 짤지 함께 살펴보는 상담이에요."
+          : isReview
+            ? " 지난 학기를 함께 돌아보고, 다음 학기에 무엇을 목표로 삼을지 정하는 상담이에요."
+            : " 학생의 기록을 처음 읽고, 앞으로 무엇을 목표로 삼고 어떤 탐구를 할지 함께 정하는 상담이에요."}
       </p>
       <p>
         제가 보고 있는 것은 <strong className="font-bold">방금 만든 정밀 진단 리포트</strong>와, 지금까지 쌓인
         성적·활동·독서·수상·봉사 기록, 그리고 가입할 때 답해주신 진로와 관심 축입니다.
         {diagnosisIsEmpty && " 다만 아직 쌓인 기록이 없어 진단이 비어 있어요 — 그만큼 이 대화에서 들려주시는 이야기가 근거가 됩니다."}
       </p>
-      <p>
-        이야기가 충분해지면 제가 <strong className="font-bold">{targetLabel} 목표와 탐구 주제 초안</strong>을 제안드릴게요.
-        마음에 들지 않으면 얼마든지 고쳐 말씀해주세요. <strong className="font-bold">대화만으로는 아무것도 확정되지 않고</strong>,
-        아래 [상담 마치고 메인 화면으로] 버튼을 누르는 순간에만 계획으로 저장됩니다.
-      </p>
+      {isGraduate ? (
+        <p>
+          학생부는 이미 확정되어 더 바꿀 수 없으니, <strong className="font-bold">새 활동을 권하지는 않아요.</strong> 대신 있는
+          기록으로 목표 학과에 대한 <strong className="font-bold">적합성·강점·현실적 승산</strong>을 솔직하게 짚고, 도전하고
+          싶다면 그 안에서 어떻게 서술·포지셔닝해 공략할지 함께 정리해요. 승산이 낮으면 낮다고 정직하게 말씀드릴게요.
+        </p>
+      ) : (
+        <p>
+          이야기가 충분해지면 제가 <strong className="font-bold">{targetLabel} 목표와 탐구 주제 초안</strong>을 제안드릴게요.
+          마음에 들지 않으면 얼마든지 고쳐 말씀해주세요. <strong className="font-bold">대화만으로는 아무것도 확정되지 않고</strong>,
+          아래 [상담 마치고 메인 화면으로] 버튼을 누르는 순간에만 계획으로 저장됩니다.
+        </p>
+      )}
       <p className="text-gray-500">
-        {isReview
-          ? "먼저 이번 학기에 실제로 한 것과 아쉬웠던 것부터 편하게 들려주세요."
-          : "먼저 관심 있는 분야, 해보고 싶은 것, 피하고 싶은 제약을 편하게 들려주세요."}
+        {isGraduate
+          ? "먼저 목표 학과와, 그 학과를 지원하려는 이유를 편하게 들려주세요."
+          : isReview
+            ? "먼저 이번 학기에 실제로 한 것과 아쉬웠던 것부터 편하게 들려주세요."
+            : "먼저 관심 있는 분야, 해보고 싶은 것, 피하고 싶은 제약을 편하게 들려주세요."}
       </p>
     </>
   );
@@ -251,7 +268,13 @@ export function ConsultationGate({
             세특연구소 AI 정밀 학업 진단 · {kindLabel}
           </span>
           <h1 className="text-2xl md:text-3xl font-extrabold text-gray-950 tracking-tight leading-snug">
-            {isFinalSemester ? (
+            {isGraduate ? (
+              <>
+                확정된 학생부로
+                <br />
+                <span className="text-brand-500">목표 학과 지원 전략을 세워요</span>
+              </>
+            ) : isFinalSemester ? (
               <>
                 지금까지의 기록을 정리하고
                 <br />
@@ -272,9 +295,11 @@ export function ConsultationGate({
             )}
           </h1>
           <p className="text-sm text-gray-600">
-            {isFinalSemester
-              ? "지금은 3학년 2학기예요. 남은 기록을 정리하고, 상담을 마치면 메인 화면으로 들어갈 수 있어요."
-              : "이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요."}
+            {isGraduate
+              ? "확정된 학생부를 바탕으로 목표 학과 지원 전략을 상담해요. 상담을 마치면 메인 화면으로 들어갈 수 있어요."
+              : isFinalSemester
+                ? "지금은 3학년 2학기예요. 남은 기록을 정리하고, 상담을 마치면 메인 화면으로 들어갈 수 있어요."
+                : "이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요."}
           </p>
         </header>
 
@@ -378,7 +403,7 @@ export function ConsultationGate({
                 <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center flex-none"><Icon name="bot" size={15} /></span>
                 <div>
                   <strong className="block text-xs font-extrabold text-gray-950">AI 입시 컨설턴트 상담</strong>
-                  <span className="block text-[11px] text-gray-400">대화를 마치면 이번 학기 목표와 탐구 주제가 정해집니다</span>
+                  <span className="block text-[11px] text-gray-400">{isGraduate ? "목표 학과 적합성과 지원 전략을 함께 살펴봐요" : "대화를 마치면 이번 학기 목표와 탐구 주제가 정해집니다"}</span>
                 </div>
               </div>
               <span
@@ -386,7 +411,7 @@ export function ConsultationGate({
                   ready ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80" : "bg-gray-100 text-gray-500"
                 }`}
               >
-                {ready ? "확정 준비 완료" : "상담 진행 중"}
+                {isGraduate ? "상담 진행 중" : ready ? "확정 준비 완료" : "상담 진행 중"}
               </span>
             </div>
 
@@ -394,9 +419,11 @@ export function ConsultationGate({
               bottomRef={bottomRef}
               bubbles={bubbles}
               empty={
-                isReview
-                  ? "이번 학기가 어땠는지 편하게 이야기해주세요."
-                  : "관심 분야나 앞으로의 방향에 대해 이야기해주세요."
+                isGraduate
+                  ? "목표 학과와 지원하려는 이유를 편하게 이야기해주세요."
+                  : isReview
+                    ? "이번 학기가 어땠는지 편하게 이야기해주세요."
+                    : "관심 분야나 앞으로의 방향에 대해 이야기해주세요."
               }
               intro={consultationIntro}
             />
@@ -414,11 +441,23 @@ export function ConsultationGate({
               <button
                 className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs transition"
                 type="button"
-                disabled={!ready || concluding}
+                disabled={(!isGraduate && !ready) || concluding}
                 onClick={() => void handleConclude()}
-                title={ready ? undefined : "챗봇이 상담을 마무리하자고 하면 눌러주세요"}
+                title={
+                  isGraduate
+                    ? "상담이 충분하다고 느끼면 눌러 메인 화면으로 들어갈 수 있어요"
+                    : ready
+                      ? undefined
+                      : "챗봇이 상담을 마무리하자고 하면 눌러주세요"
+                }
               >
-                {concluding ? "확정하는 중…" : ready ? "상담 마치고 메인 화면으로 →" : "상담이 아직 끝나지 않았어요"}
+                {concluding
+                  ? "확정하는 중…"
+                  : isGraduate
+                    ? "상담 마치고 메인 화면으로 →"
+                    : ready
+                      ? "상담 마치고 메인 화면으로 →"
+                      : "상담이 아직 끝나지 않았어요"}
               </button>
             </div>
           </section>

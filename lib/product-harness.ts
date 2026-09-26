@@ -266,7 +266,7 @@ export type ProductWorkspace = {
 /** 진단+상담 관문 판정. 만족하지 않으면 메인 화면 대신 상담 화면을 그린다. */
 export type ConsultationStatus = {
   satisfied: boolean;
-  requiredKind: "initial" | "semester_review" | null;
+  requiredKind: "initial" | "semester_review" | "graduate_fit" | null;
   targetGrade: number | null;
   targetSemester: number | null;
   resumableSessionId: string | null;
