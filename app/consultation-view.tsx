@@ -65,6 +65,7 @@ export function ConsultationGate({
   const sendingRef = useRef(false);
   const sessionInitRef = useRef(false);
   const openingStartedRef = useRef(false);
+  const diagnosisInitRef = useRef(false);
 
   /**
    * 사용자가 한 번이라도 말을 건넸는지(대화 시작 여부).
@@ -133,6 +134,11 @@ export function ConsultationGate({
   }, []);
 
   useEffect(() => {
+    // React strict mode(개발 모드)가 마운트 시 effect를 두 번 부르는데, 여기에
+    // 가드가 없어 진단이 계정마다 2개씩 만들어지고 DeepSeek도 2번 불렸다.
+    // sessionInitRef와 같은 패턴으로 실제 실행은 한 번만 하게 막는다.
+    if (diagnosisInitRef.current) return;
+    diagnosisInitRef.current = true;
     let cancelled = false;
     (async () => {
       try {
@@ -160,7 +166,7 @@ export function ConsultationGate({
    * 데이터를 본 챗봇이 매번 직접 짓는다(스트리밍 말풍선 하나로 들어온다).
    */
   const startOpening = useCallback(async (sessionId: string) => {
-    if (streaming || sendingRef.current) return;
+    if (sendingRef.current) return;
     const pendingId = `opening-${Date.now()}`;
     setStreaming(true);
     setBubbles((prev) => {
@@ -192,10 +198,16 @@ export function ConsultationGate({
     } finally {
       setStreaming(false);
     }
-  }, [streaming]);
+  }, []);
 
   useEffect(() => {
-    if (!diagnosis || session || sessionInitRef.current) return;
+    // session은 일부러 의존성/가드에 넣지 않는다 — 아래에서 만든 세션을
+    // setSession으로 반영하는 순간(그 직후 await 지점) 이 effect가 session
+    // 의존성 때문에 스스로 정리(cleanup)되면서 그 클로저의 cancelled를
+    // true로 바꿔, 아직 진행 중이던 같은 흐름의 나머지(첫 인사 시작)가
+    // "취소된 것"처럼 조용히 건너뛰어지는 문제가 있었다. 재실행 방지는
+    // sessionInitRef 하나로 충분하다.
+    if (!diagnosis || sessionInitRef.current) return;
     sessionInitRef.current = true;
     let cancelled = false;
 
@@ -251,7 +263,7 @@ export function ConsultationGate({
     return () => {
       cancelled = true;
     };
-  }, [diagnosis, session, startOpening]);
+  }, [diagnosis, startOpening]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -275,6 +287,10 @@ export function ConsultationGate({
       setInput("");
       setError("");
       setStreaming(true);
+      // 메시지를 보내면(첫 메시지 포함) 컴팩트한 리포트 화면 대신 넓은 1:1 상담
+      // 화면으로 전환한다 — hasUserChatted만으로는 바뀌지 않고, 실제 전송 시점에
+      // 직접 트리거해야 한다.
+      setViewMode("chat_room");
       const pendingId = `pending-${Date.now()}`;
       setBubbles((prev) => [
         ...prev,
