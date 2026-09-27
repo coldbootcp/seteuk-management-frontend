@@ -10,7 +10,15 @@ const nextConfig: NextConfig = {
     if (process.env.NODE_ENV !== "production") return [];
 
     const apiOrigin = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim();
-    const connectSrc = ["'self'", "https://accounts.google.com", apiOrigin]
+    // Vercel Preview 배포(dev)는 자체 피드백 툴바(vercel.live)를 주입한다.
+    // Production 빌드에는 그 스크립트가 없으니 이 허용은 조용히 쓰이지 않는다.
+    const connectSrc = [
+      "'self'",
+      "https://accounts.google.com",
+      "https://vercel.live",
+      "wss://ws-us3.pusher.com",
+      apiOrigin,
+    ]
       .filter(Boolean)
       .join(" ");
 
@@ -19,12 +27,12 @@ const nextConfig: NextConfig = {
       // Next.js가 hydration 데이터를 인라인 <script>로 심으므로 'unsafe-inline'이
       // 필요하다 — 이 프로젝트는 React만 쓰고 dangerouslySetInnerHTML이 없어
       // 사용자 입력이 그 자리에 꽂힐 경로 자체가 없다(React 이스케이프 처리).
-      "script-src 'self' 'unsafe-inline' https://accounts.google.com",
+      "script-src 'self' 'unsafe-inline' https://accounts.google.com https://vercel.live",
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
       "img-src 'self' data: https:",
       "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com",
       `connect-src ${connectSrc}`,
-      "frame-src https://accounts.google.com",
+      "frame-src https://accounts.google.com https://vercel.live",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
