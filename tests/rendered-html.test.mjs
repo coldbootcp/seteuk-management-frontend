@@ -60,8 +60,21 @@ test("the consultation gate starts with record-based diagnosis, not a generated 
   assert.match(gate, /const created = await api<\{ diagnosis_id: string \}>\("\/diagnosis"/);
   assert.doesNotMatch(gate, /\/diagnosis\/pre-questions/);
   assert.doesNotMatch(gate, /진단 전 확인/);
-  assert.match(gate, /hasUserChatted/);
   assert.match(gate, /h-\[740px\] md:h-\[820px\]/);
+
+  // 상담 화면은 "큰 화면에서 보기"로 나뉘던 두 모드를 하나로 합쳤다 — viewMode가
+  // 되살아나거나 그 버튼이 다시 생기면 안 된다.
+  assert.doesNotMatch(gate, /viewMode/);
+  assert.doesNotMatch(gate, /큰 화면에서 보기/);
+
+  // 추천 답변은 고정 문구가 아니라 백엔드가 챗봇 답변에 맞춰 매 턴 만들어 보내는
+  // suggested_replies를 그대로 띄운다.
+  assert.match(gate, /const \[quickReplies, setQuickReplies\] = useState<string\[\]>/);
+  assert.match(gate, /setQuickReplies\(payload\.suggested_replies \?\? \[\]\)/);
+
+  // 마무리 버튼은 처음부터 항상 보이되 완료 전에는 눌리지 않고, 안내 문구가 붙는다.
+  assert.match(gate, /disabled=\{concluding \|\| !canConclude\}/);
+  assert.match(gate, /상담을 마쳐야 다음으로 넘어갈 수 있어요/);
 });
 
 test("the school record review stays client-side and states the real storage policy", async () => {

@@ -51,7 +51,11 @@ export const TOOL_LABELS: Record<string, string> = {
 type Handlers = {
   onToken: (delta: string) => void;
   onAction: (action: ChatAction) => void;
-  onDone: (payload: { message_id: string; applied_actions?: ChatAction[] }) => void;
+  onDone: (payload: {
+    message_id: string;
+    applied_actions?: ChatAction[];
+    suggested_replies?: string[];
+  }) => void;
   onError: (payload: { error_code: string; message: string }) => void;
 };
 
@@ -63,7 +67,7 @@ type ConsultationHandlers = Handlers & {
 /** 상담 세션의 첫 인사 전용. 학생이 아직 아무 말도 안 한 턴이라 도구·나가기 신호가 없다. */
 type OpeningHandlers = {
   onToken: (delta: string) => void;
-  onDone: (payload: { message_id: string | null }) => void;
+  onDone: (payload: { message_id: string | null; suggested_replies?: string[] }) => void;
   onError: (payload: { error_code: string; message: string }) => void;
 };
 

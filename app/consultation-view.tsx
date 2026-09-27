@@ -11,7 +11,7 @@ import {
 import { streamConsultationMessage, streamConsultationOpening, TOOL_LABELS } from "../lib/chat";
 import type { ConsultationSession, ConsultationStatus } from "../lib/product-harness";
 import { GateFrame } from "./gate-frame";
-import { ChatComposer, ChatThread, type ChatBubble } from "./chat-thread";
+import { type ChatBubble } from "./chat-thread";
 import { MarkdownText } from "./markdown-text";
 import { Icon } from "./icons";
 
@@ -61,24 +61,14 @@ export function ConsultationGate({
   const [concluding, setConcluding] = useState(false);
   const [error, setError] = useState("");
   const [showMiniSwot, setShowMiniSwot] = useState(false);
+  // 추천 답변은 더 이상 고정 문구가 아니다. 챗봇의 마지막 말에 맞춰 백엔드가 매 턴
+  // 3개를 만들어 SSE done 이벤트로 실어 보내며, 여기에 담긴다.
+  const [quickReplies, setQuickReplies] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
   const sessionInitRef = useRef(false);
   const openingStartedRef = useRef(false);
-
-  /**
-   * 사용자가 한 번이라도 말을 건넸는지(대화 시작 여부).
-   * 처음에는 진단 리포트를 함께 볼 수 있도록 컴팩트하게(560px) 두고,
-   * 사용자가 한 번이라도 채팅을 시작하면 세로 폭을 충분히 늘려(820px) 대화 흐름을 편하게 읽을 수 있게 한다.
-   */
-  const hasUserChatted = bubbles.some((b) => b.role === "user");
-
-  /**
-   * 화면 모드:
-   * - "report": 채팅 시작 전 기본 화면 (상세 진단 리포트 + 기본 챗봇 도입 상자)
-   * - "chat_room": 채팅 시작 시 전환되는 1:1 컨설턴트 챗봇 전용 페이지 (preview-3200 4번 스타일)
-   */
-  const [viewMode, setViewMode] = useState<"report" | "chat_room">("report");
+  const diagnosisInitRef = useRef(false);
 
   // 프로필 기본 정보 조회 (학생 이름, 학년/학기, 지망 진로/학과)
   useEffect(() => {
@@ -133,6 +123,10 @@ export function ConsultationGate({
   }, []);
 
   useEffect(() => {
+    // React StrictMode(dev)에서 이펙트가 두 번 돌면 진단이 중복 생성되고 폴링이
+    // 꼬여 화면이 "진단 중"에 갇힌다. ref로 한 번만 실행되게 막는다.
+    if (diagnosisInitRef.current) return;
+    diagnosisInitRef.current = true;
     let cancelled = false;
     (async () => {
       try {
@@ -178,12 +172,14 @@ export function ConsultationGate({
           setBubbles((prev) =>
             prev.map((b) => (b.id === pendingId ? { ...b, content: b.content + delta } : b)),
           ),
-        onDone: (payload) =>
+        onDone: (payload) => {
           setBubbles((prev) =>
             prev.map((b) =>
               b.id === pendingId ? { ...b, id: payload.message_id ?? b.id, streaming: false } : b,
             ),
-          ),
+          );
+          setQuickReplies(payload.suggested_replies ?? []);
+        },
         onError: (payload) => {
           setError(`${payload.message} (${payload.error_code})`);
           setBubbles((prev) => prev.filter((b) => b.id !== pendingId));
@@ -207,7 +203,10 @@ export function ConsultationGate({
         setPhase("ready");
         try {
           const history = await getConsultationMessages(created.id);
-          if (cancelled) return;
+          // cancelled(StrictMode의 이펙트 cleanup)여도 여기서 그냥 return하면,
+          // 재실행은 sessionInitRef 가드에 막혀 첫 인사를 아무도 못 부른다.
+          // 그래서 cancelled여도 아래 로직은 진행하되, 중복은 openingStartedRef와
+          // setBubbles의 멱등 처리로 막는다.
           if (history.length > 0) {
             // 만약 학생의 첫 발화 이전에 어시스턴트 첫 인사가 2개 이상 들어와 있다면 (동시 호출 등으로 인한 중복)
             // 가장 마지막 첫 인사 1개만 남기도록 정제
@@ -231,9 +230,6 @@ export function ConsultationGate({
               actions: m.appliedActions ?? [],
             }));
             setBubbles(mapped);
-            if (mapped.some((m) => m.role === "user")) {
-              setViewMode("chat_room");
-            }
           } else if (!openingStartedRef.current) {
             openingStartedRef.current = true;
             // 새로 만든 세션(재개가 아님) — 챗봇이 먼저 인사를 건넨다.
@@ -257,15 +253,6 @@ export function ConsultationGate({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [bubbles, streaming]);
 
-  useEffect(() => {
-    if (hasUserChatted) {
-      const timer = window.setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 320);
-      return () => window.clearTimeout(timer);
-    }
-  }, [hasUserChatted, viewMode]);
-
   async function send(contentOverride?: string) {
     const content = (contentOverride !== undefined ? contentOverride : input).trim();
     if (!content || streaming || sendingRef.current || !session) return;
@@ -275,6 +262,9 @@ export function ConsultationGate({
       setInput("");
       setError("");
       setStreaming(true);
+      // 방금 보낸 답변에 딸려 있던 칩은 더 이상 맥락에 맞지 않으니 즉시 비운다.
+      // 새 추천은 이번 턴의 done 이벤트로 다시 채운다.
+      setQuickReplies([]);
       const pendingId = `pending-${Date.now()}`;
       setBubbles((prev) => [
         ...prev,
@@ -295,14 +285,16 @@ export function ConsultationGate({
             setReplanProposal({ rationale: String(action.arguments?.rationale ?? "") });
           }
         },
-        onDone: (payload) =>
+        onDone: (payload) => {
           setBubbles((prev) =>
             prev.map((b) =>
               b.id === pendingId
                 ? { ...b, id: payload.message_id, streaming: false, actions: payload.applied_actions ?? b.actions }
                 : b,
             ),
-          ),
+          );
+          setQuickReplies(payload.suggested_replies ?? []);
+        },
         onError: (payload) => {
           setError(`${payload.message} (${payload.error_code})`);
           setBubbles((prev) => prev.map((b) => (b.id === pendingId ? { ...b, streaming: false } : b)));
@@ -376,37 +368,6 @@ export function ConsultationGate({
   // 맞지 않아, 이 학기에는 게이트 문구를 따로 둔다.
   const isFinalSemester = status.targetGrade === 3 && status.targetSemester === 2;
 
-  // 추천 답변 칩 목록 (단계 및 상태에 따른 가이드 제공)
-  const quickReplies: string[] = isGraduate
-    ? userMessageCount === 0
-      ? [
-          "목표 학과와 지원하려는 이유부터 말씀드릴게요",
-          "제 생기부로 이 학과에 얼마나 맞는지 솔직하게 알려주세요",
-        ]
-      : [
-          "제 기록에서 가장 강하게 내세울 수 있는 점은 무엇인가요?",
-          "약점은 자기소개·면접에서 어떻게 풀어내면 좋을까요?",
-        ]
-    : ready
-    ? ["✓ 제안해주신 로드맵과 목표대로 최종 확정할게요!"]
-    : userMessageCount === 0
-    ? [
-        "이번 학기에 집중할 추천 탐구 방향을 알려주세요",
-        "상위권 학종을 위해선 어떤 활동을 보강해야 할까요?",
-        "교과 세특과 진로 연계는 어떻게 잡는 게 좋을까요?",
-      ]
-    : userMessageCount === 1
-    ? [
-        "제안해주신 방향이 좋습니다! 세부 탐구 주제도 추천해주세요",
-        "학업 성적과 탐구 활동 비중을 어떻게 조율할까요?",
-        "이 분야에서 평가관들이 가장 눈여겨보는 역량은 무엇인가요?",
-      ]
-    : [
-        "제안해주신 목표로 이번 학기 로드맵을 확정하고 싶어요",
-        "목표를 조금 더 수정하거나 보강하고 싶어요",
-        "다른 교과목과의 연계 방안도 궁금해요",
-      ];
-
   return (
     <GateFrame onSignOut={onSignOut} width="wide">
       <div className="space-y-6">
@@ -444,49 +405,47 @@ export function ConsultationGate({
           </section>
         )}
 
-        {/* 2. 대화 시작 후 전용 페이지 (viewMode === "chat_room"): 3200 포트 4번 1:1 컨설턴트 챗봇 UI */}
-        {phase === "ready" && viewMode === "chat_room" && (
+        {/* 대화 화면: 좌측에 진행단계·간단 프로필 위젯, 우측에 1:1 컨설턴트 챗봇 콘솔.
+            예전에 별도 모드로 나뉘던 리포트/챗룸을 하나의 레이아웃으로 합쳤다. */}
+        {phase === "ready" && (
           <div className="max-w-6xl mx-auto space-y-6 pb-12">
-            {/* Top Status & Scenario Navigation Bar */}
+            {/* 상단 시나리오 배너 */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 px-6 rounded-2xl border border-gray-200/80 shadow-xs">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("report")}
-                  className="text-xs text-gray-500 hover:text-gray-900 font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <Icon name="chevron-left" size={14} />
-                  <span>진단 리포트 보기</span>
-                </button>
-                <span className="text-gray-300">|</span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-brand-600 text-xs font-bold border border-blue-200/60">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                  {isGraduate
-                    ? "확정된 생기부 ➔ 목표 학과 적합성 & 지원 전략 상담"
-                    : isFinalSemester
-                    ? "3학년 2학기 점검 ➔ 남은 기록 정리 & 수시 지원 준비"
-                    : isReview
-                    ? "학기말 정기 재평가 ➔ 다음 학기 목표 조율 & 심화 탐구 도출"
-                    : "최초 진단 ➔ 3개년 마스터 플랜 1:1 심층 상담"}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span
-                  className={`text-[11px] font-bold px-3 py-1 rounded-full border ${
-                    ready
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-blue-50 text-brand-700 border-blue-200"
-                  }`}
-                >
-                  {!isGraduate && ready ? "상담 확정 준비 완료 ✓" : "실시간 상호 대화 중"}
-                </span>
-              </div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-brand-600 text-xs font-bold border border-blue-200/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+                {isGraduate
+                  ? "확정된 생기부 ➔ 목표 학과 적합성 & 지원 전략 상담"
+                  : isFinalSemester
+                  ? "3학년 2학기 점검 ➔ 남은 기록 정리 & 수시 지원 준비"
+                  : isReview
+                  ? "학기말 정기 재평가 ➔ 다음 학기 목표 조율 & 심화 탐구 도출"
+                  : "최초 진단 ➔ 3개년 마스터 플랜 1:1 심층 상담"}
+              </span>
+              <span
+                className={`text-[11px] font-bold px-3 py-1 rounded-full border ${
+                  ready
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-blue-50 text-brand-700 border-blue-200"
+                }`}
+              >
+                {!isGraduate && ready ? "상담 확정 준비 완료 ✓" : "실시간 상호 대화 중"}
+              </span>
             </div>
 
-            {/* Split Consultation Layout (4 Cols / 8 Cols) */}
+            {/* 상담을 마쳐야 넘어갈 수 있다는 안내 */}
+            <div className="flex items-start gap-2.5 p-3.5 px-5 bg-amber-50/70 border border-amber-200/70 rounded-2xl">
+              <span className="text-amber-500 mt-0.5 flex-none">
+                <Icon name="alert" size={15} />
+              </span>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                {isGraduate
+                  ? "이 상담을 마쳐야 성적·활동 기록 등 메인 화면으로 들어갈 수 있어요. 목표 학과와 적합성에 대해 충분히 이야기한 뒤 아래 [상담 마치고 메인 화면으로] 버튼을 눌러주세요."
+                  : "이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요. 컨설턴트와 목표를 조율하고 준비가 되면 아래 [상담 마치고 메인 화면으로] 버튼이 활성화돼요."}
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left Column (4 Cols): Student Profile & Context Dashboard */}
+              {/* 좌측: 학생 프로필 & 진행 단계 & 진단 요약 */}
               <div className="lg:col-span-4 space-y-4">
                 {/* 1. Profile Card */}
                 <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-4">
@@ -501,9 +460,7 @@ export function ConsultationGate({
                           {targetGrade}학년 {targetSemester}학기
                         </span>
                       </div>
-                      <span className="text-xs text-gray-500 line-clamp-1 mt-0.5">
-                        {targetCareer}
-                      </span>
+                      <span className="text-xs text-gray-500 line-clamp-1 mt-0.5">{targetCareer}</span>
                     </div>
                   </div>
 
@@ -535,85 +492,85 @@ export function ConsultationGate({
                   </div>
                 </div>
 
-                {/* 2. 4-Step Consultation Progress Steps Tracker — 로드맵을 세우지 않는 졸업생 상담에는 맞지 않아 숨긴다. */}
+                {/* 2. 4단계 진행 트래커 — 로드맵을 세우지 않는 졸업생 상담에는 숨긴다. */}
                 {!isGraduate && (
-                <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-gray-900">상담 진행 단계</span>
-                    <span className="text-[10px] text-gray-400">4단계 프로세스</span>
+                  <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-900">상담 진행 단계</span>
+                      <span className="text-[10px] text-gray-400">4단계 프로세스</span>
+                    </div>
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 flex items-center gap-2">
+                          <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center justify-center flex-none">
+                            ✓
+                          </span>
+                          1단계: 학생부 진단 & 관심사 경청
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-600">완료</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 flex items-center gap-2">
+                          <span
+                            className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
+                              consultationStep >= 2 ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"
+                            }`}
+                          >
+                            {consultationStep >= 2 ? "✓" : "2"}
+                          </span>
+                          2단계: 3개년 학술 서사 맥락 협의
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold ${
+                            consultationStep >= 2 ? "text-emerald-600" : "text-brand-600"
+                          }`}
+                        >
+                          {consultationStep >= 2 ? "완료" : "진행 중"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 flex items-center gap-2">
+                          <span
+                            className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
+                              ready
+                                ? "bg-emerald-100 text-emerald-700"
+                                : consultationStep >= 3
+                                ? "bg-blue-100 text-brand-700"
+                                : "bg-gray-100 text-gray-400"
+                            }`}
+                          >
+                            {ready ? "✓" : "3"}
+                          </span>
+                          3단계: 현재 학기 3대 목표 조율
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold ${
+                            ready ? "text-emerald-600" : consultationStep >= 3 ? "text-brand-600" : "text-gray-400"
+                          }`}
+                        >
+                          {ready ? "확정" : consultationStep >= 3 ? "조율 중" : "대기"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 flex items-center gap-2">
+                          <span
+                            className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
+                              ready ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"
+                            }`}
+                          >
+                            {ready ? "✓" : "4"}
+                          </span>
+                          4단계: 10대 세특 심화 주제 확정
+                        </span>
+                        <span className={`text-[10px] font-bold ${ready ? "text-emerald-600" : "text-gray-400"}`}>
+                          {ready ? "도출 완료" : "대기"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600 flex items-center gap-2">
-                        <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center justify-center flex-none">
-                          ✓
-                        </span>
-                        1단계: 학생부 진단 & 관심사 경청
-                      </span>
-                      <span className="text-[10px] font-bold text-emerald-600">완료</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600 flex items-center gap-2">
-                        <span
-                          className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
-                            consultationStep >= 2 ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"
-                          }`}
-                        >
-                          {consultationStep >= 2 ? "✓" : "2"}
-                        </span>
-                        2단계: 3개년 학술 서사 맥락 협의
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold ${
-                          consultationStep >= 2 ? "text-emerald-600" : "text-brand-600"
-                        }`}
-                      >
-                        {consultationStep >= 2 ? "완료" : "진행 중"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600 flex items-center gap-2">
-                        <span
-                          className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
-                            ready
-                              ? "bg-emerald-100 text-emerald-700"
-                              : consultationStep >= 3
-                              ? "bg-blue-100 text-brand-700"
-                              : "bg-gray-100 text-gray-400"
-                          }`}
-                        >
-                          {ready ? "✓" : "3"}
-                        </span>
-                        3단계: 현재 학기 3대 목표 조율
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold ${
-                          ready ? "text-emerald-600" : consultationStep >= 3 ? "text-brand-600" : "text-gray-400"
-                        }`}
-                      >
-                        {ready ? "확정" : consultationStep >= 3 ? "조율 중" : "대기"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600 flex items-center gap-2">
-                        <span
-                          className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
-                            ready ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"
-                          }`}
-                        >
-                          {ready ? "✓" : "4"}
-                        </span>
-                        4단계: 10대 세특 심화 주제 확정
-                      </span>
-                      <span className={`text-[10px] font-bold ${ready ? "text-emerald-600" : "text-gray-400"}`}>
-                        {ready ? "도출 완료" : "대기"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
                 )}
 
-                {/* 3. Mini-SWOT Quick Viewer Drawer */}
+                {/* 3. 진단 SWOT 요약 (펼치기) */}
                 {diagnosis && !diagnosisIsEmpty && (
                   <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs space-y-2.5">
                     <button
@@ -651,39 +608,39 @@ export function ConsultationGate({
                     )}
                   </div>
                 )}
+
+                {/* 4. 기록이 없어 진단을 만들지 못한 경우 안내 */}
+                {diagnosis && diagnosisIsEmpty && (
+                  <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs space-y-1.5">
+                    <h3 className="text-xs font-extrabold text-gray-900">과거 기록 기반 진단은 아직 없어요</h3>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      학생부·활동·성적 기록이 없으면 강점·약점을 사실처럼 판단할 수 없어요. 입력한 진로와 관심사를
+                      바탕으로 상담을 이어갑니다.
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {/* Right Column (8 Cols): High-End Consultation Messenger Console */}
+              {/* 우측: 1:1 컨설턴트 챗봇 콘솔 */}
               <div className="lg:col-span-8 flex flex-col bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden h-[740px] md:h-[820px]">
-                {/* Messenger Header */}
-                <div className="p-4 px-5 border-b border-gray-200/80 bg-white flex items-center justify-between flex-none">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-gray-900 to-gray-700 text-white flex items-center justify-center text-lg font-bold shadow-xs flex-none">
-                      🎓
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <strong className="text-sm text-gray-900">세특연구소 전담 수석 컨설턴트 AI</strong>
-                        <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-bold border border-emerald-100">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          실시간 1:1 상담 중
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-gray-500">서울대·카이스트 등 상위권 공학계열 학종 로드맵 전담</p>
-                    </div>
+                {/* 헤더 */}
+                <div className="p-4 px-5 border-b border-gray-200/80 bg-white flex items-center gap-3 flex-none">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-gray-900 to-gray-700 text-white flex items-center justify-center text-lg font-bold shadow-xs flex-none">
+                    🎓
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("report")}
-                    className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Icon name="file" size={13} />
-                    <span>진단 리포트</span>
-                  </button>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <strong className="text-sm text-gray-900">세특연구소 전담 수석 컨설턴트 AI</strong>
+                      <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-bold border border-emerald-100">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        실시간 1:1 상담 중
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500">서울대·카이스트 등 상위권 공학계열 학종 로드맵 전담</p>
+                  </div>
                 </div>
 
-                {/* Scrollable Chat Feed */}
+                {/* 대화 피드 */}
                 <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-[#F8F9FA]/50">
                   {bubbles.map((msg) => {
                     if (msg.role === "user") {
@@ -704,7 +661,6 @@ export function ConsultationGate({
                       );
                     }
 
-                    // Assistant Message
                     return (
                       <div className="flex items-start gap-2.5" key={msg.id}>
                         <div className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold text-xs flex-none mt-1 shadow-xs">
@@ -722,10 +678,8 @@ export function ConsultationGate({
                             )}
                           </div>
 
-                          {/* Tool action badges */}
                           {(() => {
                             const visibleActions = msg.actions.filter((action) => {
-                              // 실패한 내부 도구 호출(✕) 및 내부 계획/신호/메모리 도구는 뱃지로 노출하지 않음
                               if (action.result && "error" in action.result) return false;
                               if (
                                 action.tool === "propose_draft_plan" ||
@@ -758,7 +712,7 @@ export function ConsultationGate({
                     );
                   })}
 
-                  {/* Confirmed / Ready Card embedded in chat when ready */}
+                  {/* 준비 완료 카드 */}
                   {!isGraduate && ready && (
                     <div className="w-full bg-white p-5 rounded-2xl border-2 border-emerald-500 shadow-md space-y-3.5">
                       <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -775,22 +729,13 @@ export function ConsultationGate({
                         </span>
                       </div>
                       <p className="text-xs text-gray-600 leading-relaxed">
-                        컨설턴트와의 대화를 통해 이번 학기 학술 로드맵 목표와 방향성이 정돈되었습니다.
-                        아래 버튼을 눌러 계획을 확정하고 본격적인 활동을 시작해 보세요!
+                        컨설턴트와의 대화를 통해 이번 학기 학술 로드맵 목표와 방향성이 정돈되었습니다. 아래
+                        [상담 마치고 메인 화면으로] 버튼을 눌러 계획을 확정하고 본격적인 활동을 시작해 보세요!
                       </p>
-                      <button
-                        type="button"
-                        disabled={concluding}
-                        onClick={() => void handleConclude()}
-                        className="w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <span>{concluding ? "확정하는 중…" : "계획 확정 및 대시보드로 이동"}</span>
-                        <span>➔</span>
-                      </button>
                     </div>
                   )}
 
-                  {/* AI Typing Indicator */}
+                  {/* AI 타이핑 인디케이터 */}
                   {streaming && (
                     <div className="flex items-start gap-2.5">
                       <div className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold text-xs flex-none mt-1 shadow-xs">
@@ -817,253 +762,7 @@ export function ConsultationGate({
                   <div ref={bottomRef} />
                 </div>
 
-                {/* Quick Replies Interactive Chips */}
-                {!ready && !streaming && quickReplies.length > 0 && (
-                  <div className="px-5 py-2.5 bg-white border-t border-gray-100 flex flex-wrap gap-2 items-center flex-none">
-                    <span className="text-[11px] text-gray-400 font-semibold flex items-center gap-1 flex-none mr-1">
-                      <span>💡</span> 추천 답변:
-                    </span>
-                    {quickReplies.map((replyText, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => void send(replyText)}
-                        className="px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50/70 hover:bg-blue-100 border border-blue-200/80 text-brand-700 transition shadow-2xs cursor-pointer flex items-center gap-1"
-                      >
-                        <span>💬</span>
-                        <span>{replyText}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Bottom Interactive Text Input Bar */}
-                <div className="p-3.5 px-5 bg-white border-t border-gray-200/80 flex items-center gap-2.5 flex-none">
-                  <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.nativeEvent.isComposing) return;
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void send();
-                      }
-                    }}
-                    placeholder={
-                      ready
-                        ? "상담 및 목표 조율이 완료되었습니다. 위의 [대시보드로 이동] 버튼을 눌러주세요."
-                        : "컨설턴트 AI에게 진로 희망이나 수정하고 싶은 목표를 자유롭게 말씀해 보세요..."
-                    }
-                    disabled={concluding || streaming}
-                    className="flex-1 py-3 px-4 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder-gray-400 focus:bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 focus:outline-none transition disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void send()}
-                    disabled={!input.trim() || streaming || concluding}
-                    className="px-4 py-3 rounded-xl bg-gray-900 hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer disabled:cursor-not-allowed flex-none"
-                  >
-                    <span>전송</span>
-                    <span className="text-[10px]">➤</span>
-                  </button>
-                </div>
-
-                {/* 졸업생 상담은 로드맵 확정 신호가 없으므로, 충분히 대화한 뒤 학생이 직접 마친다. */}
-                {isGraduate && (
-                  <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex-none">
-                    <button
-                      type="button"
-                      disabled={concluding || !graduateCanConclude}
-                      onClick={() => void handleConclude()}
-                      title={
-                        graduateCanConclude
-                          ? "상담이 충분하다고 느끼면 눌러 메인 화면으로 들어갈 수 있어요"
-                          : "목표 학과와 적합성에 대해 조금 더 이야기한 뒤 마칠 수 있어요"
-                      }
-                      className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:cursor-not-allowed"
-                    >
-                      {concluding
-                        ? "확정하는 중…"
-                        : graduateCanConclude
-                        ? "상담 마치고 메인 화면으로 →"
-                        : "조금 더 이야기한 뒤 마칠 수 있어요"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 3. 대화 시작 전 기본 화면 (viewMode === "report"): 정밀 진단 리포트 + 챗봇 도입 상자 */}
-        {phase === "ready" && viewMode === "report" && (
-          <div className="space-y-6">
-            {/* 만약 이미 대화를 시작했다면 상단에 바로 복귀할 수 있는 칩/배너 표시 */}
-            {hasUserChatted && (
-              <div className="flex items-center justify-between p-3.5 px-5 bg-blue-50/90 border border-blue-200 rounded-2xl shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-brand-500 animate-pulse" />
-                  <span className="text-xs font-bold text-brand-800">
-                    세특연구소 전담 수석 컨설턴트와의 1:1 상담이 진행 중입니다.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("chat_room")}
-                  className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <span>큰 화면에서 보기</span>
-                  <Icon name="chevron-right" size={13} />
-                </button>
-              </div>
-            )}
-
-            <header className="text-center max-w-3xl mx-auto space-y-3">
-              <h1 className="text-2xl md:text-3xl font-extrabold text-gray-950 tracking-tight leading-snug">
-                {isGraduate ? (
-                  <>
-                    확정된 생기부로
-                    <br />
-                    <span className="text-brand-500">목표 학과 지원 전략을 세워요</span>
-                  </>
-                ) : isFinalSemester ? (
-                  <>
-                    지금까지의 기록을 정리하고
-                    <br />
-                    <span className="text-brand-500">수시 지원을 준비해요</span>
-                  </>
-                ) : isReview ? (
-                  <>
-                    이번 학기를 점검하고
-                    <br />
-                    <span className="text-brand-500">다음 학기 목표를 함께 정해요</span>
-                  </>
-                ) : (
-                  <>
-                    맞춤 계획 설계를 위해
-                    <br />
-                    <span className="text-brand-500">AI 정밀 학업 진단</span>을 먼저 진행합니다
-                  </>
-                )}
-              </h1>
-              <p className="text-sm text-gray-600">
-                {isGraduate
-                  ? "확정된 생기부를 바탕으로 목표 학과 지원 전략을 상담해요. 상담을 마치면 메인 화면으로 들어갈 수 있어요."
-                  : isFinalSemester
-                  ? "지금은 3학년 2학기예요. 남은 기록을 정리하고, 상담을 마치면 메인 화면으로 들어갈 수 있어요."
-                  : "이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요."}
-              </p>
-            </header>
-
-            {diagnosis && diagnosisIsEmpty && (
-              <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs">
-                <div className="flex items-start gap-3">
-                  <span className="w-9 h-9 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center flex-none">
-                    <Icon name="file" size={18} />
-                  </span>
-                  <div className="space-y-1.5">
-                    <h2 className="text-base font-extrabold text-gray-950">아직 과거 기록 기반 진단은 만들지 않았어요</h2>
-                    <p className="text-sm text-gray-600 leading-relaxed">
-                      학생부 PDF나 이전 활동·성적 기록이 없으면 강점·약점·반복 패턴을 사실처럼 판단할 수 없습니다.
-                      기록을 추가하면 그 내용을 근거로 정밀 진단을 만들 수 있어요. 지금은 입력해 주신 진로와 관심사를 바탕으로 상담을 이어가겠습니다.
-                    </p>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {diagnosis && !diagnosisIsEmpty && (
-              <section className="bg-white p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xs space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                  <div className="flex items-center gap-2">
-                    <Icon className="text-brand-600" name="microscope" size={18} />
-                    <h2 className="text-base font-extrabold text-gray-950">AI 정밀 진단 리포트</h2>
-                  </div>
-                  {hasUserChatted && (
-                    <button
-                      type="button"
-                      onClick={() => setViewMode("chat_room")}
-                      className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
-                    >
-                      <span>큰 화면에서 보기</span>
-                      <Icon name="chevron-right" size={13} />
-                    </button>
-                  )}
-                </div>
-
-                {diagnosis.headline_comment && (
-                  <div className="p-4 rounded-xl bg-gradient-to-r from-brand-50/70 to-blue-50/40 border border-brand-100/80">
-                    <p className="text-xs md:text-sm font-semibold text-gray-800 leading-relaxed">
-                      {diagnosis.headline_comment}
-                    </p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { label: "강점 (Strengths)", items: diagnosis.strengths, dot: "bg-emerald-500", box: "bg-emerald-50/50 border-emerald-200/70" },
-                    { label: "약점 (Weaknesses)", items: diagnosis.weaknesses, dot: "bg-red-500", box: "bg-red-50/40 border-red-200/70" },
-                    { label: "기회 (Opportunities)", items: diagnosis.opportunities, dot: "bg-brand-500", box: "bg-blue-50/50 border-blue-200/70" },
-                    { label: "반복되는 패턴 (Threats)", items: diagnosis.threats, dot: "bg-amber-500", box: "bg-amber-50/50 border-amber-200/70" },
-                  ].map((group) => (
-                    <div className={`p-4 rounded-xl border space-y-2 ${group.box}`} key={group.label}>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${group.dot}`} />
-                        <strong className="text-xs font-extrabold text-gray-900">{group.label}</strong>
-                      </div>
-                      {group.items.length ? (
-                        <ul className="space-y-1.5">
-                          {group.items.map((item) => (
-                            <li className="text-xs text-gray-600 leading-relaxed" key={item}>· {item}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-xs text-gray-400">해당 항목이 없습니다.</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {session && (
-              <section className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden flex flex-col h-[560px]">
-                <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 flex-none">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-8 h-8 rounded-xl bg-gradient-to-tr from-gray-900 to-gray-700 text-white flex items-center justify-center text-sm font-bold shadow-xs flex-none">
-                      🎓
-                    </span>
-                    <div>
-                      <strong className="block text-xs font-extrabold text-gray-950">AI 입시 컨설턴트 1:1 심층 상담</strong>
-                      <span className="block text-[11px] text-gray-400">
-                        학생부 기반의 실시간 맞춤 상담을 진행합니다
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("chat_room")}
-                    className="px-3 py-1 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200/80 text-brand-700 font-bold text-xs transition flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>큰 화면에서 보기</span>
-                    <Icon name="chevron-right" size={13} />
-                  </button>
-                </div>
-
-                <ChatThread
-                  bottomRef={bottomRef}
-                  bubbles={bubbles}
-                  empty={
-                    isGraduate
-                      ? "목표 학과와 지원하려는 이유를 편하게 이야기해주세요."
-                      : isReview
-                      ? "이번 학기가 어땠는지 편하게 이야기해주세요."
-                      : "관심 분야나 앞으로의 방향에 대해 이야기해주세요."
-                  }
-                />
-
-                {/* 추천 시작 질문 칩 */}
+                {/* 추천 답변 칩 (챗봇 마지막 말에 맞춰 동적으로 생성) */}
                 {!streaming && quickReplies.length > 0 && (
                   <div className="px-5 py-2.5 bg-white border-t border-gray-100 flex flex-wrap gap-2 items-center flex-none">
                     <span className="text-[11px] text-gray-400 font-semibold flex items-center gap-1 flex-none mr-1">
@@ -1083,29 +782,67 @@ export function ConsultationGate({
                   </div>
                 )}
 
-                <ChatComposer
-                  disabled={streaming}
-                  onChange={setInput}
-                  onSend={() => void send()}
-                  placeholder="메시지를 입력하면 1:1 컨설턴트 전용 상담 화면으로 연결됩니다..."
-                  streaming={streaming}
-                  value={input}
-                />
+                {/* 입력 바 */}
+                <div className="p-3.5 px-5 bg-white border-t border-gray-200/80 flex items-center gap-2.5 flex-none">
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing) return;
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void send();
+                      }
+                    }}
+                    placeholder={
+                      ready
+                        ? "상담 및 목표 조율이 완료되었습니다. 아래 [상담 마치고 메인 화면으로] 버튼을 눌러주세요."
+                        : "컨설턴트 AI에게 진로 희망이나 수정하고 싶은 목표를 자유롭게 말씀해 보세요..."
+                    }
+                    disabled={concluding || streaming}
+                    className="flex-1 py-3 px-4 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder-gray-400 focus:bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 focus:outline-none transition disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void send()}
+                    disabled={!input.trim() || streaming || concluding}
+                    className="px-4 py-3 rounded-xl bg-gray-900 hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer disabled:cursor-not-allowed flex-none"
+                  >
+                    <span>전송</span>
+                    <span className="text-[10px]">➤</span>
+                  </button>
+                </div>
 
-                {canConclude && (
-                  <div className="px-5 py-3.5 border-t border-gray-100 bg-gray-50/60 flex-none">
-                    <button
-                      className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs transition"
-                      type="button"
-                      disabled={concluding}
-                      onClick={() => void handleConclude()}
-                    >
-                      {concluding ? "확정하는 중…" : "상담 마치고 메인 화면으로 →"}
-                    </button>
-                  </div>
-                )}
-              </section>
-            )}
+                {/* 마무리 버튼: 처음부터 항상 보이되, 상담을 마칠 수 있을 때만 눌린다. */}
+                <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex-none space-y-2">
+                  <button
+                    type="button"
+                    disabled={concluding || !canConclude}
+                    onClick={() => void handleConclude()}
+                    title={
+                      canConclude
+                        ? "상담이 충분하다고 느끼면 눌러 메인 화면으로 들어갈 수 있어요"
+                        : isGraduate
+                        ? "목표 학과와 적합성에 대해 조금 더 이야기한 뒤 마칠 수 있어요"
+                        : "컨설턴트와 목표를 조율해 준비가 되면 눌러 마칠 수 있어요"
+                    }
+                    className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                  >
+                    <span>{concluding ? "확정하는 중…" : "상담 마치고 메인 화면으로"}</span>
+                    {!concluding && <span>→</span>}
+                  </button>
+                  {!canConclude && (
+                    <p className="text-[11px] text-gray-400 text-center leading-relaxed">
+                      상담을 마쳐야 다음으로 넘어갈 수 있어요.
+                      {isGraduate
+                        ? " 목표 학과·적합성에 대해 조금 더 이야기해 주세요."
+                        : " 컨설턴트와 목표를 조율하면 버튼이 활성화돼요."}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
