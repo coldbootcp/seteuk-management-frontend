@@ -33,7 +33,7 @@ export default function TermsOfServicePage() {
         <section className="space-y-2">
           <h2 className="text-base font-bold text-gray-950">제3조 (회원가입 및 계정)</h2>
           <ul className="list-disc pl-5 space-y-1">
-            <li>이용자는 이메일/비밀번호 또는 구글·카카오 계정으로 가입할 수 있습니다.</li>
+            <li>이용자는 이메일/비밀번호 또는 구글 계정으로 가입할 수 있습니다.</li>
             <li>
               이메일/비밀번호로 가입한 경우, 이메일 인증을 완료해야 서비스를 정상적으로
               이용할 수 있습니다.

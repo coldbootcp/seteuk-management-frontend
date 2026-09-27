@@ -12,6 +12,7 @@ import {
 } from "../lib/api-client";
 import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
+import { fetchTimetables, saveTimetables } from "../lib/timetables-api";
 import { SignIn } from "./sign-in";
 import { LandingView } from "./landing-view";
 import { ConsultationGate } from "./consultation-view";
@@ -144,6 +145,31 @@ function profileSemesterValue(form: ProfileForm) {
   return isGraduatedGrade(form.grade) ? 2 : Number(form.semester);
 }
 
+/**
+ * 입학 연도와 오늘로 "지금 몇 학년 몇 학기인지"를 계산한다. 졸업 여부도 여기서
+ * 갈린다 — 생기부에 3학년 기록이 있다는 사실이 아니라, 입학 연도가 3년을 넘겼는지로
+ * 판단한다. 그래서 3학년 1학기까지만 담긴 현역 고3 생기부를 졸업자로 오해하지 않는다.
+ * (대시보드 semesterCheck와 같은 학제 규칙: 3월 새 학년, 3~8월 1학기.)
+ */
+function expectedPeriodFromFreshmanYear(
+  freshmanAcademicYear: number | null,
+): { grade: string; semester: string } | null {
+  if (!freshmanAcademicYear || freshmanAcademicYear < 1990 || freshmanAcademicYear > 2100) {
+    return null;
+  }
+  const now = new Date();
+  const academicYearNow = now.getMonth() >= 2 ? now.getFullYear() : now.getFullYear() - 1;
+  const rawGrade = academicYearNow - freshmanAcademicYear + 1;
+  if (rawGrade > 3) return { grade: "graduated", semester: "" };
+  if (rawGrade < 1) return null; // 아직 입학 전 — 알 수 없으니 채우지 않는다.
+  const semester = now.getMonth() >= 2 && now.getMonth() <= 7 ? 1 : 2;
+  return { grade: String(rawGrade), semester: String(semester) };
+}
+
+/**
+ * 생기부 마지막 기록만으로 현재 학년을 되짚는 폴백. 입학 연도를 모를 때만 쓴다.
+ * 입학 연도가 있으면 expectedPeriodFromFreshmanYear가 우선한다.
+ */
 function currentGradeValueFromCompletedRecord(completedGrade: number) {
   if (completedGrade === 2) return "2";
   return completedGrade >= 3 ? "graduated" : String(completedGrade + 1);
@@ -151,7 +177,10 @@ function currentGradeValueFromCompletedRecord(completedGrade: number) {
 
 function expectedCurrentPeriodFromRecord(period: SchoolRecordPeriod | null): { grade: string; semester: string } | null {
   if (!period) return null;
-  if (period.grade >= 3) return { grade: "graduated", semester: "" };
+  // 마지막 기록이 3학년이어도 졸업으로 단정하지 않는다 — 3학년 재학 중일 수 있다.
+  // 졸업 여부는 입학 연도로만 판단하며(expectedPeriodFromFreshmanYear), 여기서는
+  // 입학 연도를 모를 때의 학년 추정만 한다.
+  if (period.grade >= 3) return { grade: "3", semester: "2" };
   if (period.grade === 2) {
     return { grade: "2", semester: "2" };
   }
@@ -426,7 +455,7 @@ function summarizeOnboardingRecord(parsed: SchoolRecordParseResult, completedGra
 /* ──────────────────────────────────────────────
    Shared Components
    ────────────────────────────────────────────── */
-function StatusBadge({ status }: { status: RoadmapNode["status"] }) {
+function StatusBadge({ status, isCurrent = false }: { status: RoadmapNode["status"]; isCurrent?: boolean }) {
   const config: Record<RoadmapNode["status"], { label: string; cls: string }> = {
     planned:      { label: "예정",     cls: "badge-planned" },
     active:       { label: "진행 중",  cls: "badge-active"  },
@@ -439,6 +468,13 @@ function StatusBadge({ status }: { status: RoadmapNode["status"] }) {
     skipped:      { label: "건너뜀",   cls: "badge-muted"   },
     revised:      { label: "수정됨",   cls: "badge-muted"   },
   };
+  // 진행 중인 학기는 목표 주제 하나가 활동으로 연결되면 백엔드에서 done/partial이
+  // 되지만, 학생은 아직 그 학기에 있고 다른 주제도 남아 있다. "완료" 도장 대신
+  // "진행 중"으로 보여줘야 이번 학기가 이미 끝난 것처럼 오해하지 않는다. 활동이
+  // 연결됐다는 사실은 3개년 흐름의 '연결 기록' 수로 따로 드러난다.
+  if (isCurrent && (status === "done" || status === "partial" || status === "completed")) {
+    return <span className="status-badge badge-active">진행 중</span>;
+  }
   const { label, cls } = config[status];
   return <span className={`status-badge ${cls}`}>{label}</span>;
 }
@@ -589,7 +625,11 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       const initialParsed = parseSchoolRecordJson(resultJson, freshmanAcademicYear);
       const latestPeriod = getLatestSchoolRecordPeriod(initialParsed);
       const completedGrade = latestPeriod?.grade;
-      const expectedPeriod = expectedCurrentPeriodFromRecord(latestPeriod);
+      // 현재 학년·학기·졸업은 입학 연도로 판단하는 것을 우선한다 — 생기부에 3학년
+      // 기록이 있다는 사실만으로 졸업으로 단정하면, 3학년 1학기까지만 담긴 현역
+      // 고3을 졸업자로 오해한다. 입학 연도를 모를 때만 마지막 기록으로 되짚는다.
+      const periodFromYear = expectedPeriodFromFreshmanYear(freshmanAcademicYear ?? null);
+      const expectedPeriod = periodFromYear ?? expectedCurrentPeriodFromRecord(latestPeriod);
       const expectedCurrentGrade = expectedPeriod?.grade ?? (completedGrade ? currentGradeValueFromCompletedRecord(completedGrade) : null);
       const expectedCurrentSemester = expectedPeriod?.semester ?? null;
       const studentName = typeof resultJson.student_name === "string" ? resultJson.student_name.trim() : "";
@@ -603,27 +643,35 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       parsed.fileName = file.name;
       const summary = summarizeOnboardingRecord(parsed, completedGrade);
 
-      if (expectedCurrentGrade && !form.grade) {
+      // 학생부에서 읽은 기본 정보는 이 화면에서 잠기므로(recordLocked), 빈 칸일
+      // 때만 채우는 게 아니라 문서가 밝힌 값으로 항상 세팅해 화면과 어긋나지
+      // 않게 한다. 이름은 파서가 실제로 읽었을 때만 넣는다.
+      if (expectedCurrentGrade) {
         updateGrade(expectedCurrentGrade);
         if (expectedCurrentSemester && !isGraduatedGrade(expectedCurrentGrade)) {
           update("semester", expectedCurrentSemester);
         }
       }
-      if (studentName && !form.name.trim()) update("name", studentName);
-      if (freshmanAcademicYear && !form.freshmanAcademicYear) {
+      if (studentName) update("name", studentName);
+      if (freshmanAcademicYear) {
         update("freshmanAcademicYear", String(freshmanAcademicYear));
       }
+      // 과목·활동은 상담에서 다듬는 참고값이라 잠그지 않으므로, 학생이 이미
+      // 적은 게 있으면 덮지 않는다.
       if (summary.subjects.length && !form.preferredSubjects.trim()) update("preferredSubjects", summary.subjects.join(", "));
       if (summary.currentActivities && !form.currentEngagement.trim()) update("currentEngagement", summary.currentActivities);
       const periodMessage = completedGrade ? ` ${completedGrade}학년까지 확정된 기록으로 확인했습니다.` : "";
       const gradeMessage = expectedCurrentGrade ? ` 현재 상태는 ${gradeLabel(expectedCurrentGrade)}${expectedCurrentSemester ? ` ${expectedCurrentSemester}학기` : ""} 후보로 자동 입력했습니다.` : "";
-      const nameMessage = studentName && !form.name.trim() ? ` 이름은 ${studentName} 학생으로 자동 입력했습니다.` : "";
+      const nameMessage = studentName ? ` 이름은 ${studentName} 학생으로 자동 입력했습니다.` : "";
       const policyMessage = freshmanAcademicYear ? ` 입학 연도는 ${freshmanAcademicYear}학년도로 확인했습니다.` : "";
       setOnboardingRecordParse(parsed);
       setOnboardingRecordAutoFields(true);
       setOnboardingRecordContext({ expectedGrade: expectedCurrentGrade, studentName });
-      setOnboardingRecordMessage(completedGrade && completedGrade >= 3
-        ? "3학년까지 확정된 졸업자 학생부로 확인했습니다. 계획은 만들지 않고, 분석·정리한 학생부 기록을 보여드립니다."
+      // 졸업 여부는 입학 연도로만 판단한다. 생기부에 3학년 기록이 있어도 입학
+      // 연도상 재학 중이면(현역 고3) 졸업자로 안내하지 않는다.
+      const graduatedByYear = expectedCurrentGrade != null && isGraduatedGrade(expectedCurrentGrade);
+      setOnboardingRecordMessage(graduatedByYear
+        ? `입학 연도 기준으로 이미 졸업 시점으로 확인했습니다. 분석·정리한 학생부 기록을 보여드립니다.${nameMessage}${periodMessage}`
         : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}${policyMessage}`);
     } catch (e) {
       if (controller.signal.aborted) return;
@@ -632,6 +680,9 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       setOnboardingRecordParse(null);
       setOnboardingRecordAutoFields(false);
       setOnboardingRecordContext({});
+      // 실패 전 자동으로 채워 두었던 기본 정보를 비운다 — 잠금이 풀린 상태로
+      // 검증 안 된 값이 남지 않게 한다.
+      clearRecordAutofilledFields();
     } finally {
       if (onboardingRecordAbortRef.current === controller) {
         onboardingRecordAbortRef.current = null;
@@ -642,6 +693,21 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     }
   }
 
+  // 생기부 분석이 실패하거나 취소되면 "생기부로 시작" 상태가 풀려 잠금도 해제된다.
+  // 그때 분석이 자동으로 채워 두었던 기본 정보가 검증 없이 폼에 남지 않도록 비운다.
+  // 이 필드들은 생기부로 시작한 흐름에서 잠겨 있어 학생이 직접 넣은 값이 아니다.
+  function clearRecordAutofilledFields() {
+    setForm((cur) => ({
+      ...cur,
+      name: "",
+      grade: "",
+      semester: "",
+      freshmanAcademicYear: "",
+      preferredSubjects: "",
+      currentEngagement: "",
+    }));
+  }
+
   function cancelOnboardingRecordAnalysis() {
     onboardingRecordAbortRef.current?.abort();
     onboardingRecordAbortRef.current = null;
@@ -649,7 +715,10 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     setOnboardingRecordStage("업로드 대기");
     setOnboardingRecordFile("");
     setOnboardingRecordMessage("");
+    setOnboardingRecordParse(null);
+    setOnboardingRecordAutoFields(false);
     setOnboardingRecordContext({});
+    clearRecordAutofilledFields();
     setError("");
     if (onboardingRecordRef.current) onboardingRecordRef.current.value = "";
   }
@@ -681,24 +750,29 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   }
 
   const hasValidFreshmanYear = /^(19|20)\d{2}$/.test(form.freshmanAcademicYear);
+  // 생기부로 시작했다면 기본 정보(학년·학기·입학 연도)는 문서에서 읽은 값으로
+  // 채우고 잠근다. 학생이 이 칸에서 임의로 바꾸면 문서가 밝힌 사실과 어긋나므로,
+  // 틀렸을 때는 이후 챗봇 상담에서 바로잡게 한다. 직접 시작(생기부 없이)한
+  // 경우에는 잠그지 않는다.
+  //
+  // 파싱이 끝난 시점(onboardingRecordParse)만이 아니라 분석이 도는 중
+  // (onboardingRecordBusy)이나 파일을 이미 고른 순간(onboardingRecordFile)부터
+  // 잠근다 — 안 그러면 분석하는 1~2분 동안 학생이 값을 바꿔 넣을 수 있었다.
+  const startedFromRecord =
+    onboardingRecordBusy || onboardingRecordParse != null || !!onboardingRecordFile;
+  const recordStudentName = onboardingRecordContext.studentName?.trim() ?? "";
+  const recordLocked = startedFromRecord;
+  // 이름은 파서가 실제로 읽었을 때만 잠근다. 인적사항에서 성명을 못 읽으면
+  // (recordStudentName이 빈 값) 잠그지 않고 학생이 직접 입력하게 둔다.
+  const nameLocked = recordLocked && !!recordStudentName;
   // 진로가 아직 비어 있어도 상담에서 탐색할 수 있다. 가입 단계에서 억지로 분야를
   // 정하게 하면 이후 모든 추천의 출발점이 부정확해진다.
   const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && hasValidFreshmanYear;
-  const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution;
-  // 파서가 읽은 학년·학기는 제안값일 뿐이다. 학생이 언제든 직접 고칠 수 있고,
-  // 불일치는 안내로만 다룬다.
-  const recordLocked = false;
-  /**
-   * 이름은 학생부를 올려도 잠그지 않는다. 파서가 읽은 이름이 틀리거나(붙어 나온 글자,
-   * 옛 이름) 학생이 다르게 쓰고 싶을 때 고칠 길이 아예 없었다. 대신 학생부와 다르면
-   * 그 사실을 그 자리에서 알려 준다 — 다른 학생의 자료를 올린 것일 수도 있어서다.
-   */
-  const recordStudentName = onboardingRecordContext.studentName?.trim() ?? "";
-  const recordNameMismatch = Boolean(recordStudentName && form.name.trim() && recordStudentName !== form.name.trim());
-  const recordFreshmanYear = onboardingRecordParse?.freshmanAcademicYear ?? null;
-  const freshmanYearMismatch = Boolean(
-    recordFreshmanYear && form.freshmanAcademicYear && Number(form.freshmanAcademicYear) !== recordFreshmanYear
-  );
+  // 생기부로 시작했다면 분석이 끝나 그 값이 실제로 채워지기 전에는 다음으로
+  // 넘어가지 못하게 막는다. 분석 중(busy)이거나, 파일만 고르고 아직 결과가
+  // 없는 상태(실패·취소 포함)에서 넘어가면 잠근 정보가 비어 버린다.
+  const recordReadyIfStarted = !startedFromRecord || onboardingRecordParse != null;
+  const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution && recordReadyIfStarted;
   /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
   function startWithRecord(file: File | undefined) {
     if (!file) return;
@@ -985,27 +1059,17 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               <div>
                 <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-name">학생 이름</label>
                 <input
-                  className={`w-full px-3.5 py-2 rounded-xl border text-xs font-semibold focus:outline-none bg-gray-50/50 focus:bg-white transition ${
-                    recordNameMismatch ? "border-amber-400 focus:border-amber-500" : "border-gray-200 focus:border-brand-500"
-                  }`}
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                  disabled={nameLocked}
                   id="ob-name"
                   onChange={(e) => update("name", e.target.value)}
                   placeholder="예: 김세특"
                   value={form.name}
                 />
-                {recordNameMismatch && (
-                  <div className="mt-2 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <span className="text-[11px] text-amber-900 leading-relaxed">
-                      업로드한 학생부의 이름은 <strong className="font-bold">{recordStudentName}</strong>입니다. 다른 학생의 자료라면 학생부를 다시 올려주세요.
-                    </span>
-                    <button
-                      className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-800 text-[11px] font-bold hover:bg-amber-100 transition flex-none"
-                      onClick={() => update("name", recordStudentName)}
-                      type="button"
-                    >
-                      학생부 이름으로 바꾸기
-                    </button>
-                  </div>
+                {nameLocked && (
+                  <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
+                    업로드한 학생부에서 읽은 이름으로 자동 입력했습니다. 잘못됐다면 시작한 뒤 AI 상담에서 바로잡을 수 있어요.
+                  </p>
                 )}
               </div>
 
@@ -1044,8 +1108,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                   </button>
                 </div>
                 {recordLocked && (
-                  <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
-                    학년과 학기는 업로드한 학생부에서 확인한 값을 사용합니다. 다르면 다음 확인 질문에서 바로잡습니다.
+                  <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
+                    학년과 학기는 업로드한 학생부에서 확인한 값으로 자동 입력했습니다. 잘못됐다면 시작한 뒤 AI 상담에서 바로잡을 수 있어요.
                   </p>
                 )}
               </div>
@@ -1055,7 +1119,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                   고등학교 입학 연도
                 </label>
                 <input
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                  disabled={recordLocked}
                   id="ob-freshman-year"
                   inputMode="numeric"
                   max="2100"
@@ -1065,23 +1130,11 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                   type="text"
                   value={form.freshmanAcademicYear}
                 />
-                <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
-                  예: 2025학년도 고1이었다면 2025. 생기부를 올리면 학적사항에서 읽은 값으로 자동 입력하며, 직접 수정할 수 있습니다.
+                <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
+                  {recordLocked
+                    ? "입학 연도는 업로드한 학생부 학적사항에서 읽은 값으로 자동 입력했습니다. 잘못됐다면 시작한 뒤 AI 상담에서 바로잡을 수 있어요."
+                    : "예: 2025학년도 고1이었다면 2025. 생기부를 올리면 학적사항에서 읽은 값으로 자동 입력합니다."}
                 </p>
-                {freshmanYearMismatch && (
-                  <div className="mt-2 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <span className="text-[11px] text-amber-900 leading-relaxed">
-                      업로드한 생기부 학적사항은 <strong className="font-bold">{recordFreshmanYear}학년도 입학</strong>으로 읽혔습니다. 입력값과 다르면 어느 값이 맞는지 확인해주세요.
-                    </span>
-                    <button
-                      className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-800 text-[11px] font-bold hover:bg-amber-100 transition flex-none"
-                      onClick={() => update("freshmanAcademicYear", String(recordFreshmanYear))}
-                      type="button"
-                    >
-                      학생부 값 사용
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -1261,7 +1314,9 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                     ? "학생부 분석이 끝나면 진행할 수 있어요"
                     : busy
                       ? "저장하는 중…"
-                      : "AI 상담 시작하기 ➔"}
+                      : !recordReadyIfStarted
+                        ? "학생부를 먼저 분석해 주세요"
+                        : "AI 상담 시작하기 ➔"}
                 </span>
               </button>
             </div>
@@ -1364,7 +1419,7 @@ function ThreeYearJourney({ workspace, onNavigate }: { workspace: ProductWorkspa
               <h3 className="text-lg font-extrabold text-gray-950 mt-1">{selectedNode.title}</h3>
               <p className="text-sm text-gray-600 leading-relaxed mt-2 max-w-3xl">{selectedNode.objective || "이 학기의 방향이 아직 정리되지 않았습니다."}</p>
             </div>
-            <StatusBadge status={selectedNode.status} />
+            <StatusBadge status={selectedNode.status} isCurrent={isCurrent} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-gray-100">
@@ -2024,7 +2079,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">ACTIVE ROADMAP NODE</span>
               <h3 className="text-base font-extrabold text-gray-950 mt-0.5 leading-snug">{active ? `${active.grade}-${active.semester}학기 노드` : "이번 학기 노드"}</h3>
             </div>
-            {active && <StatusBadge status={active.status} />}
+            {active && <StatusBadge status={active.status} isCurrent />}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-3">
@@ -2153,6 +2208,12 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
     concepts: "",
     outputs: "",
     completedAt: new Date().toISOString().slice(0, 10),
+    // 갈래별 고유 항목. 예전에는 이 값들을 담을 칸이 없어 봉사 시간·수상 등급·저자가
+    // 저장되지 않았다(백엔드는 받는데 화면이 안 보냈다).
+    awardRank: "",       // 상장: 수상 등급(예: 최우수상)
+    awardHost: "",       // 상장: 주최/주관
+    volunteerHours: "",  // 봉사: 봉사 시간(정수)
+    readingAuthor: "",   // 독서: 저자
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -2234,7 +2295,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
       onWorkspace(result.workspace);
       setLastReview(result.workspace.activityReviews.find((review) => review.activityId === result.reconciliation?.activityId) ?? null);
       clearDraft();
-      setPlanEventId(""); setFiles([]); setForm((cur) => ({ ...cur, title: "", summary: "", reflection: "", activityType: "" }));
+      setPlanEventId(""); setFiles([]); setForm((cur) => ({ ...cur, title: "", summary: "", reflection: "", activityType: "", awardRank: "", awardHost: "", volunteerHours: "", readingAuthor: "" }));
       setQualityNotice(null);
     } catch (e) { setError(e instanceof Error ? e.message : "활동을 저장하지 못했습니다."); }
     finally { setBusy(false); }
@@ -2416,14 +2477,41 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             </select>
           </div>
           <div className="form-field">
-            <label htmlFor="act-date">완료일</label>
+            <label htmlFor="act-date">{form.activityType === "독서" ? "읽은 날" : form.activityType === "봉사" ? "봉사한 날" : form.activityType === "상장(대회)" ? "수상일" : "완료일"}</label>
             <input id="act-date" type="date" value={form.completedAt} onChange={(e) => setForm({ ...form, completedAt: e.target.value })} />
           </div>
+          {/* 갈래별 고유 항목 — 유형을 고른 뒤에만 관련 칸을 보여준다. */}
+          {form.activityType === "상장(대회)" && (
+            <>
+              <div className="form-field">
+                <label htmlFor="act-award-rank">수상 등급 <em>(선택)</em></label>
+                <input id="act-award-rank" value={form.awardRank} onChange={(e) => setForm({ ...form, awardRank: e.target.value })} placeholder="예: 최우수상, 은상, 장려상" />
+              </div>
+              <div className="form-field">
+                <label htmlFor="act-award-host">주최·주관 <em>(선택)</em></label>
+                <input id="act-award-host" value={form.awardHost} onChange={(e) => setForm({ ...form, awardHost: e.target.value })} placeholder="예: ○○고등학교, ○○학회" />
+              </div>
+            </>
+          )}
+          {form.activityType === "봉사" && (
+            <div className="form-field">
+              <label htmlFor="act-volunteer-hours">봉사 시간 <em>(선택)</em></label>
+              <input id="act-volunteer-hours" type="number" min="0" inputMode="numeric" value={form.volunteerHours} onChange={(e) => setForm({ ...form, volunteerHours: e.target.value.replace(/[^0-9]/g, "") })} placeholder="예: 8 (시간 단위)" />
+            </div>
+          )}
+          {form.activityType === "독서" && (
+            <div className="form-field">
+              <label htmlFor="act-reading-author">저자 <em>(선택)</em></label>
+              <input id="act-reading-author" value={form.readingAuthor} onChange={(e) => setForm({ ...form, readingAuthor: e.target.value })} placeholder="예: 레이첼 카슨" />
+            </div>
+          )}
         </div>
-        {!currentSemesterCourseSubjects.length && <div className="banner banner-error" style={{ marginBottom: "14px" }}><strong>현재 학기 수강 과목을 먼저 등록해주세요.</strong><br />[성적 관리] 또는 [시간표] 화면에서 이번 학기 과목을 추가하면 여기에서 고를 수 있습니다.</div>}
+        {/* 수강 과목은 교과 세특(활동)에만 필요하다. 봉사·독서·교외 수상은 특정
+            과목과 무관한 경우가 많아 과목 미등록이 기록을 막지 않도록 한다. */}
+        {form.activityType === "활동" && !currentSemesterCourseSubjects.length && <div className="banner banner-error" style={{ marginBottom: "14px" }}><strong>현재 학기 수강 과목을 먼저 등록해주세요.</strong><br />[성적 관리] 또는 [시간표] 화면에서 이번 학기 과목을 추가하면 여기에서 고를 수 있습니다.</div>}
         <div className="form-field" style={{ marginBottom: "14px" }}>
-          <label htmlFor="act-title">활동 제목</label>
-          <input id="act-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="활동의 핵심을 한 문장으로" />
+          <label htmlFor="act-title">{form.activityType === "독서" ? "도서명" : form.activityType === "봉사" ? "봉사 기관·장소" : form.activityType === "상장(대회)" ? "대회·상장명" : "활동 제목"}</label>
+          <input id="act-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={form.activityType === "독서" ? "예: 침묵의 봄" : form.activityType === "봉사" ? "예: 지역아동센터" : form.activityType === "상장(대회)" ? "예: 교내 과학탐구대회" : "활동의 핵심을 한 문장으로"} />
         </div>
         <div className="form-field" style={{ marginBottom: "14px" }}>
           <label htmlFor="act-summary">무엇을 어떻게 했나요?</label>
@@ -2441,7 +2529,9 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
         {error && <div className="banner banner-error" style={{ marginBottom: "14px" }}>{error}</div>}
         <button
           className="btn btn-primary"
-          disabled={busy || !currentSemesterCourseSubjects.length || !form.activityType || !form.subject || !form.title.trim() || !form.summary.trim()}
+          // 과목은 교과 세특(활동)에만 필수다. 봉사·독서·상장은 과목 없이도 저장할 수 있어야
+          // 갓 온보딩한(시간표 미입력) 학생도 이 기록들을 남길 수 있다.
+          disabled={busy || !form.activityType || !form.title.trim() || !form.summary.trim() || (form.activityType === "활동" && (!currentSemesterCourseSubjects.length || !form.subject))}
           onClick={() => submit()}
           type="button"
         >
@@ -2485,6 +2575,28 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             <div className="space-y-3">
               {workspace.activities.map((activity) => {
                 const match = workspace.reconciliations.find((log) => log.activityId === activity.id);
+                // 활동 계보(lineage): 이 활동이 이어받은 이전 활동과, 이 활동에서
+                // 이어진 다음 활동을 화면에서 잇는다. 입학사정관이 읽는 "하나의
+                // 이야기"를 학생이 직접 확인·관리하도록 돕는다. 이미 불러온 활동
+                // 배열 안에서 찾으므로 추가 요청이 없다.
+                const parentActivity = activity.parentActivityId
+                  ? workspace.activities.find((other) => other.id === activity.parentActivityId)
+                  : undefined;
+                const childActivities = workspace.activities.filter(
+                  (other) => other.parentActivityId === activity.id,
+                );
+                // 수시 때 이 활동을 설명하려면 채워져 있어야 할 것들 — 백엔드
+                // activity-flows의 readiness 판정과 같은 기준(과정 서술·배운 점·근거
+                // 파일)을 화면에서도 미리 짚어, 학생이 3년 뒤가 아니라 지금 채우게 한다.
+                // 교과 세특용 '활동'에만 의미가 있어 그 유형에만 보여준다.
+                const hasAttachment = workspace.attachments.some((a) => a.activityId === activity.id);
+                const activityGaps = activity.recordKind === "activity"
+                  ? [
+                      activity.summary.trim().length < 120 ? "무엇을 어떻게 했는지" : null,
+                      activity.reflection.trim().length < 30 ? "배운 점과 느낀 점" : null,
+                      !hasAttachment ? "발표자료·보고서 첨부" : null,
+                    ].filter((gap): gap is string => gap !== null)
+                  : [];
                 return (
                 <div className="bg-white p-4 rounded-xl border border-gray-200/80 hover:border-brand-300 transition space-y-2" key={activity.id}>
                   <div className="flex items-center justify-between gap-2">
@@ -2500,8 +2612,22 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
                     )}
                   </div>
                   <div className="history-info">
+                    {parentActivity && (
+                      <p className="text-[11px] font-semibold text-brand-600 flex items-center gap-1 mb-1">
+                        <span aria-hidden="true">↳</span>
+                        <span className="truncate">‘{parentActivity.title}’에서 이어진 탐구</span>
+                      </p>
+                    )}
                     <h3 className="text-sm font-semibold text-gray-900">{activity.title}</h3>
                     <p>{activity.summary}</p>
+                    {childActivities.length > 0 && (
+                      <p className="text-[11px] font-semibold text-violet-700 flex items-center gap-1 mt-1">
+                        <span aria-hidden="true">→</span>
+                        <span className="truncate">
+                          이 활동에서 이어짐: {childActivities.map((child) => `‘${child.title}’`).join(", ")}
+                        </span>
+                      </p>
+                    )}
                     {activity.reflection && <div className="activity-reflection"><strong>배운 점과 느낀 점</strong><p>{activity.reflection}</p></div>}
                     {activity.linkedPlanTitle && <small style={{ color: "var(--fg-muted)", display: "block", marginBottom: 8 }}>연결한 주제: {activity.linkedPlanTitle}</small>}
                     <div className="concept-tags">
@@ -2520,6 +2646,12 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
                         <button className="btn btn-ghost btn-sm" onClick={() => deleteAttachment(attachment.id)} type="button">삭제</button>
                       </div>
                     ))}
+                    {activityGaps.length > 0 && (
+                      <div className="mt-2 rounded-lg border border-amber-200/70 bg-amber-50/60 px-3 py-2">
+                        <p className="text-[11px] font-bold text-amber-800">수시 때 설명하려면 이것도 채워두면 좋아요</p>
+                        <p className="text-[11px] text-amber-700 mt-0.5">{activityGaps.join(" · ")}</p>
+                      </div>
+                    )}
                     {activity.recordKind === "activity" && (
                       <button
                         className="btn btn-secondary btn-sm"
@@ -2985,7 +3117,13 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
 
   const studentId = workspace.profile.id;
   const storageKey = `seteuk-timetables-${studentId}`;
+  // 기존 브라우저 시간표는 첫 동기화 때만 서버로 옮긴다. 이후 정본은 서버이며,
+  // localStorage는 네트워크 오류가 난 순간에도 학생 입력을 잃지 않기 위한 임시 백업이다.
+  const [timetables, setTimetables] = useState<TimetableConfig[]>([]);
+  const timetableSync = useRef<Promise<void>>(Promise.resolve());
 
+  // 한 학년-학기에는 시간표를 하나만 둔다. 서버·임시본 어디서 왔든 같은 학기가
+  // 겹치면 기본으로 표시된 것(없으면 칸이 채워진 것)을 남긴다.
   const normalizeTimetables = (list: TimetableConfig[]): TimetableConfig[] => {
     const map = new Map<string, TimetableConfig>();
     for (const t of list) {
@@ -3000,40 +3138,79 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
     return Array.from(map.values());
   };
 
-  const [timetables, setTimetables] = useState<TimetableConfig[]>(() => {
-    if (typeof window !== "undefined") {
+  useEffect(() => {
+    let cancelled = false;
+    async function hydrateTimetables() {
       try {
-        const saved = window.localStorage.getItem(storageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return normalizeTimetables(parsed);
-          }
+        const saved = await fetchTimetables();
+        if (cancelled) return;
+        if (saved.length > 0) {
+          setTimetables(normalizeTimetables(saved));
+          return;
         }
+
+        let local: TimetableConfig[] = [];
+        try {
+          const backup = window.localStorage.getItem(storageKey);
+          const parsed = backup ? JSON.parse(backup) : null;
+          if (Array.isArray(parsed)) local = parsed;
+        } catch {
+          // 손상된 과거 임시본은 무시하고 빈 시간표로 시작한다.
+        }
+        const initial = local.length
+          ? normalizeTimetables(local)
+          : [createEmptyTimetable(workspace.profile.grade, workspace.profile.semester)];
+        const synced = await saveTimetables(initial);
+        if (!cancelled) setTimetables(synced);
       } catch {
-        // ignore parse error
+        // 서버가 일시적으로 닿지 않으면 과거 임시본을 보여 주되, 다음 변경 때 다시 저장한다.
+        try {
+          const backup = window.localStorage.getItem(storageKey);
+          const parsed = backup ? JSON.parse(backup) : null;
+          if (!cancelled) {
+            setTimetables(Array.isArray(parsed) && parsed.length ? normalizeTimetables(parsed) : [
+              createEmptyTimetable(workspace.profile.grade, workspace.profile.semester),
+            ]);
+          }
+        } catch {
+          if (!cancelled) setTimetables([createEmptyTimetable(workspace.profile.grade, workspace.profile.semester)]);
+        }
       }
     }
-    return [createEmptyTimetable(workspace.profile.grade, workspace.profile.semester)];
-  });
+    void hydrateTimetables();
+    return () => { cancelled = true; };
+  }, [storageKey, workspace.profile.grade, workspace.profile.semester]);
 
   const handleTimetablesChange = (updated: TimetableConfig[]) => {
     const normalized = normalizeTimetables(updated);
     setTimetables(normalized);
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify(normalized));
-      } catch {
-        // ignore storage error
-      }
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(normalized));
+    } catch {
+      // localStorage는 보조 백업이라 실패해도 서버 동기화는 계속한다.
     }
+    // 연속 클릭·드래그가 이전 저장을 나중에 덮어쓰지 않도록 순서대로 저장한다.
+    timetableSync.current = timetableSync.current
+      .catch(() => undefined)
+      .then(async () => {
+        const saved = normalizeTimetables(await saveTimetables(normalized));
+        setTimetables(saved);
+        try {
+          window.localStorage.setItem(storageKey, JSON.stringify(saved));
+        } catch {
+          // 서버 저장은 이미 끝났으므로 무시한다.
+        }
+      })
+      .catch(() => {
+        // 다음 사용자 조작에서는 다시 저장을 시도한다. 화면의 임시본은 남겨 둔다.
+      });
   };
 
   useEffect(() => {
     const hasCurrent = timetables.some(
       (t) => t.grade === workspace.profile.grade && t.semester === workspace.profile.semester
     );
-    if (!hasCurrent) {
+    if (timetables.length > 0 && !hasCurrent) {
       const newTt = createEmptyTimetable(workspace.profile.grade, workspace.profile.semester);
       handleTimetablesChange([...timetables, newTt]);
     }

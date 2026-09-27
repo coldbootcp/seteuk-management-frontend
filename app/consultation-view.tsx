@@ -362,8 +362,32 @@ export function ConsultationGate({
   const userMessageCount = bubbles.filter((b) => b.role === "user").length;
   const consultationStep = ready ? 4 : userMessageCount >= 2 ? 3 : userMessageCount >= 1 ? 2 : 1;
 
+  // 졸업생(수시 재수생)은 생기부가 이미 확정되어 로드맵을 세우지 않는다. 확정된
+  // 기록과 목표 학과의 적합성·지원 전략만 상담하므로 문구와 마무리 흐름이 다르다.
+  const isGraduate = status.requiredKind === "graduate_fit";
+  // 졸업생 상담은 로드맵 확정 신호(ready)가 없어 버튼을 열어 두지만, 대화를 한
+  // 마디도 안 하고 통과하는 것은 막는다 — 학생이 최소 2번은 말을 걸어야 마칠 수 있게
+  // 한다(백엔드 conclude의 GRADUATE_FIT_MIN_USER_MESSAGES와 같은 기준).
+  const graduateMinMessages = 2;
+  const graduateCanConclude = isGraduate && userMessageCount >= graduateMinMessages;
+  const canConclude = isGraduate ? graduateCanConclude : ready;
+  // 3학년 2학기는 새 탐구 계획을 세우는 시기가 아니라 수시 원서·마무리 시기다.
+  // 신입생·저학년과 같은 "정밀 진단으로 계획을 세운다" 문구를 그대로 쓰면 시점에
+  // 맞지 않아, 이 학기에는 게이트 문구를 따로 둔다.
+  const isFinalSemester = status.targetGrade === 3 && status.targetSemester === 2;
+
   // 추천 답변 칩 목록 (단계 및 상태에 따른 가이드 제공)
-  const quickReplies: string[] = ready
+  const quickReplies: string[] = isGraduate
+    ? userMessageCount === 0
+      ? [
+          "목표 학과와 지원하려는 이유부터 말씀드릴게요",
+          "제 생기부로 이 학과에 얼마나 맞는지 솔직하게 알려주세요",
+        ]
+      : [
+          "제 기록에서 가장 강하게 내세울 수 있는 점은 무엇인가요?",
+          "약점은 자기소개·면접에서 어떻게 풀어내면 좋을까요?",
+        ]
+    : ready
     ? ["✓ 제안해주신 로드맵과 목표대로 최종 확정할게요!"]
     : userMessageCount === 0
     ? [
@@ -437,7 +461,11 @@ export function ConsultationGate({
                 <span className="text-gray-300">|</span>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-brand-600 text-xs font-bold border border-blue-200/60">
                   <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                  {isReview
+                  {isGraduate
+                    ? "확정된 생기부 ➔ 목표 학과 적합성 & 지원 전략 상담"
+                    : isFinalSemester
+                    ? "3학년 2학기 점검 ➔ 남은 기록 정리 & 수시 지원 준비"
+                    : isReview
                     ? "학기말 정기 재평가 ➔ 다음 학기 목표 조율 & 심화 탐구 도출"
                     : "최초 진단 ➔ 3개년 마스터 플랜 1:1 심층 상담"}
                 </span>
@@ -451,7 +479,7 @@ export function ConsultationGate({
                       : "bg-blue-50 text-brand-700 border-blue-200"
                   }`}
                 >
-                  {ready ? "상담 확정 준비 완료 ✓" : "실시간 상호 대화 중"}
+                  {!isGraduate && ready ? "상담 확정 준비 완료 ✓" : "실시간 상호 대화 중"}
                 </span>
               </div>
             </div>
@@ -483,7 +511,7 @@ export function ConsultationGate({
                     <div className="flex justify-between text-gray-600">
                       <span>진단 구분:</span>
                       <strong className="text-gray-900 font-bold">
-                        {isReview ? "학기말 정기 재평가" : "최초 정밀 진단"}
+                        {isGraduate ? "지원 전략 상담" : isReview ? "학기말 정기 재평가" : "최초 정밀 진단"}
                       </strong>
                     </div>
                     <div className="flex justify-between text-gray-600">
@@ -494,14 +522,21 @@ export function ConsultationGate({
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <span>진행 상태:</span>
-                      <strong className={ready ? "text-emerald-600 font-bold" : "text-brand-600 font-bold"}>
-                        {ready ? "목표 확정 완료 ✓" : "상호 의견 조율 중"}
+                      <strong className={canConclude ? "text-emerald-600 font-bold" : "text-brand-600 font-bold"}>
+                        {isGraduate
+                          ? graduateCanConclude
+                            ? "마무리 가능"
+                            : "상담 진행 중"
+                          : ready
+                          ? "목표 확정 완료 ✓"
+                          : "상호 의견 조율 중"}
                       </strong>
                     </div>
                   </div>
                 </div>
 
-                {/* 2. 4-Step Consultation Progress Steps Tracker */}
+                {/* 2. 4-Step Consultation Progress Steps Tracker — 로드맵을 세우지 않는 졸업생 상담에는 맞지 않아 숨긴다. */}
+                {!isGraduate && (
                 <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-gray-900">상담 진행 단계</span>
@@ -576,6 +611,7 @@ export function ConsultationGate({
                     </div>
                   </div>
                 </div>
+                )}
 
                 {/* 3. Mini-SWOT Quick Viewer Drawer */}
                 {diagnosis && !diagnosisIsEmpty && (
@@ -723,7 +759,7 @@ export function ConsultationGate({
                   })}
 
                   {/* Confirmed / Ready Card embedded in chat when ready */}
-                  {ready && (
+                  {!isGraduate && ready && (
                     <div className="w-full bg-white p-5 rounded-2xl border-2 border-emerald-500 shadow-md space-y-3.5">
                       <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                         <div className="flex items-center gap-2">
@@ -832,6 +868,29 @@ export function ConsultationGate({
                     <span className="text-[10px]">➤</span>
                   </button>
                 </div>
+
+                {/* 졸업생 상담은 로드맵 확정 신호가 없으므로, 충분히 대화한 뒤 학생이 직접 마친다. */}
+                {isGraduate && (
+                  <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex-none">
+                    <button
+                      type="button"
+                      disabled={concluding || !graduateCanConclude}
+                      onClick={() => void handleConclude()}
+                      title={
+                        graduateCanConclude
+                          ? "상담이 충분하다고 느끼면 눌러 메인 화면으로 들어갈 수 있어요"
+                          : "목표 학과와 적합성에 대해 조금 더 이야기한 뒤 마칠 수 있어요"
+                      }
+                      className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {concluding
+                        ? "확정하는 중…"
+                        : graduateCanConclude
+                        ? "상담 마치고 메인 화면으로 →"
+                        : "조금 더 이야기한 뒤 마칠 수 있어요"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -862,7 +921,19 @@ export function ConsultationGate({
 
             <header className="text-center max-w-3xl mx-auto space-y-3">
               <h1 className="text-2xl md:text-3xl font-extrabold text-gray-950 tracking-tight leading-snug">
-                {isReview ? (
+                {isGraduate ? (
+                  <>
+                    확정된 생기부로
+                    <br />
+                    <span className="text-brand-500">목표 학과 지원 전략을 세워요</span>
+                  </>
+                ) : isFinalSemester ? (
+                  <>
+                    지금까지의 기록을 정리하고
+                    <br />
+                    <span className="text-brand-500">수시 지원을 준비해요</span>
+                  </>
+                ) : isReview ? (
                   <>
                     이번 학기를 점검하고
                     <br />
@@ -877,7 +948,11 @@ export function ConsultationGate({
                 )}
               </h1>
               <p className="text-sm text-gray-600">
-                이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요.
+                {isGraduate
+                  ? "확정된 생기부를 바탕으로 목표 학과 지원 전략을 상담해요. 상담을 마치면 메인 화면으로 들어갈 수 있어요."
+                  : isFinalSemester
+                  ? "지금은 3학년 2학기예요. 남은 기록을 정리하고, 상담을 마치면 메인 화면으로 들어갈 수 있어요."
+                  : "이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요."}
               </p>
             </header>
 
@@ -980,7 +1055,9 @@ export function ConsultationGate({
                   bottomRef={bottomRef}
                   bubbles={bubbles}
                   empty={
-                    isReview
+                    isGraduate
+                      ? "목표 학과와 지원하려는 이유를 편하게 이야기해주세요."
+                      : isReview
                       ? "이번 학기가 어땠는지 편하게 이야기해주세요."
                       : "관심 분야나 앞으로의 방향에 대해 이야기해주세요."
                   }
@@ -1015,7 +1092,7 @@ export function ConsultationGate({
                   value={input}
                 />
 
-                {ready && (
+                {canConclude && (
                   <div className="px-5 py-3.5 border-t border-gray-100 bg-gray-50/60 flex-none">
                     <button
                       className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs transition"

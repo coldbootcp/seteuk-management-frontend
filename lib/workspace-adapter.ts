@@ -163,6 +163,7 @@ function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentA
     // 학기를 아는 기록만 마디에 맨다. 학년 단위 기록(자율활동 등)은 어느 한 학기의
     // 것이 아니므로 여기서 고르지 않고, 화면이 그 학년의 학기들에 함께 보여준다.
     roadmapNodeId: semester == null ? null : locate(grade, semester),
+    parentActivityId: (raw.parent_activity_id as string) ?? null,
     planEventId: (raw.source_plan_event_id as string) ?? null,
     linkedPlanTitle: null,
     // 활동 시점의 정본은 grade/semester다. performed_on은 학생이 직접 입력했을
@@ -694,39 +695,6 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       });
       return { ...result, provider: "deepseek" };
     }
-    case path === "/api/onboarding/clarify": {
-      const form = body.form ?? {};
-      const answers = (body.answers ?? []) as { id?: string; key?: string; question?: string; answer?: unknown }[];
-      const result = await api<{ questions: Json[]; complete: boolean }>("/profile/clarify", {
-        method: "POST",
-        body: {
-          name: form.name || null,
-          grade: form.grade ? Number(form.grade) : null,
-          semester: form.semester ? Number(form.semester) : null,
-          freshman_academic_year: form.freshmanAcademicYear
-            ? Number(form.freshmanAcademicYear)
-            : null,
-          career_goal: form.targetCareer || null,
-          target_department: (form.targetMajors ?? [])[0] || null,
-          interest_keywords: form.interests ?? [],
-          answers: answers
-            .filter((entry) => entry.answer)
-            .map((entry) => ({
-              key: entry.key ?? entry.id ?? "",
-              question: entry.question ?? "",
-              answer: Array.isArray(entry.answer) ? entry.answer.join(", ") : String(entry.answer),
-            })),
-        },
-      });
-      return {
-        ...result,
-        questions: (result.questions ?? []).map((question) => ({
-          ...question,
-          id: question.key,
-          selectionMode: question.selection_mode,
-        })),
-      };
-    }
     case path === "/api/onboarding/preview": {
       // 미리보기는 draft 로드맵이다 — 확정 전이라 화면에서 고칠 수 있고, 다시 눌러도
       // 버전이 오르지 않는다.
@@ -797,23 +765,34 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       if (kindLabel === "상장" || kindLabel === "봉사" || kindLabel === "독서") {
         const ENDPOINTS = { 상장: "/awards", 봉사: "/volunteer-records", 독서: "/reading-activities" };
         const bodies: Record<string, Json> = {
+          // 수상 등급(rank)·주최(participants)는 예전엔 버려졌다 — 학생이 제목에
+          // 다 욱여넣어야 했다. 이제 각자의 칸으로 보낸다.
           상장: {
             name: activity.title,
+            rank: (activity.awardRank as string)?.trim() || null,
+            participants: (activity.awardHost as string)?.trim() || null,
             date: activity.completedAt || null,
             grade: period.grade,
             semester: period.semester,
           },
+          // 봉사 시간(hours)은 생기부 봉사활동의 핵심인데 담을 칸이 없었다.
           봉사: {
             grade: period.grade,
+            semester: period.semester,
             date: activity.completedAt || null,
             place: activity.title,
             content: activity.summary || null,
+            hours: Number.isInteger(Number(activity.volunteerHours)) && String(activity.volunteerHours).length
+              ? Number(activity.volunteerHours)
+              : null,
           },
+          // 저자(author)도 버려지던 값이다.
           독서: {
             grade: period.grade,
             semester: period.semester,
             subject: activity.subject || null,
             title: activity.title,
+            author: (activity.readingAuthor as string)?.trim() || null,
           },
         };
         await api(ENDPOINTS[kindLabel], { method: "POST", body: bodies[kindLabel] });

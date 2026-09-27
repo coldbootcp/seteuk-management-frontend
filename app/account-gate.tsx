@@ -217,7 +217,6 @@ export function AccountSection() {
   const linkedMethods = [
     status.has_password && "이메일/비밀번호",
     status.google_linked && "Google",
-    status.kakao_linked && "카카오",
   ].filter(Boolean) as string[];
 
   return (

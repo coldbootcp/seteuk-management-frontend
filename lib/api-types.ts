@@ -628,6 +628,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/timetables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Timetables */
+        get: operations["list_timetables_api_v1_timetables_get"];
+        /**
+         * Replace Timetables
+         * @description 학생의 시간표 목록을 원자적으로 동기화한다.
+         *
+         *     프론트는 시간표 안에서 슬롯을 옮기거나 여러 칸을 한 번에 추가한다. 매 조작마다
+         *     부분 API를 여러 번 보내면 중간 실패로 한 과목의 반복 배치가 깨질 수 있어, 화면의
+         *     완성된 목록 하나를 저장 단위로 삼는다. 서버 UUID가 아닌 id를 보내 수정하려 하면
+         *     다른 학생 행을 건드리는 대신 명시적으로 거절한다.
+         */
+        put: operations["replace_timetables_api_v1_timetables_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/profile": {
         parameters: {
             query?: never;
@@ -677,26 +703,6 @@ export interface paths {
          *     학생이 고른 값만 POST /profile로 확정된다.
          */
         post: operations["suggest_direction_api_v1_profile_suggest_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/profile/clarify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Clarify Onboarding
-         * @description 지금까지 채운 답변을 보고, 아직 비었거나 막연한 부분에 대해 확인 질문을 만든다.
-         */
-        post: operations["clarify_onboarding_api_v1_profile_clarify_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2778,6 +2784,8 @@ export interface components {
             name: string;
             /** Rank */
             rank?: string | null;
+            /** Participants */
+            participants?: string | null;
             /** Date */
             date?: string | null;
             /** Raw Date */
@@ -2843,6 +2851,8 @@ export interface components {
             name?: string | null;
             /** Rank */
             rank?: string | null;
+            /** Participants */
+            participants?: string | null;
             /** Date */
             date?: string | null;
             /** Raw Date */
@@ -2996,94 +3006,6 @@ export interface components {
          * @enum {string}
          */
         ChatMode: "normal" | "edit";
-        /**
-         * ClarifyAnswer
-         * @description 앞선 질문에 학생이 이미 준 답.
-         */
-        ClarifyAnswer: {
-            /** Key */
-            key: string;
-            /**
-             * Question
-             * @default
-             */
-            question: string;
-            /** Answer */
-            answer: string;
-        };
-        /** ClarifyQuestion */
-        ClarifyQuestion: {
-            /** Key */
-            key: string;
-            /** Label */
-            label: string;
-            /** Question */
-            question: string;
-            /**
-             * Why
-             * @default
-             */
-            why: string;
-            /**
-             * Selection Mode
-             * @default single
-             * @enum {string}
-             */
-            selection_mode: "single" | "multiple";
-            /**
-             * Options
-             * @default []
-             */
-            options: string[];
-        };
-        /**
-         * ClarifyRequest
-         * @description 지금까지 채운 값. 전부 선택이라 폼을 반쯤 채운 상태에서도 물어볼 수 있다.
-         *
-         *     `answers`가 중요하다 — 이걸 빼고 부르면 학생이 방금 답한 것을 모른 채 같은 질문을
-         *     다시 내서 온보딩이 끝나지 않는다.
-         */
-        ClarifyRequest: {
-            /** Name */
-            name?: string | null;
-            /** Grade */
-            grade?: number | null;
-            /** Semester */
-            semester?: number | null;
-            /** Freshman Academic Year */
-            freshman_academic_year?: number | null;
-            /** Career Goal */
-            career_goal?: string | null;
-            /** Target Department */
-            target_department?: string | null;
-            /**
-             * Interest Keywords
-             * @default []
-             */
-            interest_keywords: string[];
-            /** Self Assessed Strengths */
-            self_assessed_strengths?: string | null;
-            /** Self Assessed Weaknesses */
-            self_assessed_weaknesses?: string | null;
-            /**
-             * Answers
-             * @default []
-             */
-            answers: components["schemas"]["ClarifyAnswer"][];
-        };
-        /** ClarifyResponse */
-        ClarifyResponse: {
-            /**
-             * Questions
-             * @default []
-             */
-            questions: components["schemas"]["ClarifyQuestion"][];
-            /**
-             * Complete
-             * @default false
-             */
-            complete: boolean;
-        };
         /** ConfirmFullReplanRequest */
         ConfirmFullReplanRequest: {
             /** Confirmed */
@@ -4353,6 +4275,110 @@ export interface components {
              * @default []
              */
             keywords: string[];
+        };
+        /** TimetableListResponse */
+        TimetableListResponse: {
+            /** Timetables */
+            timetables: components["schemas"]["TimetableRead"][];
+        };
+        /** TimetableRead */
+        TimetableRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Grade */
+            grade: number;
+            /** Semester */
+            semester: number;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Slots */
+            slots?: components["schemas"]["TimetableSlotInput"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** TimetableReplaceRequest */
+        TimetableReplaceRequest: {
+            /** Timetables */
+            timetables?: components["schemas"]["TimetableWrite"][];
+        };
+        /** TimetableSlotInput */
+        TimetableSlotInput: {
+            /** Id */
+            id: string;
+            /** Course Name */
+            course_name: string;
+            /** Teacher */
+            teacher?: string | null;
+            /** Room */
+            room?: string | null;
+            /** Day */
+            day: number;
+            /** Start Period */
+            start_period: number;
+            /**
+             * Period Span
+             * @default 1
+             */
+            period_span: number;
+            /**
+             * Category
+             * @default 일반선택
+             */
+            category: string;
+            /**
+             * Group
+             * @default 기타
+             */
+            group: string;
+            /**
+             * Color Index
+             * @default 0
+             */
+            color_index: number;
+            /**
+             * Units
+             * @default 0
+             */
+            units: number;
+            /**
+             * Is Career Related
+             * @default false
+             */
+            is_career_related: boolean;
+        };
+        /** TimetableWrite */
+        TimetableWrite: {
+            /** Id */
+            id?: string | null;
+            /** Name */
+            name: string;
+            /** Grade */
+            grade: number;
+            /** Semester */
+            semester: number;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Slots */
+            slots?: components["schemas"]["TimetableSlotInput"][];
         };
         /** TokenPairResponse */
         TokenPairResponse: {
@@ -5702,6 +5728,59 @@ export interface operations {
             };
         };
     };
+    list_timetables_api_v1_timetables_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimetableListResponse"];
+                };
+            };
+        };
+    };
+    replace_timetables_api_v1_timetables_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimetableReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimetableListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_profile_api_v1_profile_post: {
         parameters: {
             query?: never;
@@ -5775,39 +5854,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuggestResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    clarify_onboarding_api_v1_profile_clarify_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ClarifyRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClarifyResponse"];
                 };
             };
             /** @description Validation Error */

@@ -39,6 +39,18 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
     () => [...workspace.activities].sort((a, b) => a.grade - b.grade || (a.semester ?? 0) - (b.semester ?? 0)),
     [workspace.activities],
   );
+  // 학생의 대입 연도. 예전에는 statistics=2026, 모집요강·프로그램·지원카드=2027로
+  // 상수를 박아 두어 모든 학생이 자기 대입 연도와 무관한 자료를 봤다. 입학 연도로
+  // 계산한다 — 3년제 고교 정규 진학이면 입학연도+3이 지원(대입) 연도다(2025입학→
+  // 2028대입). 입학 연도를 모르면(온보딩 전 등) 백엔드 자료가 있는 최신 연도로
+  // 넘어가도록 undefined를 쓰지 않고, 현재 달력연도+1을 보수적 기본값으로 둔다.
+  const admissionYear = useMemo(() => {
+    const freshman = workspace.profile.freshmanAcademicYear;
+    if (freshman && freshman >= 1990 && freshman <= 2100) return freshman + 3;
+    const now = new Date();
+    // 3월 이후면 이미 새 학년도가 시작됐으므로 올해+1, 아니면 올해를 대입 연도 후보로.
+    return now.getMonth() >= 2 ? now.getFullYear() + 1 : now.getFullYear();
+  }, [workspace.profile.freshmanAcademicYear]);
   const [targets, setTargets] = useState<ApplicationTarget[]>([]);
   const [activeTargetId, setActiveTargetId] = useState<string | null>(null);
   const [universityQuery, setUniversityQuery] = useState("");
@@ -132,8 +144,8 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
     async function loadAdmissionInformation() {
       setAdmissionInfoLoading(true);
       const [statistics, guide, results, profile, detail] = await Promise.allSettled([
-        api<UniversityAdmissionStatistics>(`/admission-catalog/universities/${universityId}/statistics?source_admission_year=2026`),
-        api<UniversityAdmissionGuide>(`/admission-catalog/universities/${universityId}/admission-guide?source_admission_year=2027`),
+        api<UniversityAdmissionStatistics>(`/admission-catalog/universities/${universityId}/statistics?source_admission_year=${admissionYear}`),
+        api<UniversityAdmissionGuide>(`/admission-catalog/universities/${universityId}/admission-guide?source_admission_year=${admissionYear}`),
         api<ProgramPastResults>(`/admission-catalog/tracks/${trackId}/past-results`),
         api<ProgramProfile>(`/admission-catalog/tracks/${trackId}/program-profile`),
         api<TrackDetail>(`/admission-catalog/tracks/${trackId}/detail`),
@@ -148,7 +160,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
     }
     void loadAdmissionInformation();
     return () => { cancelled = true; };
-  }, [activeTarget?.trackId, activeTarget?.universityId]);
+  }, [activeTarget?.trackId, activeTarget?.universityId, admissionYear]);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,7 +228,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
       setCatalogError("");
       try {
         const rows = await api<CatalogProgram[]>(
-          `/admission-catalog/universities/${universityId}/programs?admission_year=2027&limit=100`,
+          `/admission-catalog/universities/${universityId}/programs?admission_year=${admissionYear}&limit=100`,
         );
         if (!cancelled) setPrograms(rows);
       } catch {
@@ -227,7 +239,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
     }
     void loadPrograms();
     return () => { cancelled = true; };
-  }, [selectedUniversity]);
+  }, [selectedUniversity, admissionYear]);
 
   useEffect(() => {
     if (!selectedProgram) return;
@@ -266,7 +278,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
           university_id: selectedUniversity.id,
           program_id: selectedProgram.id,
           track_id: selectedTrack.id,
-          admission_year: 2027,
+          admission_year: admissionYear,
         },
       });
       setActivityFlows(await api<ActivityFlow[]>("/application-preparations/activity-flows"));
