@@ -151,6 +151,11 @@ function profileSemesterValue(form: ProfileForm) {
  * 판단한다. 그래서 3학년 1학기까지만 담긴 현역 고3 생기부를 졸업자로 오해하지 않는다.
  * (대시보드 semesterCheck와 같은 학제 규칙: 3월 새 학년, 3~8월 1학기.)
  */
+/** 입학 연도로 쓸 수 있는 값인지. 빈 값·null이 Number()로 0이 되는 경우를 걸러낸다. */
+function isValidFreshmanYear(year: number | null | undefined): year is number {
+  return typeof year === "number" && Number.isInteger(year) && year >= 1990 && year <= 2100;
+}
+
 function expectedPeriodFromFreshmanYear(
   freshmanAcademicYear: number | null,
 ): { grade: string; semester: string } | null {
@@ -613,13 +618,13 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       // PDF 학적사항이 알려준 입학 연도 또는 학생이 직접 입력한 값만 쓴다. 현재
       // 달력으로 거꾸로 계산하면 과거 졸업생 생기부의 날짜·학년이 틀어질 수 있다.
       const providedFreshmanYear = Number(form.freshmanAcademicYear);
-      const manualFreshmanYear = Number.isInteger(providedFreshmanYear) ? providedFreshmanYear : undefined;
+      const manualFreshmanYear = isValidFreshmanYear(providedFreshmanYear) ? providedFreshmanYear : undefined;
       const resultJson = await analyzeSchoolRecordPdf(file, controller.signal, (state) => {
         if (state.stage) setOnboardingRecordStage(state.stage);
       });
       if (controller.signal.aborted) return;
       const parsedFreshmanYear = Number(resultJson.freshman_academic_year);
-      const freshmanAcademicYear = Number.isInteger(parsedFreshmanYear)
+      const freshmanAcademicYear = isValidFreshmanYear(parsedFreshmanYear)
         ? parsedFreshmanYear
         : manualFreshmanYear;
       const initialParsed = parseSchoolRecordJson(resultJson, freshmanAcademicYear);
@@ -749,30 +754,27 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     finally { setBusy(false); }
   }
 
-  const hasValidFreshmanYear = /^(19|20)\d{2}$/.test(form.freshmanAcademicYear);
-  // 생기부로 시작했다면 기본 정보(학년·학기·입학 연도)는 문서에서 읽은 값으로
-  // 채우고 잠근다. 학생이 이 칸에서 임의로 바꾸면 문서가 밝힌 사실과 어긋나므로,
-  // 틀렸을 때는 이후 챗봇 상담에서 바로잡게 한다. 직접 시작(생기부 없이)한
-  // 경우에는 잠그지 않는다.
-  //
-  // 파싱이 끝난 시점(onboardingRecordParse)만이 아니라 분석이 도는 중
-  // (onboardingRecordBusy)이나 파일을 이미 고른 순간(onboardingRecordFile)부터
-  // 잠근다 — 안 그러면 분석하는 1~2분 동안 학생이 값을 바꿔 넣을 수 있었다.
-  const startedFromRecord =
-    onboardingRecordBusy || onboardingRecordParse != null || !!onboardingRecordFile;
-  const recordStudentName = onboardingRecordContext.studentName?.trim() ?? "";
-  const recordLocked = startedFromRecord;
-  // 이름은 파서가 실제로 읽었을 때만 잠근다. 인적사항에서 성명을 못 읽으면
-  // (recordStudentName이 빈 값) 잠그지 않고 학생이 직접 입력하게 둔다.
-  const nameLocked = recordLocked && !!recordStudentName;
+  // 생기부로 시작하면 입학 연도는 학적사항에서 읽은 값을 그대로 쓴다. 입력칸도,
+  // 불일치 안내도 보여주지 않는다 — 문서가 밝힌 사실과 어긋날 일이 없다고 본다.
+  // 입력칸은 생기부 없이 시작했거나, 생기부에서 입학 연도를 읽지 못했을 때만
+  // 보이고, 보일 때는 반드시 채워야 한다(학년 판정의 기준이 입학 연도다).
+  const recordFreshmanYear = onboardingRecordParse?.freshmanAcademicYear ?? null;
+  const showFreshmanYearInput = !onboardingRecordBusy && !isValidFreshmanYear(recordFreshmanYear);
+  const freshmanYearReady = !showFreshmanYearInput || isValidFreshmanYear(Number(form.freshmanAcademicYear));
   // 진로가 아직 비어 있어도 상담에서 탐색할 수 있다. 가입 단계에서 억지로 분야를
   // 정하게 하면 이후 모든 추천의 출발점이 부정확해진다.
-  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && hasValidFreshmanYear;
-  // 생기부로 시작했다면 분석이 끝나 그 값이 실제로 채워지기 전에는 다음으로
-  // 넘어가지 못하게 막는다. 분석 중(busy)이거나, 파일만 고르고 아직 결과가
-  // 없는 상태(실패·취소 포함)에서 넘어가면 잠근 정보가 비어 버린다.
-  const recordReadyIfStarted = !startedFromRecord || onboardingRecordParse != null;
-  const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution && recordReadyIfStarted;
+  const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && freshmanYearReady;
+  const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution;
+  // 파서가 읽은 학년·학기는 제안값일 뿐이다. 학생이 언제든 직접 고칠 수 있고,
+  // 불일치는 안내로만 다룬다.
+  const recordLocked = false;
+  /**
+   * 이름은 학생부를 올려도 잠그지 않는다. 파서가 읽은 이름이 틀리거나(붙어 나온 글자,
+   * 옛 이름) 학생이 다르게 쓰고 싶을 때 고칠 길이 아예 없었다. 대신 학생부와 다르면
+   * 그 사실을 그 자리에서 알려 준다 — 다른 학생의 자료를 올린 것일 수도 있어서다.
+   */
+  const recordStudentName = onboardingRecordContext.studentName?.trim() ?? "";
+  const recordNameMismatch = Boolean(recordStudentName && form.name.trim() && recordStudentName !== form.name.trim());
   /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
   function startWithRecord(file: File | undefined) {
     if (!file) return;
@@ -1059,17 +1061,27 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               <div>
                 <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-name">학생 이름</label>
                 <input
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
-                  disabled={nameLocked}
+                  className={`w-full px-3.5 py-2 rounded-xl border text-xs font-semibold focus:outline-none bg-gray-50/50 focus:bg-white transition ${
+                    recordNameMismatch ? "border-amber-400 focus:border-amber-500" : "border-gray-200 focus:border-brand-500"
+                  }`}
                   id="ob-name"
                   onChange={(e) => update("name", e.target.value)}
                   placeholder="예: 김세특"
                   value={form.name}
                 />
-                {nameLocked && (
-                  <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
-                    업로드한 학생부에서 읽은 이름으로 자동 입력했습니다. 잘못됐다면 시작한 뒤 AI 상담에서 바로잡을 수 있어요.
-                  </p>
+                {recordNameMismatch && (
+                  <div className="mt-2 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-[11px] text-amber-900 leading-relaxed">
+                      업로드한 학생부의 이름은 <strong className="font-bold">{recordStudentName}</strong>입니다. 다른 학생의 자료라면 학생부를 다시 올려주세요.
+                    </span>
+                    <button
+                      className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-800 text-[11px] font-bold hover:bg-amber-100 transition flex-none"
+                      onClick={() => update("name", recordStudentName)}
+                      type="button"
+                    >
+                      학생부 이름으로 바꾸기
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -1114,28 +1126,29 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                 )}
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-freshman-year">
-                  고등학교 입학 연도
-                </label>
-                <input
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
-                  disabled={recordLocked}
-                  id="ob-freshman-year"
-                  inputMode="numeric"
-                  max="2100"
-                  min="1990"
-                  onChange={(event) => update("freshmanAcademicYear", event.target.value.replace(/\D/g, "").slice(0, 4))}
-                  placeholder="예: 2025"
-                  type="text"
-                  value={form.freshmanAcademicYear}
-                />
-                <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
-                  {recordLocked
-                    ? "입학 연도는 업로드한 학생부 학적사항에서 읽은 값으로 자동 입력했습니다. 잘못됐다면 시작한 뒤 AI 상담에서 바로잡을 수 있어요."
-                    : "예: 2025학년도 고1이었다면 2025. 생기부를 올리면 학적사항에서 읽은 값으로 자동 입력합니다."}
-                </p>
-              </div>
+              {showFreshmanYearInput && (
+                <div>
+                  <label className="text-[11px] font-bold text-gray-600 block mb-1" htmlFor="ob-freshman-year">
+                    고등학교 입학 연도
+                  </label>
+                  <input
+                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold focus:border-brand-500 focus:outline-none bg-gray-50/50 focus:bg-white transition"
+                    id="ob-freshman-year"
+                    inputMode="numeric"
+                    max="2100"
+                    min="1990"
+                    onChange={(event) => update("freshmanAcademicYear", event.target.value.replace(/\D/g, "").slice(0, 4))}
+                    placeholder="예: 2025"
+                    type="text"
+                    value={form.freshmanAcademicYear}
+                  />
+                  <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
+                    {onboardingRecordParse
+                      ? "생기부에서 입학 연도를 읽지 못했어요. 직접 입력해주세요. 예: 2025학년도 고1이었다면 2025."
+                      : "예: 2025학년도 고1이었다면 2025."}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* 2. 목표와 관심 */}
@@ -1314,8 +1327,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                     ? "학생부 분석이 끝나면 진행할 수 있어요"
                     : busy
                       ? "저장하는 중…"
-                      : !recordReadyIfStarted
-                        ? "학생부를 먼저 분석해 주세요"
+                      : !freshmanYearReady
+                        ? "입학 연도를 입력해주세요"
                         : "AI 상담 시작하기 ➔"}
                 </span>
               </button>
