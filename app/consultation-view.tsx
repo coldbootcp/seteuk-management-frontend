@@ -191,6 +191,12 @@ export function ConsultationGate({
   // 졸업생(수시 재수생)은 생기부가 이미 확정되어 로드맵을 세우지 않는다. 확정된
   // 기록과 목표 학과의 적합성·지원 전략만 상담하므로 문구와 마무리 흐름이 다르다.
   const isGraduate = status.requiredKind === "graduate_fit";
+  // 졸업생 상담은 로드맵 확정 신호(ready)가 없어 버튼을 열어 두지만, 대화를 한
+  // 마디도 안 하고 통과하는 것은 막는다 — 학생이 최소 2번은 말을 걸어야 마칠 수 있게
+  // 한다(백엔드 conclude의 GRADUATE_FIT_MIN_USER_MESSAGES와 같은 기준).
+  const graduateMinMessages = 2;
+  const userMessageCount = bubbles.filter((b) => b.role === "user").length;
+  const graduateCanConclude = isGraduate && userMessageCount >= graduateMinMessages;
   // 3학년 2학기는 새 탐구 계획을 세우는 시기가 아니라 수시 원서·마무리 시기다.
   // 신입생·저학년과 같은 "정밀 진단으로 계획을 세운다" 문구를 그대로 쓰면 시점에
   // 맞지 않아, 이 학기에는 게이트 문구를 따로 둔다.
@@ -441,11 +447,15 @@ export function ConsultationGate({
               <button
                 className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-xs shadow-xs transition"
                 type="button"
-                disabled={(!isGraduate && !ready) || concluding}
+                disabled={
+                  concluding || (isGraduate ? !graduateCanConclude : !ready)
+                }
                 onClick={() => void handleConclude()}
                 title={
                   isGraduate
-                    ? "상담이 충분하다고 느끼면 눌러 메인 화면으로 들어갈 수 있어요"
+                    ? graduateCanConclude
+                      ? "상담이 충분하다고 느끼면 눌러 메인 화면으로 들어갈 수 있어요"
+                      : "목표 학과와 적합성에 대해 조금 더 이야기한 뒤 마칠 수 있어요"
                     : ready
                       ? undefined
                       : "챗봇이 상담을 마무리하자고 하면 눌러주세요"
@@ -454,7 +464,9 @@ export function ConsultationGate({
                 {concluding
                   ? "확정하는 중…"
                   : isGraduate
-                    ? "상담 마치고 메인 화면으로 →"
+                    ? graduateCanConclude
+                      ? "상담 마치고 메인 화면으로 →"
+                      : "조금 더 이야기한 뒤 마칠 수 있어요"
                     : ready
                       ? "상담 마치고 메인 화면으로 →"
                       : "상담이 아직 끝나지 않았어요"}
