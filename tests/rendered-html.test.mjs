@@ -300,3 +300,19 @@ test("current-semester courses sit beside the timetable as draggable blocks", as
   assert.match(view, /aria-label="새 과목 추가"/);
   assert.doesNotMatch(view, /과목 직접 등록|과목 검색·불러오기|CourseSearchModal/);
 });
+
+test("the settings tab can replace the school record and rerun the diagnosis on demand", async () => {
+  const [app, api] = await Promise.all([source("app/workspace-app.tsx"), source("lib/school-record-api.ts")]);
+
+  // 이미 연동돼도 최신 생기부로 바꿀 수 있고, 서버가 대조하는 교체 모드로 올린다.
+  assert.match(app, /연동됨 · 최신으로 교체/);
+  assert.doesNotMatch(app, /disabled=\{hasSchoolRecord \|\| recordBusy\}/);
+  assert.match(api, /form\.append\("mode", "replace"\)/);
+
+  // 확인이 필요하면 반영하지 않았다고 이유와 함께 보여 준다.
+  assert.match(app, /<RecordReviewNotice review=\{recordReview\} \/>/);
+
+  // 진단은 학생이 누를 때만 다시 만든다.
+  assert.match(app, /진단 다시 하기/);
+  assert.match(api, /"\/diagnosis", \{ method: "POST" \}/);
+});

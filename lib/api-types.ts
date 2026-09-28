@@ -519,7 +519,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Upload */
+        /**
+         * Create Upload
+         * @description mode=replace는 설정 탭의 올리기·교체다. 파싱이 끝나면 학생 기록과 대조해, 이상·충돌이
+         *     없으면 서버가 바로 반영하고 있으면 상태의 review에 남기고 멈춘다.
+         */
         post: operations["create_upload_api_v1_seteuk_uploads_post"];
         delete?: never;
         options?: never;
@@ -3006,6 +3010,8 @@ export interface components {
         Body_create_upload_api_v1_seteuk_uploads_post: {
             /** File */
             file: string;
+            /** @default onboarding */
+            mode: components["schemas"]["UploadMode"];
         };
         /** Body_upload_attachment_api_v1_activities__activity_id__attachments_post */
         Body_upload_attachment_api_v1_activities__activity_id__attachments_post: {
@@ -3669,6 +3675,9 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** @default onboarding */
+            mode: components["schemas"]["UploadMode"];
+            review?: components["schemas"]["RecordReview"] | null;
         };
         /** ListResponse[AcademicPerformanceRead] */
         ListResponse_AcademicPerformanceRead_: {
@@ -4204,6 +4213,106 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * RecordAnomaly
+         * @description 생기부가 이 학생의 지금 상황과 맞지 않아 보이는 점. 서버가 코드로 판정한다 —
+         *     챗봇이 해명을 요청하는 근거이고, 하나라도 있으면 자동 반영하지 않는다.
+         */
+        RecordAnomaly: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "name_mismatch" | "freshman_year_mismatch" | "future_period" | "stale_record" | "activity_match_unavailable";
+            /** Message */
+            message: string;
+        };
+        /**
+         * RecordConflict
+         * @description 생기부 항목과 학생이 직접 입력한 기록이 같은 것을 가리키는데 내용이 다른 경우.
+         *
+         *     parsed_index는 반영 단계와 같은 기준(현재 학기 이후를 거른 결과)의 순번이다.
+         */
+        RecordConflict: {
+            /** Id */
+            id: string;
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "academic_performance" | "activities";
+            /** Parsed Index */
+            parsed_index: number;
+            /**
+             * Existing Id
+             * Format: uuid
+             */
+            existing_id: string;
+            /** Grade */
+            grade: number;
+            /** Semester */
+            semester?: number | null;
+            /** Title */
+            title: string;
+            /** Record Summary */
+            record_summary: string;
+            /** Existing Summary */
+            existing_summary: string;
+            /**
+             * Differences
+             * @default []
+             */
+            differences: string[];
+        };
+        /**
+         * RecordReview
+         * @description 교체 업로드의 대조 결과.
+         *
+         *     - clean_imported: 이상·충돌이 없어 서버가 바로 반영했다.
+         *     - needs_review: 이상이나 충돌이 있어 반영하지 않고 확인을 기다린다.
+         */
+        RecordReview: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "clean_imported" | "needs_review";
+            /**
+             * Anomalies
+             * @default []
+             */
+            anomalies: components["schemas"]["RecordAnomaly"][];
+            /**
+             * Conflicts
+             * @default []
+             */
+            conflicts: components["schemas"]["RecordConflict"][];
+            /**
+             * Import Plan
+             * @default {}
+             */
+            import_plan: {
+                [key: string]: number[];
+            };
+            /**
+             * Fill Placeholders
+             * @default {}
+             */
+            fill_placeholders: {
+                [key: string]: number;
+            };
+            /**
+             * Skipped Duplicates
+             * @default {}
+             */
+            skipped_duplicates: {
+                [key: string]: number;
+            };
+            /** Imported */
+            imported?: {
+                [key: string]: number;
+            } | null;
+        };
         /** RefreshRequest */
         RefreshRequest: {
             /** Refresh Token */
@@ -4692,6 +4801,11 @@ export interface components {
             status: components["schemas"]["UploadStatus"];
         };
         /**
+         * UploadMode
+         * @enum {string}
+         */
+        UploadMode: "onboarding" | "replace";
+        /**
          * UploadStatus
          * @enum {string}
          */
@@ -4705,6 +4819,9 @@ export interface components {
             imported_at?: string | null;
             /** Failure Reason */
             failure_reason?: string | null;
+            /** @default onboarding */
+            mode: components["schemas"]["UploadMode"];
+            review?: components["schemas"]["RecordReview"] | null;
         };
         /** ValidationError */
         ValidationError: {
