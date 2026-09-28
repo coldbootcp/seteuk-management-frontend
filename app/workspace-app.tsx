@@ -27,6 +27,7 @@ import { AccountSection, EmailVerificationGate, WithdrawalPendingGate } from "./
 import { GateFrame } from "./gate-frame";
 import { ChatView } from "./chat-view";
 import { CurrentCoursePicker } from "./course-picker";
+import { RecordReviewChat } from "./record-review-chat";
 import { TimetableView } from "./timetable-view";
 import { CalendarView } from "./calendar-view";
 import { GradesView } from "./grades-view";
@@ -2839,7 +2840,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
  * 설정 탭 생기부 올리기·교체의 결과. 문제가 없으면 무엇이 반영됐는지, 있으면 왜 아직 반영하지
  * 않았는지(서버가 찾은 이상·충돌)를 그대로 보여 준다.
  */
-function RecordReviewNotice({ review }: { review: RecordReview }) {
+function RecordReviewNotice({ review, onOpenReview }: { review: RecordReview; onOpenReview: () => void }) {
   const skipped = summarizeCounts(review.skipped_duplicates);
   if (review.state === "clean_imported") {
     const imported = summarizeCounts(review.imported);
@@ -2887,9 +2888,13 @@ function RecordReviewNotice({ review }: { review: RecordReview }) {
           </ul>
         </div>
       )}
-      <p className="text-[10px] text-amber-700 break-keep">
-        곧 챗봇이 이 항목들을 하나씩 확인한 뒤 반영하도록 연결할 예정이에요.
-      </p>
+      <button
+        className="w-full px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition"
+        onClick={onOpenReview}
+        type="button"
+      >
+        챗봇과 확인하기
+      </button>
     </div>
   );
 }
@@ -2909,6 +2914,7 @@ function ProfileView({ workspace, onNavigate, onRefresh }: {
   const [recordReview, setRecordReview] = useState<RecordReview | null>(null);
   const [diagnosisBusy, setDiagnosisBusy] = useState(false);
   const [diagnosisMessage, setDiagnosisMessage] = useState("");
+  const [reviewChatOpen, setReviewChatOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -2933,6 +2939,8 @@ function ProfileView({ workspace, onNavigate, onRefresh }: {
       const outcome = await replaceSchoolRecord(file);
       setRecordReview(outcome.review);
       if (outcome.importedAt) onRefresh();
+      // 확인이 필요하면 바로 챗봇 확인 화면으로 넘어간다(닫고 나중에 이어 가도 된다).
+      if (outcome.review?.state === "needs_review") setReviewChatOpen(true);
     } catch (e) {
       setRecordError(e instanceof Error ? e.message : "생기부를 분석하지 못했습니다.");
     } finally {
@@ -3193,12 +3201,23 @@ function ProfileView({ workspace, onNavigate, onRefresh }: {
                 </button>
                 {recordError && <p className="text-[11px] text-red-600 font-semibold mt-2 px-1">{recordError}</p>}
                 {diagnosisMessage && <p className="text-[11px] text-gray-600 font-semibold mt-2 px-1">{diagnosisMessage}</p>}
-                {recordReview && <RecordReviewNotice review={recordReview} />}
+                {recordReview && recordReview.state !== "resolved" && recordReview.state !== "discarded" && (
+                  <RecordReviewNotice onOpenReview={() => setReviewChatOpen(true)} review={recordReview} />
+                )}
               </div>
             </div>
           </div>
 
           <AccountSection />
+          {reviewChatOpen && (
+            <RecordReviewChat
+              onClose={() => setReviewChatOpen(false)}
+              onResolved={() => {
+                setRecordReview(null);
+                onRefresh();
+              }}
+            />
+          )}
         </div>
       </div>
     </div>

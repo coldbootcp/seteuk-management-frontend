@@ -310,9 +310,27 @@ test("the settings tab can replace the school record and rerun the diagnosis on 
   assert.match(api, /form\.append\("mode", "replace"\)/);
 
   // 확인이 필요하면 반영하지 않았다고 이유와 함께 보여 준다.
-  assert.match(app, /<RecordReviewNotice review=\{recordReview\} \/>/);
+  assert.match(app, /<RecordReviewNotice onOpenReview=\{\(\) => setReviewChatOpen\(true\)\} review=\{recordReview\} \/>/);
 
   // 진단은 학생이 누를 때만 다시 만든다.
   assert.match(app, /진단 다시 하기/);
   assert.match(api, /"\/diagnosis", \{ method: "POST" \}/);
+});
+
+test("a stopped school record opens the record review chat and only the button imports it", async () => {
+  const [app, chat, api] = await Promise.all([
+    source("app/workspace-app.tsx"),
+    source("app/record-review-chat.tsx"),
+    source("lib/school-record-api.ts"),
+  ]);
+
+  // 확인이 필요하면 바로 확인 상담으로 넘어가고, 나중에 알림의 버튼으로도 이어 간다.
+  assert.match(app, /if \(outcome\.review\?\.state === "needs_review"\) setReviewChatOpen\(true\)/);
+  assert.match(app, /챗봇과 확인하기/);
+  assert.match(api, /"\/consultation\/record-review"/);
+
+  // 반영은 챗봇이 아니라 학생이 누르는 버튼으로만, 준비 신호가 온 뒤에만.
+  assert.match(chat, /disabled=\{!review\?\.ready \|\| concluding \|\| streaming\}/);
+  assert.match(chat, /확인한 내용으로 반영/);
+  assert.match(api, /\/conclude`/);
 });

@@ -22,7 +22,7 @@ export type RecordConflict = {
 };
 
 export type RecordReview = {
-  state: "clean_imported" | "needs_review";
+  state: "clean_imported" | "needs_review" | "resolved" | "discarded";
   anomalies: RecordAnomaly[];
   conflicts: RecordConflict[];
   skipped_duplicates: Record<string, number>;
@@ -93,4 +93,52 @@ export function summarizeCounts(counts: Record<string, number> | null | undefine
     .filter(([key]) => (counts[key] ?? 0) > 0)
     .map(([key, label]) => `${label} ${counts[key]}`)
     .join(" · ");
+}
+
+/* ──────────────────────────────────────────────
+   생기부 확인 상담(kind=record_review)
+   ────────────────────────────────────────────── */
+
+export type ConflictChoice = "keep_mine" | "use_record" | "keep_both";
+
+export const CONFLICT_CHOICE_LABELS: Record<ConflictChoice, string> = {
+  keep_mine: "내 기록 유지",
+  use_record: "생기부로 바꾸기",
+  keep_both: "둘 다 남기기",
+};
+
+export type RecordReviewState = {
+  available: boolean;
+  ready: boolean;
+  concluded?: boolean;
+  file_name?: string | null;
+  anomalies?: RecordAnomaly[];
+  conflicts?: (RecordConflict & { choice: ConflictChoice | null })[];
+  scope?: { mode: "all" | "until" | "none"; grade: number | null; semester: number | null; reason: string } | null;
+  outstanding?: string[];
+  result_state?: RecordReview["state"];
+  imported?: Record<string, number> | null;
+};
+
+export type RecordReviewSession = { id: string; record_review: RecordReviewState | null };
+
+export async function openRecordReview(): Promise<RecordReviewSession> {
+  return api<RecordReviewSession>("/consultation/record-review", { method: "POST" });
+}
+
+export async function concludeRecordReview(sessionId: string): Promise<RecordReviewSession> {
+  return api<RecordReviewSession>(`/consultation/sessions/${sessionId}/conclude`, { method: "POST" });
+}
+
+export async function recordReviewMessages(
+  sessionId: string,
+): Promise<{ id: string; role: string; content: string; applied_actions: unknown[] | null }[]> {
+  return api(`/consultation/sessions/${sessionId}/messages`);
+}
+
+export function scopeLabel(scope: RecordReviewState["scope"]): string {
+  if (!scope) return "아직 정하지 않음";
+  if (scope.mode === "none") return "반영하지 않음";
+  if (scope.mode === "until") return `${scope.grade}학년 ${scope.semester}학기까지 반영`;
+  return "전부 반영";
 }

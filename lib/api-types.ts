@@ -1054,6 +1054,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/consultation/record-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Or Resume Record Review
+         * @description 확인을 기다리는 교체 업로드(설정 탭 생기부 올리기)의 확인 상담을 열거나 이어 간다.
+         *     확인할 생기부가 없으면 409(CONSULTATION_NOT_READY).
+         */
+        post: operations["create_or_resume_record_review_api_v1_consultation_record_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/attendance": {
         parameters: {
             query?: never;
@@ -3219,6 +3240,10 @@ export interface components {
             semester_goal?: {
                 [key: string]: unknown;
             } | null;
+            /** Record Review */
+            record_review?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ConsultationStatusResponse
@@ -4270,13 +4295,14 @@ export interface components {
          *
          *     - clean_imported: 이상·충돌이 없어 서버가 바로 반영했다.
          *     - needs_review: 이상이나 충돌이 있어 반영하지 않고 확인을 기다린다.
+         *     - resolved / discarded: 생기부 확인 상담에서 정한 대로 반영했다 / 반영하지 않기로 했다.
          */
         RecordReview: {
             /**
              * State
              * @enum {string}
              */
-            state: "clean_imported" | "needs_review";
+            state: "clean_imported" | "needs_review" | "resolved" | "discarded";
             /**
              * Anomalies
              * @default []
@@ -6798,6 +6824,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_or_resume_record_review_api_v1_consultation_record_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsultationSessionRead"];
                 };
             };
         };

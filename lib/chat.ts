@@ -55,6 +55,8 @@ export const TOOL_LABELS: Record<string, string> = {
   propose_draft_plan: "탐구 주제 초안",
   propose_full_replan_exception: "전체 재설계 제안",
   signal_ready_to_conclude: "상담 마무리 신호",
+  set_record_scope: "생기부 반영 범위",
+  resolve_record_conflict: "기록 충돌 결정",
 };
 
 type Handlers = {
@@ -80,6 +82,8 @@ export type ConsultationSignal = {
   flow?: unknown;
   flow_confirmed?: boolean;
   semester_goal?: unknown;
+  /** 생기부 확인 상담(kind=record_review)의 확인 현황 — lib/school-record-api의 RecordReviewState. */
+  record_review?: unknown;
 };
 
 /** 상담 챗봇 전용. 매 턴 끝에 마무리 버튼을 켤지 알려주는 signal 이벤트가 하나 더 있다. */
