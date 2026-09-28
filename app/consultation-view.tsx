@@ -236,7 +236,7 @@ export function ConsultationGate({
    * 데이터를 본 챗봇이 매번 직접 짓는다(스트리밍 말풍선 하나로 들어온다).
    */
   const startOpening = useCallback(async (sessionId: string) => {
-    if (streaming || sendingRef.current) return;
+    if (sendingRef.current) return;
     const pendingId = `opening-${Date.now()}`;
     setStreaming(true);
     setBubbles((prev) => {
@@ -270,10 +270,16 @@ export function ConsultationGate({
     } finally {
       setStreaming(false);
     }
-  }, [streaming]);
+  }, []);
 
   useEffect(() => {
-    if (!diagnosis || session || sessionInitRef.current) return;
+    // session은 일부러 의존성/가드에 넣지 않는다 — 아래에서 만든 세션을
+    // setSession으로 반영하는 순간(그 직후 await 지점) 이 effect가 session
+    // 의존성 때문에 스스로 정리(cleanup)되면서 그 클로저의 cancelled를
+    // true로 바꿔, 아직 진행 중이던 같은 흐름의 나머지(첫 인사 시작)가
+    // "취소된 것"처럼 조용히 건너뛰어지는 문제가 있었다. 재실행 방지는
+    // sessionInitRef 하나로 충분하다.
+    if (!diagnosis || sessionInitRef.current) return;
     sessionInitRef.current = true;
     let cancelled = false;
 
@@ -330,7 +336,7 @@ export function ConsultationGate({
     return () => {
       cancelled = true;
     };
-  }, [diagnosis, session, startOpening, applySessionProgress]);
+  }, [diagnosis, startOpening, applySessionProgress]);
 
   const { feedRef, spacerRef, onScroll, showJump, jumpToBottom, pinNextUserMessage } = useChatScroll(bubbles);
 
