@@ -43,26 +43,38 @@ export type ReplaceOutcome = { review: RecordReview | null; importedAt: string |
 const POLL_INTERVAL_MS = 2000;
 const POLL_LIMIT = 150; // 5분
 
-export async function replaceSchoolRecord(file: File): Promise<ReplaceOutcome> {
+/** 교체 모드로 올리기만 한다. 분석은 서버가 이어서 한다(waitForReplacement로 기다린다). */
+export async function startReplacement(file: File): Promise<void> {
   const form = new FormData();
   form.append("file", file);
   form.append("mode", "replace");
-  const created = await api<{ upload_id: string }>("/seteuk/uploads", { method: "POST", form });
-
-  for (let attempt = 0; attempt < POLL_LIMIT; attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS));
-    const status = await api<UploadStatus>(`/seteuk/uploads/${created.upload_id}`);
-    if (status.status === "failed") throw new Error(status.failure_reason ?? "생기부를 분석하지 못했습니다.");
-    if (status.status === "done") return { review: status.review, importedAt: status.imported_at };
-  }
-  throw new Error("분석이 5분을 넘었습니다. 잠시 후 설정 탭을 다시 열어 확인해 주세요.");
+  await api<{ upload_id: string }>("/seteuk/uploads", { method: "POST", form });
 }
 
-/** 새로고침해도 확인을 기다리는 교체 업로드를 되찾는다. */
-export async function pendingRecordReview(): Promise<RecordReview | null> {
+/**
+ * 가장 최근 교체 업로드의 분석이 끝날 때까지 기다린다. 업로드는 한 번에 하나만 남으므로
+ * id를 들고 다니지 않아도 된다 — 확인 화면을 나갔다 다시 들어와도 같은 업로드를 이어 본다.
+ */
+export async function waitForReplacement(signal?: AbortSignal): Promise<ReplaceOutcome> {
+  for (let attempt = 0; attempt < POLL_LIMIT; attempt += 1) {
+    if (signal?.aborted) throw new Error("취소했습니다.");
+    const latest = await api<UploadStatus | null>("/seteuk/uploads/latest");
+    if (!latest || latest.mode !== "replace") throw new Error("올린 생기부를 찾지 못했습니다.");
+    if (latest.status === "failed") throw new Error(latest.failure_reason ?? "생기부를 분석하지 못했습니다.");
+    if (latest.status === "done") return { review: latest.review, importedAt: latest.imported_at };
+    await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+  throw new Error("분석이 5분을 넘었습니다. 잠시 후 다시 확인해 주세요.");
+}
+
+/** 설정 탭 버튼이 보여 줄 상태 — 분석 중이거나 확인을 기다리면 확인 화면으로 이어 간다. */
+export type ReplacementStatus = "none" | "processing" | "needs_review";
+
+export async function replacementStatus(): Promise<ReplacementStatus> {
   const latest = await api<UploadStatus | null>("/seteuk/uploads/latest");
-  if (!latest || latest.mode !== "replace" || latest.imported_at) return null;
-  return latest.review?.state === "needs_review" ? latest.review : null;
+  if (!latest || latest.mode !== "replace" || latest.imported_at) return "none";
+  if (latest.status === "processing") return "processing";
+  return latest.status === "done" && latest.review?.state === "needs_review" ? "needs_review" : "none";
 }
 
 /** 진단을 새로 만든다. 진단은 로드맵을 바꾸지 않는다. */

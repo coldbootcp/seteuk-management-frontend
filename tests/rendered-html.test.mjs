@@ -306,31 +306,38 @@ test("the settings tab can replace the school record and rerun the diagnosis on 
 
   // 이미 연동돼도 최신 생기부로 바꿀 수 있고, 서버가 대조하는 교체 모드로 올린다.
   assert.match(app, /연동됨 · 최신으로 교체/);
-  assert.doesNotMatch(app, /disabled=\{hasSchoolRecord \|\| recordBusy\}/);
   assert.match(api, /form\.append\("mode", "replace"\)/);
 
-  // 확인이 필요하면 반영하지 않았다고 이유와 함께 보여 준다.
-  assert.match(app, /<RecordReviewNotice onOpenReview=\{\(\) => setReviewChatOpen\(true\)\} review=\{recordReview\} \/>/);
+  // 확인을 기다리면 버튼이 "생기부 연동 완료하기"가 되고 연동 화면으로 다시 들어간다.
+  assert.match(app, /생기부 연동 완료하기/);
+  assert.match(app, /onOpenRecordReview\(null\)/);
 
   // 진단은 학생이 누를 때만 다시 만든다.
   assert.match(app, /진단 다시 하기/);
   assert.match(api, /"\/diagnosis", \{ method: "POST" \}/);
 });
 
-test("a stopped school record opens the record review chat and only the button imports it", async () => {
-  const [app, chat, api] = await Promise.all([
+test("picking a school record moves to a full-screen review that waits for the analysis", async () => {
+  const [app, screen, frame, api] = await Promise.all([
     source("app/workspace-app.tsx"),
     source("app/record-review-chat.tsx"),
+    source("app/gate-frame.tsx"),
     source("lib/school-record-api.ts"),
   ]);
 
-  // 확인이 필요하면 바로 확인 상담으로 넘어가고, 나중에 알림의 버튼으로도 이어 간다.
-  assert.match(app, /if \(outcome\.review\?\.state === "needs_review"\) setReviewChatOpen\(true\)/);
-  assert.match(app, /챗봇과 확인하기/);
+  // 파일을 고르는 즉시 셸 대신 전체 화면(온보딩 상담과 같은 틀)으로 넘어간다.
+  assert.match(app, /if \(file\) onOpenRecordReview\(file\)/);
+  assert.match(app, /if \(recordReview\) \{\s*return \(\s*<RecordReviewScreen/);
+  assert.match(screen, /<GateFrame onClose=\{onExit\}/);
+  assert.match(frame, /aria-label="닫기"/);
+
+  // 그 화면에서 분석을 기다리고, 확인이 필요하면 거기서 챗봇과 정한다.
+  assert.match(screen, /생기부를 분석하고 있어요/);
+  assert.match(screen, /await waitForReplacement\(\)/);
   assert.match(api, /"\/consultation\/record-review"/);
 
   // 반영은 챗봇이 아니라 학생이 누르는 버튼으로만, 준비 신호가 온 뒤에만.
-  assert.match(chat, /disabled=\{!review\?\.ready \|\| concluding \|\| streaming\}/);
-  assert.match(chat, /확인한 내용으로 반영/);
+  assert.match(screen, /disabled=\{!review\?\.ready \|\| concluding \|\| streaming\}/);
+  assert.match(screen, /확인한 내용으로 반영/);
   assert.match(api, /\/conclude`/);
 });

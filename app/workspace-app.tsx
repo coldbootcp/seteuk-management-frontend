@@ -13,13 +13,7 @@ import {
 import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
 import { fetchTimetables, saveTimetables } from "../lib/timetables-api";
-import {
-  pendingRecordReview,
-  replaceSchoolRecord,
-  rerunDiagnosis,
-  summarizeCounts,
-  type RecordReview,
-} from "../lib/school-record-api";
+import { replacementStatus, rerunDiagnosis, type ReplacementStatus } from "../lib/school-record-api";
 import { SignIn } from "./sign-in";
 import { LandingView } from "./landing-view";
 import { ConsultationGate } from "./consultation-view";
@@ -27,7 +21,7 @@ import { AccountSection, EmailVerificationGate, WithdrawalPendingGate } from "./
 import { GateFrame } from "./gate-frame";
 import { ChatView } from "./chat-view";
 import { CurrentCoursePicker } from "./course-picker";
-import { RecordReviewChat } from "./record-review-chat";
+import { RecordReviewScreen } from "./record-review-chat";
 import { TimetableView } from "./timetable-view";
 import { CalendarView } from "./calendar-view";
 import { GradesView } from "./grades-view";
@@ -2836,117 +2830,40 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   );
 }
 
-/**
- * 설정 탭 생기부 올리기·교체의 결과. 문제가 없으면 무엇이 반영됐는지, 있으면 왜 아직 반영하지
- * 않았는지(서버가 찾은 이상·충돌)를 그대로 보여 준다.
- */
-function RecordReviewNotice({ review, onOpenReview }: { review: RecordReview; onOpenReview: () => void }) {
-  const skipped = summarizeCounts(review.skipped_duplicates);
-  if (review.state === "clean_imported") {
-    const imported = summarizeCounts(review.imported);
-    const filled = review.imported?.filled_placeholders ?? 0;
-    return (
-      <div className="mt-2 p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/80 space-y-1">
-        <strong className="block text-[11px] font-bold text-emerald-800">생기부를 반영했어요</strong>
-        <p className="text-[11px] text-emerald-900 leading-relaxed break-keep">
-          {imported || "새로 들어간 기록은 없어요"}
-          {filled > 0 && ` · 빈칸 과목 ${filled}개에 성적 채움`}
-        </p>
-        {skipped && (
-          <p className="text-[10px] text-emerald-700 break-keep">직접 입력한 기록과 같은 {skipped}건은 한 번만 남겼어요.</p>
-        )}
-        <p className="text-[10px] text-emerald-700 break-keep">새 기록으로 진단을 보려면 위의 &lsquo;진단 다시 하기&rsquo;를 누르세요.</p>
-      </div>
-    );
-  }
-  return (
-    <div className="mt-2 p-3 rounded-xl bg-amber-50/80 border border-amber-200/80 space-y-2">
-      <strong className="block text-[11px] font-bold text-amber-900">
-        확인이 필요한 항목이 있어 아직 반영하지 않았어요
-      </strong>
-      {review.anomalies.length > 0 && (
-        <ul className="space-y-1">
-          {review.anomalies.map((anomaly) => (
-            <li className="text-[11px] text-amber-900 leading-relaxed break-keep" key={anomaly.kind}>
-              · {anomaly.message}
-            </li>
-          ))}
-        </ul>
-      )}
-      {review.conflicts.length > 0 && (
-        <div className="space-y-1">
-          <span className="block text-[10px] font-bold text-amber-800">
-            직접 입력한 기록과 다른 항목 {review.conflicts.length}개
-          </span>
-          <ul className="space-y-1">
-            {review.conflicts.map((conflict) => (
-              <li className="text-[11px] text-amber-900 leading-relaxed break-keep" key={conflict.id}>
-                · {conflict.grade}학년{conflict.semester ? ` ${conflict.semester}학기` : ""} {conflict.title}
-                {conflict.differences.length > 0 && ` — ${conflict.differences.join(", ")}`}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <button
-        className="w-full px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition"
-        onClick={onOpenReview}
-        type="button"
-      >
-        챗봇과 확인하기
-      </button>
-    </div>
-  );
-}
-
-function ProfileView({ workspace, onNavigate, onRefresh }: {
+function ProfileView({ workspace, onNavigate, onOpenRecordReview, onRefresh }: {
   workspace: ProductWorkspace;
   onNavigate: (tab: TabId) => void;
+  /** 생기부 연동 화면(전체 화면)으로 넘어간다. file이 null이면 이미 올린 것을 이어 본다. */
+  onOpenRecordReview: (file: File | null) => void;
   onRefresh: () => void;
 }) {
   const hasDiagnosis = Boolean(workspace.dna.narrative);
   const hasSchoolRecord = workspace.schoolRecordCourses.length > 0;
   const recordInputRef = useRef<HTMLInputElement>(null);
-  const [recordBusy, setRecordBusy] = useState(false);
-  const [recordError, setRecordError] = useState("");
-  // 설정 탭의 올리기·교체 결과. 문제가 없으면 서버가 바로 반영하고(clean_imported), 이상이나
-  // 직접 입력한 기록과의 충돌이 있으면 반영하지 않고 확인을 기다린다(needs_review).
-  const [recordReview, setRecordReview] = useState<RecordReview | null>(null);
+  // 설정 탭에서 올린 생기부가 분석 중이거나 확인을 기다리면, 버튼이 생기부 연동 화면으로
+  // 이어 준다(그 화면을 ✕로 나왔을 때).
+  const [replacement, setReplacement] = useState<ReplacementStatus>("none");
   const [diagnosisBusy, setDiagnosisBusy] = useState(false);
   const [diagnosisMessage, setDiagnosisMessage] = useState("");
-  const [reviewChatOpen, setReviewChatOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    pendingRecordReview()
-      .then((review) => {
-        if (!cancelled && review) setRecordReview(review);
+    replacementStatus()
+      .then((status) => {
+        if (!cancelled) setReplacement(status);
       })
       .catch(() => {
-        // 못 불러와도 올리기는 할 수 있다.
+        // 못 불러와도 새로 올리기는 할 수 있다.
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  async function uploadSchoolRecord(file: File | undefined) {
-    if (!file) return;
-    setRecordBusy(true);
-    setRecordError("");
-    setRecordReview(null);
-    try {
-      const outcome = await replaceSchoolRecord(file);
-      setRecordReview(outcome.review);
-      if (outcome.importedAt) onRefresh();
-      // 확인이 필요하면 바로 챗봇 확인 화면으로 넘어간다(닫고 나중에 이어 가도 된다).
-      if (outcome.review?.state === "needs_review") setReviewChatOpen(true);
-    } catch (e) {
-      setRecordError(e instanceof Error ? e.message : "생기부를 분석하지 못했습니다.");
-    } finally {
-      setRecordBusy(false);
-      if (recordInputRef.current) recordInputRef.current.value = "";
-    }
+  function pickSchoolRecord(file: File | undefined) {
+    if (recordInputRef.current) recordInputRef.current.value = "";
+    // 고르는 즉시 생기부 연동 화면으로 넘어가 거기서 분석을 기다린다.
+    if (file) onOpenRecordReview(file);
   }
 
   async function runDiagnosisAgain() {
@@ -2969,7 +2886,7 @@ function ProfileView({ workspace, onNavigate, onRefresh }: {
       <input
         accept="application/pdf,.pdf"
         hidden
-        onChange={(event) => void uploadSchoolRecord(event.target.files?.[0])}
+        onChange={(event) => pickSchoolRecord(event.target.files?.[0])}
         ref={recordInputRef}
         type="file"
       />
@@ -3178,9 +3095,14 @@ function ProfileView({ workspace, onNavigate, onRefresh }: {
 
               <div className="mt-5 text-left border-t border-gray-100 pt-4 text-xs">
                 <button
-                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gray-50/70 border border-gray-100 transition hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
-                  disabled={recordBusy}
-                  onClick={() => recordInputRef.current?.click()}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition cursor-pointer ${
+                    replacement === "none"
+                      ? "bg-gray-50/70 border-gray-100 hover:bg-gray-100"
+                      : "bg-amber-50/70 border-amber-200 hover:bg-amber-100/70"
+                  }`}
+                  onClick={() =>
+                    replacement === "none" ? recordInputRef.current?.click() : onOpenRecordReview(null)
+                  }
                   type="button"
                 >
                   <span className="flex items-center gap-2">
@@ -3189,35 +3111,30 @@ function ProfileView({ workspace, onNavigate, onRefresh }: {
                   </span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                      hasSchoolRecord
-                        ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                        : recordBusy
+                      replacement === "needs_review"
+                        ? "bg-amber-500 text-white border-amber-500"
+                        : replacement === "processing"
                           ? "bg-blue-50 text-brand-600 border-blue-200"
-                          : "bg-gray-100 text-gray-500 border-gray-200"
+                          : hasSchoolRecord
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                            : "bg-gray-100 text-gray-500 border-gray-200"
                     }`}
                   >
-                    {recordBusy ? "분석 중…" : hasSchoolRecord ? "연동됨 · 최신으로 교체" : "미연결 · 올리기"}
+                    {replacement === "needs_review"
+                      ? "생기부 연동 완료하기"
+                      : replacement === "processing"
+                        ? "분석 중 · 이어 보기"
+                        : hasSchoolRecord
+                          ? "연동됨 · 최신으로 교체"
+                          : "미연결 · 올리기"}
                   </span>
                 </button>
-                {recordError && <p className="text-[11px] text-red-600 font-semibold mt-2 px-1">{recordError}</p>}
                 {diagnosisMessage && <p className="text-[11px] text-gray-600 font-semibold mt-2 px-1">{diagnosisMessage}</p>}
-                {recordReview && recordReview.state !== "resolved" && recordReview.state !== "discarded" && (
-                  <RecordReviewNotice onOpenReview={() => setReviewChatOpen(true)} review={recordReview} />
-                )}
               </div>
             </div>
           </div>
 
           <AccountSection />
-          {reviewChatOpen && (
-            <RecordReviewChat
-              onClose={() => setReviewChatOpen(false)}
-              onResolved={() => {
-                setRecordReview(null);
-                onRefresh();
-              }}
-            />
-          )}
         </div>
       </div>
     </div>
@@ -3421,6 +3338,10 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       .slice(0, 6);
   }, [searchQuery, workspace.activities]);
 
+  // 생기부 연동 화면. 켜지면 사이드바 대신 전체 화면으로 바뀐다(온보딩 상담처럼).
+  // file이 null이면 이미 올린 생기부(분석 중·확인 대기)를 이어 본다.
+  const [recordReview, setRecordReview] = useState<{ file: File | null } | null>(null);
+
   const tabs: Array<{ id: TabId; label: string; badge?: string; icon: React.ReactNode }> = [
     {
       id: "overview",
@@ -3545,6 +3466,20 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
   }
 
   const currentTabLabel = tabs.find((t) => t.id === tab)?.label ?? "";
+
+  if (recordReview) {
+    return (
+      <RecordReviewScreen
+        file={recordReview.file}
+        onExit={() => {
+          setRecordReview(null);
+          setTab("profile");
+        }}
+        onResolved={onRefresh}
+        onSignOut={onNewStudent}
+      />
+    );
+  }
 
   return (
     <div className="product-shell">
@@ -3779,7 +3714,14 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
           )}
           {tab === "portfolio" && <ApplicationPreparationView workspace={workspace} />}
           {tab === "chat"       && <ChatView onRecordsChanged={onRefresh} />}
-          {tab === "profile"    && <ProfileView workspace={workspace} onNavigate={setTab} onRefresh={onRefresh} />}
+          {tab === "profile"    && (
+            <ProfileView
+              workspace={workspace}
+              onNavigate={setTab}
+              onOpenRecordReview={(file) => setRecordReview({ file })}
+              onRefresh={onRefresh}
+            />
+          )}
         </div>
       </section>
     </div>
