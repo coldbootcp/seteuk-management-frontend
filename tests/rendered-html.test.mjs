@@ -170,3 +170,112 @@ test("no server-side or Workers code is left in the frontend", async () => {
     assert.equal(deps[banned], undefined, `${banned} should be gone`);
   }
 });
+
+test("the consultation narrows from a confirmed 3-year flow to this semester's goal and topics", async () => {
+  const [gate, adapter, chat] = await Promise.all([
+    source("app/consultation-view.tsx"),
+    source("lib/workspace-adapter.ts"),
+    source("lib/chat.ts"),
+  ]);
+
+  // 진행 단계는 메시지 수로 추측하지 않고 서버가 계산한 stage를 따른다.
+  assert.doesNotMatch(gate, /consultationStep/);
+  assert.match(gate, /STAGE_ORDER\[stage\]/);
+  for (const label of ["3개년 흐름 조율", "이번 학기 목표", "구체 탐구 주제"]) {
+    assert.match(gate, new RegExp(label));
+  }
+
+  // 3개년 흐름은 카드의 버튼으로만 확정된다 — 대화 텍스트로는 확정되지 않는다.
+  assert.match(gate, /이 흐름으로 확정/);
+  assert.match(gate, /다시 조율할래요/);
+  assert.match(adapter, /\/confirm-flow/);
+  assert.match(gate, /confirmConsultationFlow\(session\.id, confirmed\)/);
+
+  // signal 이벤트가 흐름·단계·학기 목표를 함께 싣는다.
+  assert.match(chat, /flow_confirmed\?: boolean/);
+  assert.match(gate, /onSignal: applySignal/);
+});
+
+test("conversation titles come from the topic or the student, not the first message", async () => {
+  const [view, chat] = await Promise.all([source("app/chat-view.tsx"), source("lib/chat.ts")]);
+
+  assert.match(chat, /method: "PATCH"/);
+  assert.match(chat, /event === "title"/);
+  assert.match(view, /renameConversation\(/);
+  assert.match(view, /이름 바꾸기/);
+  assert.match(view, /onTitle:/);
+  // 상담 대화는 목적에 맞는 제목을 쓴다.
+  assert.match(view, /3개년 흐름 설계/);
+  assert.match(view, /graduate_fit_consultation/);
+});
+
+test("timetable courses come from the backend subject catalog for the viewed semester", async () => {
+  const [view, types, api, timetableApi] = await Promise.all([
+    source("app/timetable-view.tsx"),
+    source("app/types/academic.ts"),
+    source("lib/subjects-api.ts"),
+    source("lib/timetables-api.ts"),
+  ]);
+
+  // 예시는 보고 있는 학기의 것 — 학생의 '현재' 학기로 고정하지 않는다.
+  assert.match(view, /grade=\{selGrade\}/);
+  assert.match(view, /semester=\{selSemester\}/);
+  assert.match(view, /commonSubjects\(grade, semester\)/);
+
+  // 과목 목록은 프론트엔드에 하드코딩하지 않고 백엔드 카탈로그에서 가져온다.
+  assert.match(view, /listSubjects\(\)/);
+  assert.doesNotMatch(view, /presetsForCurriculum|commonCoursesForPeriod|SUBJECT_PRESETS/);
+  assert.doesNotMatch(types, /COMMON_COURSES_BY_PERIOD|presetsForCurriculum/);
+  assert.match(api, /\/subjects\/search\?/);
+  assert.match(api, /\/subjects\/common\?/);
+
+  // 직접 추가도 과목명을 자유롭게 치지 않는다 — 후보에서 고르거나 기타로만.
+  assert.match(view, /<SubjectSearchField/);
+  assert.doesNotMatch(view, /placeholder="예: 물리학Ⅱ"/);
+
+  // 칸마다 카탈로그 코드를 저장해 과목 데이터와 1:1로 잇는다.
+  assert.match(types, /subjectCode\?: string/);
+  assert.match(timetableApi, /subject_code: slot\.subjectCode \?\? null/);
+  assert.match(timetableApi, /subjectCode: slot\.subject_code \?\? undefined/);
+});
+
+test("students pick this semester's courses from the catalog before the consultation", async () => {
+  const [app, picker, consultation] = await Promise.all([
+    source("app/workspace-app.tsx"),
+    source("app/course-picker.tsx"),
+    source("app/consultation-view.tsx"),
+  ]);
+
+  // 프로필 다음, 상담 전에 수강 과목 단계가 있다(졸업생은 건너뛴다).
+  assert.match(app, /setStep\("courses"\)/);
+  assert.match(app, /다음: 이번 학기 과목 고르기/);
+  assert.match(app, /<CurrentCoursePicker/);
+
+  // 엔터는 후보를 고를 뿐 — 입력한 글자를 그대로 과목으로 만들지 않는다. 목록에 없는
+  // 과목만 '기타'로 직접 입력한다.
+  assert.match(picker, /const target = selectable\[highlight\];\s*if \(target\) pick\(target\);/);
+  assert.match(picker, /기타로 직접 입력/);
+  assert.match(picker, /custom_name/);
+
+  // 필수는 아니지만, 건너뛰려면 한 번 더 확인한다.
+  assert.match(picker, /아직 시간표를 몰라요/);
+  assert.match(picker, /그래도 넘어가기/);
+
+  // 상담 화면에서도 수강 과목을 보고 고칠 수 있다.
+  assert.match(consultation, /이번 학기 수강 과목/);
+  assert.match(consultation, /getCurrentCourses\(\)/);
+});
+
+test("the consultation names the real conclude button and drops the gate banner", async () => {
+  const [consultation, chat] = await Promise.all([
+    source("app/consultation-view.tsx"),
+    source("lib/chat.ts"),
+  ]);
+
+  assert.match(consultation, /상담 마치고 메인 화면으로/);
+  assert.doesNotMatch(consultation, /이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요/);
+  assert.doesNotMatch(consultation, /나가기 버튼/);
+  assert.doesNotMatch(chat, /나가기/);
+  // 3개년 흐름은 3학년 말 도착점부터 합의한다.
+  assert.match(consultation, /3학년 말 도착점/);
+});

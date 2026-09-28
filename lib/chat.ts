@@ -1,6 +1,6 @@
 "use client";
 
-import { API, tokens } from "./api-client";
+import { API, api, tokens } from "./api-client";
 
 export type ChatMode = "normal" | "edit";
 
@@ -19,7 +19,14 @@ export type ChatAction = {
  */
 export const GENERAL_CONVERSATION_PURPOSE = "general";
 
-export type Conversation = { id: string; title: string | null; purpose: string; updated_at: string };
+export type Conversation = {
+  id: string;
+  title: string | null;
+  /** default(상담 고정 제목) / auto(대화 주제로 지은 제목) / user(학생이 고친 제목) */
+  title_source?: string | null;
+  purpose: string;
+  updated_at: string;
+};
 
 export type StoredMessage = {
   id: string;
@@ -43,7 +50,9 @@ export const TOOL_LABELS: Record<string, string> = {
   update_profile_basics: "기본 정보 수정",
   run_diagnosis: "진단 실행",
   recommend_follow_up: "후속 탐구 추천",
-  propose_draft_plan: "계획 초안 제안",
+  propose_three_year_flow: "3개년 흐름 초안",
+  set_semester_goal: "이번 학기 목표",
+  propose_draft_plan: "탐구 주제 초안",
   propose_full_replan_exception: "전체 재설계 제안",
   signal_ready_to_conclude: "상담 마무리 신호",
 };
@@ -57,14 +66,28 @@ type Handlers = {
     suggested_replies?: string[];
   }) => void;
   onError: (payload: { error_code: string; message: string }) => void;
+  /** 일반 대화에서 답변이 끝난 뒤 서버가 대화 주제로 제목을 지었을 때. */
+  onTitle?: (payload: { conversation_id: string; title: string }) => void;
 };
 
-/** 상담 챗봇 전용. 매 턴 끝에 나가기 버튼을 켤지 알려주는 signal 이벤트가 하나 더 있다. */
+/** 상담 턴 끝의 signal 이벤트. 마무리 버튼([상담 마치고 메인 화면으로]), 3개년 흐름 카드, 진행 단계를 갱신한다.
+ * flow·semester_goal은 서버 원형(snake_case) 그대로 오므로 workspace-adapter의
+ * toConsultationFlow / toConsultationSemesterGoal로 바꿔 쓴다. */
+export type ConsultationSignal = {
+  ready: boolean;
+  full_replan_confirmed?: boolean;
+  stage?: string;
+  flow?: unknown;
+  flow_confirmed?: boolean;
+  semester_goal?: unknown;
+};
+
+/** 상담 챗봇 전용. 매 턴 끝에 마무리 버튼을 켤지 알려주는 signal 이벤트가 하나 더 있다. */
 type ConsultationHandlers = Handlers & {
-  onSignal: (payload: { ready: boolean; full_replan_confirmed?: boolean }) => void;
+  onSignal: (payload: ConsultationSignal) => void;
 };
 
-/** 상담 세션의 첫 인사 전용. 학생이 아직 아무 말도 안 한 턴이라 도구·나가기 신호가 없다. */
+/** 상담 세션의 첫 인사 전용. 학생이 아직 아무 말도 안 한 턴이라 도구·마무리 신호가 없다. */
 type OpeningHandlers = {
   onToken: (delta: string) => void;
   onDone: (payload: { message_id: string | null; suggested_replies?: string[] }) => void;
@@ -160,14 +183,24 @@ export async function streamMessage(
       else if (event === "action") handlers.onAction(payload as ChatAction);
       else if (event === "done") handlers.onDone(payload as Parameters<Handlers["onDone"]>[0]);
       else if (event === "error") handlers.onError(payload as Parameters<Handlers["onError"]>[0]);
+      else if (event === "title")
+        handlers.onTitle?.(payload as { conversation_id: string; title: string });
     },
     handlers.onError,
     signal,
   );
 }
 
+/** 대화 제목을 학생이 직접 고친다. 고친 제목은 서버의 자동 제목이 덮어쓰지 않는다. */
+export async function renameConversation(conversationId: string, title: string): Promise<Conversation> {
+  return api<Conversation>(`/conversations/${conversationId}`, {
+    method: "PATCH",
+    body: { title },
+  });
+}
+
 /** 상담 챗봇 대화 한 턴. 일반 대화와 달리 mode 토글이 없고, 매 턴 끝에 signal 이벤트로
- * 나가기 버튼 상태를 알려준다. */
+ * 마무리 버튼 상태를 알려준다. */
 export async function streamConsultationMessage(
   sessionId: string,
   content: string,

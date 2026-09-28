@@ -4,14 +4,31 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api-client";
 import {
   concludeConsultation,
+  confirmConsultationFlow,
   confirmFullReplan,
   createOrResumeConsultationSession,
   getConsultationMessages,
+  toConsultationFlow,
+  toConsultationSemesterGoal,
 } from "../lib/workspace-adapter";
-import { streamConsultationMessage, streamConsultationOpening, TOOL_LABELS } from "../lib/chat";
-import type { ConsultationSession, ConsultationStatus } from "../lib/product-harness";
+import {
+  streamConsultationMessage,
+  streamConsultationOpening,
+  TOOL_LABELS,
+  type ConsultationSignal,
+} from "../lib/chat";
+import type {
+  ConsultationFlow,
+  ConsultationSemesterGoal,
+  ConsultationSession,
+  ConsultationStage,
+  ConsultationStatus,
+} from "../lib/product-harness";
 import { GateFrame } from "./gate-frame";
-import { type ChatBubble } from "./chat-thread";
+import { CurrentCoursePicker } from "./course-picker";
+import { getCurrentCourses, type CurrentCourses } from "../lib/subjects-api";
+import { JumpToBottomButton, type ChatBubble } from "./chat-thread";
+import { useChatScroll } from "../lib/use-chat-scroll";
 import { MarkdownText } from "./markdown-text";
 import { Icon } from "./icons";
 
@@ -37,8 +54,32 @@ type UserProfileBasics = {
  * 이 화면을 통과해야만(상담을 마쳐야만) ProductShell로 넘어간다.
  *
  * 단계: (1) 진단이 아직 없으면 실행 → (2) 보고서 표시 → (3) 상담 챗봇과 대화 →
- * (4) 챗봇이 종료 신호를 보내면 나가기 버튼이 켜짐 → (5) 학생이 눌러야 확정.
+ * (4) 챗봇이 종료 신호를 보내면 [상담 마치고 메인 화면으로] 버튼이 켜짐 → (5) 학생이 눌러야 확정.
+ *
+ * 상담 대화 자체는 큰 그림에서 작은 그림으로 좁혀 간다: 3개년 흐름 → 이번 학기 목표 →
+ * 구체 탐구 주제 → 마무리. 어느 단계인지(stage)는 서버가 세션에 저장된 사실로 계산해
+ * 매 턴 signal 이벤트로 알려 주고, 화면은 그 값만 따른다. 3개년 흐름은 챗봇이 초안을
+ * 올리면 흐름 카드가 뜨고, 학생이 카드의 확정 버튼을 눌러야 다음 단계로 넘어간다.
  */
+
+/** 서버 stage를 진행 트래커의 순서(0~3)로. 졸업생 상담은 트래커를 쓰지 않는다. */
+const STAGE_ORDER: Record<ConsultationStage, number> = {
+  flow: 0,
+  semester_goal: 1,
+  topics: 2,
+  wrap_up: 3,
+  graduate_fit: 0,
+};
+
+const STAGE_STEPS = [
+  { label: "3개년 흐름 조율", hint: "3학년 말 도착점을 정하고, 거기로 가는 학기별 큰 방향을 잡아요" },
+  { label: "이번 학기 목표", hint: "확정한 흐름 안에서 이번 학기에 할 일을 정해요" },
+  { label: "구체 탐구 주제", hint: "목표에서 나온 주제를 2~3개씩 좁혀 골라요" },
+  { label: "초안 확인·확정", hint: "정리된 초안을 확인하고 상담을 마쳐요" },
+];
+
+const FLOW_CONFIRM_MESSAGE = "3개년 흐름은 이대로 확정할게요. 이제 이번 학기 목표를 정해 볼까요?";
+const FLOW_REVISE_PREFILL = "3개년 흐름에서 바꾸고 싶은 부분이 있어요: ";
 export function ConsultationGate({
   status,
   onSatisfied,
@@ -58,17 +99,41 @@ export function ConsultationGate({
   const [streaming, setStreaming] = useState(false);
   const [ready, setReady] = useState(false);
   const [replanProposal, setReplanProposal] = useState<{ rationale: string } | null>(null);
+  // 상담 진행 단계와 3개년 흐름·이번 학기 목표. 세션 조회와 매 턴 signal로 갱신된다.
+  const [stage, setStage] = useState<ConsultationStage>("flow");
+  const [flow, setFlow] = useState<ConsultationFlow | null>(null);
+  const [flowConfirmed, setFlowConfirmed] = useState(false);
+  const [semesterGoal, setSemesterGoal] = useState<ConsultationSemesterGoal | null>(null);
+  const [flowSubmitting, setFlowSubmitting] = useState(false);
+  // 이번 학기 수강 과목 — 상담이 이번 학기 주제를 과목과 연결하는 근거. 온보딩에서
+  // 건너뛰었거나 바뀌었으면 여기서 등록한다(챗봇은 매 턴 최신 과목을 다시 읽는다).
+  const [currentCourses, setCurrentCourses] = useState<CurrentCourses | null>(null);
+  const [coursePickerOpen, setCoursePickerOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [concluding, setConcluding] = useState(false);
   const [error, setError] = useState("");
-  const [showMiniSwot, setShowMiniSwot] = useState(false);
   // 추천 답변은 더 이상 고정 문구가 아니다. 챗봇의 마지막 말에 맞춰 백엔드가 매 턴
   // 3개를 만들어 SSE done 이벤트로 실어 보내며, 여기에 담긴다.
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
   const sessionInitRef = useRef(false);
   const openingStartedRef = useRef(false);
   const diagnosisInitRef = useRef(false);
+
+  useEffect(() => {
+    if (status.requiredKind === "graduate_fit") return;
+    let cancelled = false;
+    getCurrentCourses()
+      .then((courses) => {
+        if (!cancelled) setCurrentCourses(courses);
+      })
+      .catch(() => {
+        // 과목을 못 불러와도 상담은 이어진다 — 카드만 빈 상태로 보인다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status.requiredKind]);
 
   // 프로필 기본 정보 조회 (학생 이름, 학년/학기, 지망 진로/학과)
   useEffect(() => {
@@ -98,6 +163,23 @@ export function ConsultationGate({
       cancelled = true;
     };
   }, []);
+
+  /** 세션 응답(생성·재개·확정 버튼)의 진행 상태를 화면에 반영한다. */
+  const applySessionProgress = useCallback((next: ConsultationSession) => {
+    setStage(next.stage);
+    setFlow(next.flow);
+    setFlowConfirmed(next.flowConfirmed);
+    setSemesterGoal(next.semesterGoal);
+  }, []);
+
+  /** 상담 턴 끝 signal 이벤트의 진행 상태를 화면에 반영한다. */
+  function applySignal(payload: ConsultationSignal) {
+    setReady(Boolean(payload.ready));
+    if (payload.stage) setStage(payload.stage as ConsultationStage);
+    if ("flow" in payload) setFlow(toConsultationFlow(payload.flow));
+    if ("flow_confirmed" in payload) setFlowConfirmed(Boolean(payload.flow_confirmed));
+    if ("semester_goal" in payload) setSemesterGoal(toConsultationSemesterGoal(payload.semester_goal));
+  }
 
   async function pollDiagnosis(diagnosisId: string): Promise<void> {
     for (let attempt = 0; attempt < 90; attempt += 1) {
@@ -200,6 +282,7 @@ export function ConsultationGate({
         if (cancelled) return;
         setSession(created);
         setReady(created.ready);
+        applySessionProgress(created);
         setPhase("ready");
         try {
           const history = await getConsultationMessages(created.id);
@@ -247,11 +330,9 @@ export function ConsultationGate({
     return () => {
       cancelled = true;
     };
-  }, [diagnosis, session, startOpening]);
+  }, [diagnosis, session, startOpening, applySessionProgress]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [bubbles, streaming]);
+  const { feedRef, spacerRef, onScroll, showJump, jumpToBottom, pinNextUserMessage } = useChatScroll(bubbles);
 
   async function send(contentOverride?: string) {
     const content = (contentOverride !== undefined ? contentOverride : input).trim();
@@ -266,6 +347,7 @@ export function ConsultationGate({
       // 새 추천은 이번 턴의 done 이벤트로 다시 채운다.
       setQuickReplies([]);
       const pendingId = `pending-${Date.now()}`;
+      pinNextUserMessage();
       setBubbles((prev) => [
         ...prev,
         { id: `u-${Date.now()}`, role: "user", content, actions: [] },
@@ -299,7 +381,7 @@ export function ConsultationGate({
           setError(`${payload.message} (${payload.error_code})`);
           setBubbles((prev) => prev.map((b) => (b.id === pendingId ? { ...b, streaming: false } : b)));
         },
-        onSignal: (payload) => setReady(Boolean(payload.ready)),
+        onSignal: applySignal,
       });
       setStreaming(false);
     } finally {
@@ -321,11 +403,41 @@ export function ConsultationGate({
     }
   }
 
+  /**
+   * 3개년 흐름 카드의 버튼. 확정하면 서버가 이번 학기 목표 단계로 넘기고, 챗봇이 이어서
+   * 말하도록 확정했다는 메시지를 대신 보낸다. "다시 조율"은 입력창에 운을 띄워 준다.
+   */
+  async function respondToFlow(confirmed: boolean) {
+    if (!session || flowSubmitting || streaming) return;
+    setFlowSubmitting(true);
+    setError("");
+    try {
+      if (confirmed || flowConfirmed) {
+        const updated = await confirmConsultationFlow(session.id, confirmed);
+        setSession(updated);
+        applySessionProgress(updated);
+        setReady(updated.ready);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "흐름 확정을 저장하지 못했습니다.");
+      return;
+    } finally {
+      setFlowSubmitting(false);
+    }
+    if (confirmed) {
+      await send(FLOW_CONFIRM_MESSAGE);
+    } else {
+      setInput(FLOW_REVISE_PREFILL);
+      inputRef.current?.focus();
+    }
+  }
+
   async function respondToReplanProposal(confirmed: boolean) {
     if (!session) return;
     try {
       const updated = await confirmFullReplan(session.id, confirmed);
       setSession(updated);
+      applySessionProgress(updated);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "확인을 저장하지 못했습니다.");
     } finally {
@@ -350,9 +462,9 @@ export function ConsultationGate({
   const targetCareer = userProfile?.targetCareer || "컴퓨터공학 / HPC 시스템 아키텍트";
   const targetMajor = userProfile?.targetMajor || "컴퓨터공학부";
 
-  // 상담 진행 단계 동적 계산 (1~4단계)
   const userMessageCount = bubbles.filter((b) => b.role === "user").length;
-  const consultationStep = ready ? 4 : userMessageCount >= 2 ? 3 : userMessageCount >= 1 ? 2 : 1;
+  // 진행 단계는 메시지 수로 추측하지 않고 서버가 계산한 stage를 그대로 쓴다.
+  const stageIndex = ready ? STAGE_STEPS.length : STAGE_ORDER[stage] ?? 0;
 
   // 졸업생(수시 재수생)은 생기부가 이미 확정되어 로드맵을 세우지 않는다. 확정된
   // 기록과 목표 학과의 적합성·지원 전략만 상담하므로 문구와 마무리 흐름이 다르다.
@@ -432,18 +544,6 @@ export function ConsultationGate({
               </span>
             </div>
 
-            {/* 상담을 마쳐야 넘어갈 수 있다는 안내 */}
-            <div className="flex items-start gap-2.5 p-3.5 px-5 bg-amber-50/70 border border-amber-200/70 rounded-2xl">
-              <span className="text-amber-500 mt-0.5 flex-none">
-                <Icon name="alert" size={15} />
-              </span>
-              <p className="text-xs text-amber-800 leading-relaxed">
-                {isGraduate
-                  ? "이 상담을 마쳐야 성적·활동 기록 등 메인 화면으로 들어갈 수 있어요. 목표 학과와 적합성에 대해 충분히 이야기한 뒤 아래 [상담 마치고 메인 화면으로] 버튼을 눌러주세요."
-                  : "이 상담을 마쳐야 성적·시간표·활동 기록 등 메인 화면으로 들어갈 수 있어요. 컨설턴트와 목표를 조율하고 준비가 되면 아래 [상담 마치고 메인 화면으로] 버튼이 활성화돼요."}
-              </p>
-            </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* 좌측: 학생 프로필 & 진행 단계 & 진단 요약 */}
               <div className="lg:col-span-4 space-y-4">
@@ -485,131 +585,153 @@ export function ConsultationGate({
                             ? "마무리 가능"
                             : "상담 진행 중"
                           : ready
-                          ? "목표 확정 완료 ✓"
-                          : "상호 의견 조율 중"}
+                          ? "초안 확정 준비 완료 ✓"
+                          : STAGE_STEPS[STAGE_ORDER[stage] ?? 0].label}
                       </strong>
                     </div>
                   </div>
                 </div>
 
-                {/* 2. 4단계 진행 트래커 — 로드맵을 세우지 않는 졸업생 상담에는 숨긴다. */}
+                {/* 2. 4단계 진행 트래커 — 서버가 계산한 stage를 따른다. 졸업생 상담에는 숨긴다. */}
                 {!isGraduate && (
                   <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-gray-900">상담 진행 단계</span>
-                      <span className="text-[10px] text-gray-400">4단계 프로세스</span>
+                      <span className="text-[10px] text-gray-400">큰 그림 → 이번 학기 → 주제</span>
                     </div>
-                    <div className="space-y-2.5 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 flex items-center gap-2">
-                          <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center justify-center flex-none">
-                            ✓
-                          </span>
-                          1단계: 학생부 진단 & 관심사 경청
-                        </span>
-                        <span className="text-[10px] font-bold text-emerald-600">완료</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 flex items-center gap-2">
-                          <span
-                            className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
-                              consultationStep >= 2 ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"
-                            }`}
-                          >
-                            {consultationStep >= 2 ? "✓" : "2"}
-                          </span>
-                          2단계: 3개년 학술 서사 맥락 협의
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold ${
-                            consultationStep >= 2 ? "text-emerald-600" : "text-brand-600"
-                          }`}
-                        >
-                          {consultationStep >= 2 ? "완료" : "진행 중"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 flex items-center gap-2">
-                          <span
-                            className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
-                              ready
-                                ? "bg-emerald-100 text-emerald-700"
-                                : consultationStep >= 3
-                                ? "bg-blue-100 text-brand-700"
-                                : "bg-gray-100 text-gray-400"
-                            }`}
-                          >
-                            {ready ? "✓" : "3"}
-                          </span>
-                          3단계: 현재 학기 3대 목표 조율
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold ${
-                            ready ? "text-emerald-600" : consultationStep >= 3 ? "text-brand-600" : "text-gray-400"
-                          }`}
-                        >
-                          {ready ? "확정" : consultationStep >= 3 ? "조율 중" : "대기"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 flex items-center gap-2">
-                          <span
-                            className={`w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
-                              ready ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"
-                            }`}
-                          >
-                            {ready ? "✓" : "4"}
-                          </span>
-                          4단계: 10대 세특 심화 주제 확정
-                        </span>
-                        <span className={`text-[10px] font-bold ${ready ? "text-emerald-600" : "text-gray-400"}`}>
-                          {ready ? "도출 완료" : "대기"}
-                        </span>
-                      </div>
-                    </div>
+                    <ol className="space-y-2.5 text-xs">
+                      {STAGE_STEPS.map((step, index) => {
+                        const done = index < stageIndex;
+                        const current = index === stageIndex;
+                        return (
+                          <li className="flex items-start justify-between gap-2" key={step.label}>
+                            <span className="text-gray-600 flex items-start gap-2 min-w-0">
+                              <span
+                                className={`w-4 h-4 mt-0.5 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${
+                                  done
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : current
+                                    ? "bg-blue-100 text-brand-700"
+                                    : "bg-gray-100 text-gray-400"
+                                }`}
+                              >
+                                {done ? "✓" : index + 1}
+                              </span>
+                              <span className="min-w-0">
+                                <span className={current ? "font-bold text-gray-900" : undefined}>
+                                  {step.label}
+                                  {index === 0 && isReview && !flow ? " (기존 흐름 유지)" : ""}
+                                </span>
+                                {current && (
+                                  <span className="block text-[10px] text-gray-400 leading-snug mt-0.5">
+                                    {step.hint}
+                                  </span>
+                                )}
+                              </span>
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold flex-none ${
+                                done ? "text-emerald-600" : current ? "text-brand-600" : "text-gray-400"
+                              }`}
+                            >
+                              {done ? "완료" : current ? "진행 중" : "대기"}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
                   </div>
                 )}
 
-                {/* 3. 진단 SWOT 요약 (펼치기) */}
-                {diagnosis && !diagnosisIsEmpty && (
-                  <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs space-y-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setShowMiniSwot(!showMiniSwot)}
-                      className="w-full flex items-center justify-between text-xs font-bold text-gray-800 hover:text-brand-600 transition cursor-pointer"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Icon className="text-brand-600" name="microscope" size={14} />
-                        <span>진단 SWOT 요약 확인</span>
-                      </span>
-                      <span className="text-[10px] text-gray-400 font-semibold">
-                        {showMiniSwot ? "접기 ▲" : "펼치기 ▼"}
-                      </span>
-                    </button>
+                {/* 2-0. 이번 학기 수강 과목 — 이번 학기 목표·주제를 과목과 연결하는 근거. */}
+                {!isGraduate && (
+                  <div
+                    className={`bg-white p-5 rounded-2xl border shadow-xs space-y-3 ${
+                      currentCourses && currentCourses.courses.length === 0
+                        ? "border-amber-300"
+                        : "border-gray-200/80"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-gray-900">이번 학기 수강 과목</span>
+                      <button
+                        className="text-[11px] font-bold text-brand-600 hover:text-brand-700 transition cursor-pointer"
+                        onClick={() => setCoursePickerOpen(true)}
+                        type="button"
+                      >
+                        {currentCourses && currentCourses.courses.length > 0 ? "수정" : "과목 등록"}
+                      </button>
+                    </div>
+                    {currentCourses && currentCourses.courses.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {currentCourses.courses.map((course) => (
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+                              course.is_custom
+                                ? "bg-amber-50 border-amber-200 text-amber-900"
+                                : "bg-gray-50 border-gray-200 text-gray-700"
+                            }`}
+                            key={course.id}
+                          >
+                            {course.subject}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        아직 등록된 과목이 없어요. 과목을 등록하면 이번 학기 목표와 탐구 주제를 실제로 듣는 과목과
+                        연결해 추천해 드려요.
+                      </p>
+                    )}
+                  </div>
+                )}
 
-                    {showMiniSwot && (
-                      <div className="pt-2 border-t border-gray-100 space-y-2.5 text-xs">
-                        {diagnosis.headline_comment && (
-                          <div className="p-2.5 rounded-lg bg-blue-50/60 border border-blue-100 text-[11px] font-medium text-gray-700 leading-relaxed">
-                            {diagnosis.headline_comment}
-                          </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-2 text-[11px]">
-                          <div className="p-2 rounded-lg bg-emerald-50/60 border border-emerald-100">
-                            <span className="font-bold text-emerald-800 block mb-1">강점</span>
-                            <span className="text-gray-600">{diagnosis.strengths[0] || "균형 있는 성취"}</span>
-                          </div>
-                          <div className="p-2 rounded-lg bg-red-50/50 border border-red-100">
-                            <span className="font-bold text-red-800 block mb-1">약점/보완</span>
-                            <span className="text-gray-600">{diagnosis.weaknesses[0] || "심화 탐구 확장"}</span>
-                          </div>
-                        </div>
+                {/* 2-1. 확정한 3개년 흐름과 이번 학기 목표 — 이후 대화의 기준이 된다. */}
+                {!isGraduate && flow && flowConfirmed && (
+                  <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-gray-900">확정한 3개년 흐름</span>
+                      <button
+                        className="text-[10px] font-bold text-gray-400 hover:text-brand-600 transition cursor-pointer disabled:cursor-not-allowed"
+                        disabled={flowSubmitting || streaming || concluding}
+                        onClick={() => void respondToFlow(false)}
+                        type="button"
+                      >
+                        흐름 다시 조율
+                      </button>
+                    </div>
+                    {flow.destination && (
+                      <p className="text-[11px] font-bold text-gray-900 leading-relaxed">도착점 · {flow.destination}</p>
+                    )}
+                    {flow.focus && <p className="text-[11px] text-gray-600 leading-relaxed">{flow.focus}</p>}
+                    <ol className="space-y-1.5 text-[11px]">
+                      {flow.nodes.map((node) => {
+                        const isCurrent = node.grade === targetGrade && node.semester === targetSemester;
+                        return (
+                          <li
+                            className={`flex gap-2 ${isCurrent ? "font-bold text-gray-900" : "text-gray-600"}`}
+                            key={`${node.grade}-${node.semester}`}
+                          >
+                            <span className="flex-none w-14 text-gray-400 font-semibold">
+                              {node.grade}-{node.semester}
+                              {isCurrent ? " ●" : ""}
+                            </span>
+                            <span className="min-w-0">{node.title}</span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                    {semesterGoal && (
+                      <div className="p-2.5 rounded-lg bg-blue-50/60 border border-blue-100 space-y-0.5">
+                        <span className="block text-[10px] font-bold text-brand-700">이번 학기 목표</span>
+                        <span className="block text-[11px] font-bold text-gray-900">{semesterGoal.title}</span>
+                        <span className="block text-[11px] text-gray-600 leading-relaxed">{semesterGoal.objective}</span>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* 4. 기록이 없어 진단을 만들지 못한 경우 안내 */}
+                {/* 3. 기록이 없어 진단을 만들지 못한 경우 안내 */}
                 {diagnosis && diagnosisIsEmpty && (
                   <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs space-y-1.5">
                     <h3 className="text-xs font-extrabold text-gray-900">과거 기록 기반 진단은 아직 없어요</h3>
@@ -641,125 +763,213 @@ export function ConsultationGate({
                 </div>
 
                 {/* 대화 피드 */}
-                <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-[#F8F9FA]/50">
-                  {bubbles.map((msg) => {
-                    if (msg.role === "user") {
-                      return (
-                        <div className="flex justify-end items-start gap-2.5" key={msg.id}>
-                          <div className="flex flex-col items-end max-w-[82%]">
-                            <div className="flex items-center gap-1.5 mb-1 text-[11px] text-gray-400 font-medium">
-                              <span className="font-semibold text-gray-700">{studentName} 학생</span>
+                <div className="relative flex-1 min-h-0 flex flex-col">
+                  <div
+                    className="relative flex-1 min-h-0 overflow-y-auto p-5 space-y-4 bg-[#F8F9FA]/50"
+                    onScroll={onScroll}
+                    ref={feedRef}
+                  >
+                    {bubbles.map((msg) => {
+                      if (msg.role === "user") {
+                        return (
+                          <div className="flex justify-end items-start gap-2.5" data-chat-role="user" key={msg.id}>
+                            <div className="flex flex-col items-end max-w-[82%]">
+                              <div className="flex items-center gap-1.5 mb-1 text-[11px] text-gray-400 font-medium">
+                                <span className="font-semibold text-gray-700">{studentName} 학생</span>
+                              </div>
+                              <div className="bg-brand-500 text-white p-3.5 px-4 rounded-2xl rounded-tr-sm text-xs leading-relaxed shadow-xs font-medium whitespace-pre-wrap break-keep">
+                                {msg.content}
+                              </div>
                             </div>
-                            <div className="bg-brand-500 text-white p-3.5 px-4 rounded-2xl rounded-tr-sm text-xs leading-relaxed shadow-xs font-medium whitespace-pre-wrap break-keep">
-                              {msg.content}
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-sky-400 text-white flex items-center justify-center font-bold text-[11px] flex-none mt-1 shadow-xs">
+                              {studentName.slice(0, 2)}
                             </div>
                           </div>
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-sky-400 text-white flex items-center justify-center font-bold text-[11px] flex-none mt-1 shadow-xs">
-                            {studentName.slice(0, 2)}
+                        );
+                      }
+
+                      return (
+                        <div className="flex items-start gap-2.5" key={msg.id}>
+                          <div className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold text-xs flex-none mt-1 shadow-xs">
+                            🎓
+                          </div>
+                          <div className="flex flex-col items-start max-w-[88%] space-y-2.5">
+                            <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
+                              <span className="font-bold text-gray-900">세특연구소 수석 컨설턴트 AI</span>
+                            </div>
+                            <div className="bg-white border border-gray-200/90 p-4 rounded-2xl rounded-tl-sm text-xs text-gray-800 shadow-xs leading-relaxed space-y-2.5 break-keep">
+                              {msg.content ? (
+                                <MarkdownText text={msg.content} />
+                              ) : (
+                                <em className="text-gray-400 not-italic">답변을 작성하는 중입니다…</em>
+                              )}
+                            </div>
+
+                            {(() => {
+                              const visibleActions = msg.actions.filter((action) => {
+                                if (action.result && "error" in action.result) return false;
+                                if (
+                                  action.tool === "propose_three_year_flow" ||
+                                  action.tool === "set_semester_goal" ||
+                                  action.tool === "propose_draft_plan" ||
+                                  action.tool === "signal_ready_to_conclude" ||
+                                  action.tool === "propose_full_replan_exception" ||
+                                  action.tool === "remember"
+                                ) {
+                                  return false;
+                                }
+                                return true;
+                              });
+
+                              if (visibleActions.length === 0) return null;
+
+                              return (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {visibleActions.map((action, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                                    >
+                                      ✓ {TOOL_LABELS[action.tool] ?? action.tool}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
-                    }
+                    })}
 
-                    return (
-                      <div className="flex items-start gap-2.5" key={msg.id}>
+                    {/* 3개년 흐름 카드 — 아직 확정 전일 때만 대화 맨 아래에 둔다. 학생이 이
+                        카드의 버튼으로 확정해야 이번 학기 목표로 넘어간다. */}
+                    {!isGraduate && flow && !flowConfirmed && (
+                      <div className="w-full bg-white p-5 rounded-2xl border-2 border-brand-400 shadow-md space-y-3.5">
+                        <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                          <h3 className="text-xs font-extrabold text-gray-900">3개년 흐름 초안</h3>
+                          <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-brand-700 text-[10px] font-bold border border-blue-200">
+                            확정 전
+                          </span>
+                        </div>
+                        {flow.destination && (
+                          <div className="p-3 rounded-xl bg-gray-900 text-white space-y-0.5">
+                            <span className="block text-[10px] font-bold text-gray-300">3학년 말 도착점</span>
+                            <span className="block text-xs font-bold leading-relaxed">{flow.destination}</span>
+                          </div>
+                        )}
+                        {flow.focus && (
+                          <p className="text-xs font-semibold text-gray-800 leading-relaxed">{flow.focus}</p>
+                        )}
+                        {flow.soFar && (
+                          <p className="text-[11px] text-gray-500 leading-relaxed">
+                            <span className="font-bold text-gray-600">지금까지 · </span>
+                            {flow.soFar}
+                          </p>
+                        )}
+                        <ol className="space-y-2">
+                          {flow.nodes.map((node) => {
+                            const isCurrent = node.grade === targetGrade && node.semester === targetSemester;
+                            return (
+                              <li
+                                className={`p-3 rounded-xl border text-xs ${
+                                  isCurrent ? "border-brand-300 bg-blue-50/50" : "border-gray-100 bg-gray-50/60"
+                                }`}
+                                key={`${node.grade}-${node.semester}`}
+                              >
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-[10px] font-bold text-gray-500">
+                                    {node.grade}학년 {node.semester}학기
+                                  </span>
+                                  {node.narrativeStage && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-600">
+                                      {node.narrativeStage}
+                                    </span>
+                                  )}
+                                  {isCurrent && (
+                                    <span className="text-[10px] font-bold text-brand-600">이번 학기</span>
+                                  )}
+                                </div>
+                                <p className="font-bold text-gray-900">{node.title}</p>
+                                <p className="text-[11px] text-gray-600 leading-relaxed mt-0.5">{node.objective}</p>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                        <p className="text-[11px] text-gray-500 leading-relaxed">
+                          이 흐름을 확정하면, 그 안에서 이번 학기 목표와 탐구 주제를 이어서 정해요. 바꾸고 싶은
+                          학기가 있으면 컨설턴트에게 말해 주세요.
+                        </p>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-bold transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={flowSubmitting || streaming || concluding}
+                            onClick={() => void respondToFlow(false)}
+                            type="button"
+                          >
+                            다시 조율할래요
+                          </button>
+                          <button
+                            className="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition cursor-pointer disabled:cursor-not-allowed disabled:bg-gray-300"
+                            disabled={flowSubmitting || streaming || concluding}
+                            onClick={() => void respondToFlow(true)}
+                            type="button"
+                          >
+                            {flowSubmitting ? "확정하는 중…" : "이 흐름으로 확정"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 준비 완료 카드 */}
+                    {!isGraduate && ready && (
+                      <div className="w-full bg-white p-5 rounded-2xl border-2 border-emerald-500 shadow-md space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
+                              ✓
+                            </span>
+                            <h3 className="text-xs font-extrabold text-gray-900">
+                              {targetGrade}학년 {targetSemester}학기 핵심 목표 최종 조율 완료
+                            </h3>
+                          </div>
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                            계획 확정 준비 완료
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          컨설턴트와의 대화를 통해 이번 학기 학술 로드맵 목표와 방향성이 정돈되었습니다. 아래
+                          [상담 마치고 메인 화면으로] 버튼을 눌러 계획을 확정하고 본격적인 활동을 시작해 보세요!
+                        </p>
+                      </div>
+                    )}
+
+                    {/* AI 타이핑 인디케이터 */}
+                    {streaming && (
+                      <div className="flex items-start gap-2.5">
                         <div className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold text-xs flex-none mt-1 shadow-xs">
                           🎓
                         </div>
-                        <div className="flex flex-col items-start max-w-[88%] space-y-2.5">
+                        <div className="flex flex-col items-start space-y-1">
                           <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
                             <span className="font-bold text-gray-900">세특연구소 수석 컨설턴트 AI</span>
                           </div>
-                          <div className="bg-white border border-gray-200/90 p-4 rounded-2xl rounded-tl-sm text-xs text-gray-800 shadow-xs leading-relaxed space-y-2.5 break-keep">
-                            {msg.content ? (
-                              <MarkdownText text={msg.content} />
-                            ) : (
-                              <em className="text-gray-400 not-italic">답변을 작성하는 중입니다…</em>
-                            )}
+                          <div className="bg-white border border-gray-200/90 p-3.5 px-4 rounded-2xl rounded-tl-sm shadow-xs flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-brand-500 animate-bounce" />
+                              <span className="w-2 h-2 rounded-full bg-brand-500 animate-bounce [animation-delay:150ms]" />
+                              <span className="w-2 h-2 rounded-full bg-brand-500 animate-bounce [animation-delay:300ms]" />
+                            </div>
+                            <span className="text-xs text-gray-500 font-medium ml-1">
+                              학생부 분석 데이터를 바탕으로 답변을 작성 중입니다...
+                            </span>
                           </div>
-
-                          {(() => {
-                            const visibleActions = msg.actions.filter((action) => {
-                              if (action.result && "error" in action.result) return false;
-                              if (
-                                action.tool === "propose_draft_plan" ||
-                                action.tool === "signal_ready_to_conclude" ||
-                                action.tool === "propose_full_replan_exception" ||
-                                action.tool === "remember"
-                              ) {
-                                return false;
-                              }
-                              return true;
-                            });
-
-                            if (visibleActions.length === 0) return null;
-
-                            return (
-                              <div className="flex flex-wrap gap-1.5">
-                                {visibleActions.map((action, idx) => (
-                                  <span
-                                    key={idx}
-                                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                  >
-                                    ✓ {TOOL_LABELS[action.tool] ?? action.tool}
-                                  </span>
-                                ))}
-                              </div>
-                            );
-                          })()}
                         </div>
                       </div>
-                    );
-                  })}
+                    )}
 
-                  {/* 준비 완료 카드 */}
-                  {!isGraduate && ready && (
-                    <div className="w-full bg-white p-5 rounded-2xl border-2 border-emerald-500 shadow-md space-y-3.5">
-                      <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
-                            ✓
-                          </span>
-                          <h3 className="text-xs font-extrabold text-gray-900">
-                            {targetGrade}학년 {targetSemester}학기 핵심 목표 최종 조율 완료
-                          </h3>
-                        </div>
-                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-                          계획 확정 준비 완료
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        컨설턴트와의 대화를 통해 이번 학기 학술 로드맵 목표와 방향성이 정돈되었습니다. 아래
-                        [상담 마치고 메인 화면으로] 버튼을 눌러 계획을 확정하고 본격적인 활동을 시작해 보세요!
-                      </p>
-                    </div>
-                  )}
-
-                  {/* AI 타이핑 인디케이터 */}
-                  {streaming && (
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold text-xs flex-none mt-1 shadow-xs">
-                        🎓
-                      </div>
-                      <div className="flex flex-col items-start space-y-1">
-                        <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
-                          <span className="font-bold text-gray-900">세특연구소 수석 컨설턴트 AI</span>
-                        </div>
-                        <div className="bg-white border border-gray-200/90 p-3.5 px-4 rounded-2xl rounded-tl-sm shadow-xs flex items-center gap-2">
-                          <div className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-brand-500 animate-bounce" />
-                            <span className="w-2 h-2 rounded-full bg-brand-500 animate-bounce [animation-delay:150ms]" />
-                            <span className="w-2 h-2 rounded-full bg-brand-500 animate-bounce [animation-delay:300ms]" />
-                          </div>
-                          <span className="text-xs text-gray-500 font-medium ml-1">
-                            학생부 분석 데이터를 바탕으로 답변을 작성 중입니다...
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div ref={bottomRef} />
+                    <div aria-hidden ref={spacerRef} />
+                  </div>
+                  {showJump && <JumpToBottomButton onClick={jumpToBottom} />}
                 </div>
 
                 {/* 추천 답변 칩 (챗봇 마지막 말에 맞춰 동적으로 생성) */}
@@ -785,6 +995,7 @@ export function ConsultationGate({
                 {/* 입력 바 */}
                 <div className="p-3.5 px-5 bg-white border-t border-gray-200/80 flex items-center gap-2.5 flex-none">
                   <input
+                    ref={inputRef}
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
@@ -798,7 +1009,13 @@ export function ConsultationGate({
                     placeholder={
                       ready
                         ? "상담 및 목표 조율이 완료되었습니다. 아래 [상담 마치고 메인 화면으로] 버튼을 눌러주세요."
-                        : "컨설턴트 AI에게 진로 희망이나 수정하고 싶은 목표를 자유롭게 말씀해 보세요..."
+                        : isGraduate
+                        ? "목표 학과나 지원 전략에 대해 궁금한 점을 말씀해 보세요..."
+                        : stage === "flow"
+                        ? "3년 동안 어떤 방향으로 가고 싶은지, 흐름에서 바꾸고 싶은 점을 말씀해 보세요..."
+                        : stage === "semester_goal"
+                        ? "이번 학기 목표에 대한 생각을 말씀해 보세요..."
+                        : "끌리는 탐구 주제나 바꾸고 싶은 점을 말씀해 보세요..."
                     }
                     disabled={concluding || streaming}
                     className="flex-1 py-3 px-4 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder-gray-400 focus:bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 focus:outline-none transition disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -837,11 +1054,36 @@ export function ConsultationGate({
                       상담을 마쳐야 다음으로 넘어갈 수 있어요.
                       {isGraduate
                         ? " 목표 학과·적합성에 대해 조금 더 이야기해 주세요."
-                        : " 컨설턴트와 목표를 조율하면 버튼이 활성화돼요."}
+                        : " 3개년 흐름 → 이번 학기 목표 → 탐구 주제를 정하면 버튼이 활성화돼요."}
                     </p>
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 이번 학기 수강 과목 등록·수정 모달 */}
+        {coursePickerOpen && (
+          <div className="modal-overlay">
+            <div className="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-end">
+                <button
+                  aria-label="닫기"
+                  className="text-xs font-bold text-gray-400 hover:text-gray-700"
+                  onClick={() => setCoursePickerOpen(false)}
+                  type="button"
+                >
+                  ✕
+                </button>
+              </div>
+              <CurrentCoursePicker
+                onSaved={(saved) => {
+                  setCurrentCourses(saved);
+                  setCoursePickerOpen(false);
+                }}
+                submitLabel="수강 과목 저장"
+              />
             </div>
           </div>
         )}

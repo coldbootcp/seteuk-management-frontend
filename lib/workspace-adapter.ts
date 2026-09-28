@@ -14,8 +14,11 @@
 import { api } from "./api-client";
 import type {
   ActivityAttachment,
+  ConsultationFlow,
   ConsultationMessage,
+  ConsultationSemesterGoal,
   ConsultationSession,
+  ConsultationStage,
   ConsultationStatus,
   DnaDiagnosis,
   ProductWorkspace,
@@ -276,6 +279,43 @@ function toConsultationStatus(raw: Json): ConsultationStatus {
   };
 }
 
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+/** 상담 세션·signal 이벤트가 공통으로 싣는 흐름 초안을 화면용 모양으로 바꾼다. */
+export function toConsultationFlow(raw: unknown): ConsultationFlow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const flow = raw as Json;
+  const nodes = Array.isArray(flow.nodes) ? (flow.nodes as Json[]) : [];
+  return {
+    careerTrack: (flow.career_track as string) ?? "",
+    destination: (flow.destination as string) ?? "",
+    focus: (flow.focus as string) ?? "",
+    soFar: (flow.so_far as string) ?? "",
+    nodes: nodes.map((node) => ({
+      grade: Number(node.grade),
+      semester: Number(node.semester),
+      narrativeStage: (node.narrative_stage as string) ?? "",
+      title: (node.title as string) ?? "",
+      objective: (node.objective as string) ?? "",
+      candidateSubjects: strings(node.candidate_subjects),
+      competencyGoals: strings(node.competency_goals),
+    })),
+  };
+}
+
+export function toConsultationSemesterGoal(raw: unknown): ConsultationSemesterGoal | null {
+  if (!raw || typeof raw !== "object") return null;
+  const goal = raw as Json;
+  return {
+    title: (goal.title as string) ?? "",
+    objective: (goal.objective as string) ?? "",
+    candidateSubjects: strings(goal.candidate_subjects),
+    competencyGoals: strings(goal.competency_goals),
+  };
+}
+
 function toConsultationSession(raw: Json): ConsultationSession {
   return {
     id: raw.id as string,
@@ -286,6 +326,10 @@ function toConsultationSession(raw: Json): ConsultationSession {
     status: raw.status as ConsultationSession["status"],
     ready: Boolean(raw.ready),
     fullReplanConfirmed: Boolean(raw.full_replan_confirmed),
+    stage: ((raw.stage as ConsultationStage) ?? "flow"),
+    flow: toConsultationFlow(raw.flow),
+    flowConfirmed: Boolean(raw.flow_confirmed),
+    semesterGoal: toConsultationSemesterGoal(raw.semester_goal),
   };
 }
 
@@ -320,6 +364,20 @@ export async function confirmFullReplan(
 ): Promise<ConsultationSession> {
   return toConsultationSession(
     await api<Json>(`/consultation/sessions/${sessionId}/confirm-full-replan`, {
+      method: "POST",
+      body: { confirmed },
+    }),
+  );
+}
+
+/** 학생이 상담 화면의 3개년 흐름 카드에서 '이 흐름으로 확정'(true) 또는
+ * '다시 조율할래요'(false)를 눌렀을 때. 흐름이 확정돼야 이번 학기 목표로 넘어간다. */
+export async function confirmConsultationFlow(
+  sessionId: string,
+  confirmed: boolean,
+): Promise<ConsultationSession> {
+  return toConsultationSession(
+    await api<Json>(`/consultation/sessions/${sessionId}/confirm-flow`, {
       method: "POST",
       body: { confirmed },
     }),

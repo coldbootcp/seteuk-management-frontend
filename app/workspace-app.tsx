@@ -19,6 +19,7 @@ import { ConsultationGate } from "./consultation-view";
 import { AccountSection, EmailVerificationGate, WithdrawalPendingGate } from "./account-gate";
 import { GateFrame } from "./gate-frame";
 import { ChatView } from "./chat-view";
+import { CurrentCoursePicker } from "./course-picker";
 import { TimetableView } from "./timetable-view";
 import { CalendarView } from "./calendar-view";
 import { GradesView } from "./grades-view";
@@ -64,7 +65,7 @@ type ProfileForm = {
 
 
 /** 온보딩은 기본 정보를 저장한 뒤 별도 사전 질문 없이 상담 관문으로 이어진다. */
-type OnboardingStep = "select" | "profile";
+type OnboardingStep = "select" | "profile" | "courses";
 
 type ActivityDraft = {
   title: string;
@@ -743,8 +744,11 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       }
       // 3개년 큰 계획은 이제 진단+상담 관문을 거쳐야 만들어진다 — 여기서는
       // 프로필(과 선택적 생기부 반영)만 끝내고, 다음 화면 선택은 onComplete가
-      // 관문 상태를 다시 확인해서 정한다.
-      onComplete();
+      // 관문 상태를 다시 확인해서 정한다. 재학생은 그 전에 이번 학기 수강 과목을
+      // 고른다 — 상담이 이번 학기 주제를 실제 듣는 과목과 연결하는 근거다. 졸업생은
+      // 새 학기가 없으므로 이 걸음을 건너뛴다.
+      if (isGraduatedGrade(form.grade)) onComplete();
+      else setStep("courses");
     } catch (e) { setError(e instanceof Error ? e.message : "가입 정보를 저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
@@ -799,10 +803,23 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
           </span>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-gray-400 font-semibold">
-          <>
-            <span className="w-2 h-2 rounded-full bg-brand-500" />
-            <span className="text-brand-600 font-bold">기본 프로필</span>
-          </>
+          {step === "courses" ? (
+            <span>기본 프로필</span>
+          ) : (
+            <>
+              <span className="w-2 h-2 rounded-full bg-brand-500" />
+              <span className="text-brand-600 font-bold">기본 프로필</span>
+            </>
+          )}
+          <span>➔</span>
+          {step === "courses" ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-brand-500" />
+              <span className="text-brand-600 font-bold">이번 학기 과목</span>
+            </>
+          ) : (
+            <span>이번 학기 과목</span>
+          )}
           <span>➔</span>
           <span>AI 진단 · 상담</span>
         </div>
@@ -1316,10 +1333,27 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                       ? "저장하는 중…"
                       : !recordReadyIfStarted
                         ? "학생부를 먼저 분석해 주세요"
-                        : "AI 상담 시작하기 ➔"}
+                        : isGraduatedGrade(form.grade)
+                          ? "AI 상담 시작하기 ➔"
+                          : "다음: 이번 학기 과목 고르기 ➔"}
                 </span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───────── 이번 학기 수강 과목 ───────── */}
+      {step === "courses" && (
+        <div className="w-full max-w-3xl mx-auto space-y-5">
+          {stepper()}
+          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-gray-200/80 shadow-xs">
+            <CurrentCoursePicker
+              onBack={() => setStep("profile")}
+              onSaved={() => onComplete()}
+              onSkip={() => onComplete()}
+              submitLabel="저장하고 AI 상담 시작하기 ➔"
+            />
           </div>
         </div>
       )}

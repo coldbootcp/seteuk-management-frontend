@@ -272,15 +272,50 @@ export type ConsultationStatus = {
   resumableSessionId: string | null;
 };
 
+/** 상담 진행 단계 — 서버가 세션에 저장된 사실로 계산한다.
+ * flow(3개년 흐름) → semester_goal(이번 학기 목표) → topics(구체 주제) → wrap_up(마무리). */
+export type ConsultationStage = "flow" | "semester_goal" | "topics" | "wrap_up" | "graduate_fit";
+
+/** 상담에서 조율 중인 3개년 흐름의 한 학기. 현재 학기~3학년 2학기만 담긴다. */
+export type ConsultationFlowNode = {
+  grade: number;
+  semester: number;
+  narrativeStage: string;
+  title: string;
+  objective: string;
+  candidateSubjects: string[];
+  competencyGoals: string[];
+};
+
+export type ConsultationFlow = {
+  careerTrack: string;
+  /** 학생과 합의한 3학년 말 도착점 한 문장. 흐름은 여기서 거꾸로 설계된다. */
+  destination: string;
+  focus: string;
+  soFar: string;
+  nodes: ConsultationFlowNode[];
+};
+
+export type ConsultationSemesterGoal = {
+  title: string;
+  objective: string;
+  candidateSubjects: string[];
+  competencyGoals: string[];
+};
+
 export type ConsultationSession = {
   id: string;
   conversationId: string;
-  kind: "initial" | "semester_review";
+  kind: "initial" | "semester_review" | "graduate_fit";
   targetGrade: number;
   targetSemester: number;
   status: "in_progress" | "ready" | "concluded" | "abandoned";
   ready: boolean;
   fullReplanConfirmed: boolean;
+  stage: ConsultationStage;
+  flow: ConsultationFlow | null;
+  flowConfirmed: boolean;
+  semesterGoal: ConsultationSemesterGoal | null;
 };
 
 /** 상담 세션을 다시 열었을 때 불러오는 지난 대화 한 줄. */
