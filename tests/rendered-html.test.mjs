@@ -279,3 +279,24 @@ test("the consultation names the real conclude button and drops the gate banner"
   // 3개년 흐름은 3학년 말 도착점부터 합의한다.
   assert.match(consultation, /3학년 말 도착점/);
 });
+
+test("current-semester courses sit beside the timetable as draggable blocks", async () => {
+  const view = await source("app/timetable-view.tsx");
+
+  // 블록의 원천은 이번 학기 수강 과목(온보딩에서 등록)과 이 학기 시간표에 든 과목이다.
+  assert.match(view, /getCurrentCourses\(\)/);
+  assert.match(view, /paletteCourses/);
+
+  // 블록은 끌어서 칸에 놓고, 칸은 블록을 받아 그 과목을 넣는다.
+  assert.match(view, /setDraggingPaletteKey\(course\.key\)/);
+  assert.match(view, /handlePlaceFromPalette\(draggingPaletteKey, dayIdx, period\)/);
+
+  // 시간표에서 새로 추가한 과목은 수강 과목에도 저장돼 블록으로 남는다.
+  assert.match(view, /rememberCourse\(course\)/);
+  assert.match(view, /saveCurrentCourses\(/);
+
+  // 빈칸의 "+"는 과목 블록을 고르는 창을 열고, 새 과목은 블록 끝의 "+"에서만 추가한다.
+  assert.match(view, /onClick=\{\(\) => setCellChooser\(\{ day: dayIdx, period \}\)\}/);
+  assert.match(view, /aria-label="새 과목 추가"/);
+  assert.doesNotMatch(view, /과목 직접 등록|과목 검색·불러오기|CourseSearchModal/);
+});
