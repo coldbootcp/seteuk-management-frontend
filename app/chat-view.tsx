@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api-client";
+import { useChatScroll } from "../lib/use-chat-scroll";
 import {
+  renameConversation,
   streamMessage,
   type ChatMode,
   type Conversation,
@@ -17,6 +19,26 @@ import { ChatComposer, ChatThread, type ChatBubble } from "./chat-thread";
  * 것은 말풍선 아래에 남는다. 대화만으로는 어떤 기록도 지워지지 않는다(백엔드에 삭제
  * 도구가 없다).
  */
+const CONSULTATION_PURPOSES = new Set([
+  "initial_consultation",
+  "semester_review_consultation",
+  "graduate_fit_consultation",
+]);
+
+/** 서버가 제목을 아직 붙이지 않았을 때(첫 답변 직후 등) 목록에 보일 이름. */
+function fallbackTitle(purpose: string | undefined): string {
+  if (purpose === "initial_consultation") return "3개년 흐름 설계";
+  if (purpose === "semester_review_consultation") return "학기 점검 상담";
+  if (purpose === "graduate_fit_consultation") return "목표 학과 지원 전략";
+  return "새 대화";
+}
+
+function purposeBadge(purpose: string | undefined): string {
+  if (purpose === "initial_consultation") return "입시 컨설팅";
+  if (purpose === "graduate_fit_consultation") return "지원 전략";
+  return "학기 컨설팅";
+}
+
 export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -25,7 +47,12 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
   const [mode, setMode] = useState<ChatMode>("normal");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  // 제목 이름 바꾸기 — 한 번에 한 대화만 편집한다.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // 같은 대화를 목록과 머리글 두 곳에서 동시에 편집하지 않도록 어디서 시작했는지 기억한다.
+  const [editingWhere, setEditingWhere] = useState<"list" | "header">("list");
+  const [editingTitle, setEditingTitle] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
   // send()의 재진입을 막는 동기 플래그. streaming(state)만으로는 부족하다 — React
   // 상태 갱신은 다음 렌더까지 반영되지 않는데, 한글 입력 중 마지막 글자를 조합
   // 확정하며 누른 Enter가 브라우저에 따라 keydown을 두 번(조합 확정용 + 실제
@@ -81,9 +108,39 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
     };
   }, [loadConversations, open]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [bubbles]);
+  const { feedRef, spacerRef, onScroll, showJump, jumpToBottom, pinNextUserMessage } = useChatScroll(bubbles);
+
+  function startRename(conversation: Conversation, where: "list" | "header") {
+    setEditingWhere(where);
+    setEditingId(conversation.id);
+    setEditingTitle(conversation.title?.trim() || fallbackTitle(conversation.purpose));
+  }
+
+  function cancelRename() {
+    setEditingId(null);
+    setEditingTitle("");
+  }
+
+  async function commitRename() {
+    const id = editingId;
+    const title = editingTitle.trim();
+    if (!id || savingTitle) return;
+    const current = conversations.find((c) => c.id === id);
+    if (!title || title === (current?.title ?? "").trim()) {
+      cancelRename();
+      return;
+    }
+    setSavingTitle(true);
+    try {
+      const updated = await renameConversation(id, title.slice(0, 60));
+      setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, ...updated } : c)));
+      cancelRename();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "대화 이름을 바꾸지 못했습니다.");
+    } finally {
+      setSavingTitle(false);
+    }
+  }
 
   async function send() {
     const content = input.trim();
@@ -111,6 +168,7 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
       setError("");
       setStreaming(true);
       const pendingId = `pending-${Date.now()}`;
+      pinNextUserMessage();
       setBubbles((prev) => [
         ...prev,
         { id: `u-${Date.now()}`, role: "user", content, actions: [] },
@@ -129,7 +187,7 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
             prev.map((b) => (b.id === pendingId ? { ...b, actions: [...b.actions, action] } : b)),
           );
         },
-        onDone: (payload) =>
+        onDone: (payload) => {
           setBubbles((prev) =>
             prev.map((b) =>
               b.id === pendingId
@@ -140,6 +198,15 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
                     actions: payload.applied_actions ?? b.actions,
                   }
                 : b,
+            ),
+          );
+          // 답변은 끝났다 — 서버가 이어서 제목을 짓는 동안에도 다음 입력을 받는다.
+          setStreaming(false);
+        },
+        onTitle: ({ conversation_id, title }) =>
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === conversation_id ? { ...c, title, title_source: "auto" } : c,
             ),
           ),
         onError: (payload) => {
@@ -162,19 +229,39 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
   }
 
   const currentConv = conversations.find((c) => c.id === activeId);
-  const activeTitle =
-    currentConv?.title?.trim() ||
-    (currentConv?.purpose === "initial_consultation"
-      ? "AI 입시 심층 컨설팅"
-      : currentConv?.purpose === "semester_review_consultation"
-      ? "학기 회고 컨설팅"
-      : "새 대화");
+  const activeTitle = currentConv?.title?.trim() || fallbackTitle(currentConv?.purpose);
   const activeSubtitle =
     currentConv?.purpose === "initial_consultation"
-      ? "온보딩 진단 및 3개년 마스터 플랜 컨설팅 대화"
+      ? "3개년 흐름부터 이번 학기 목표·주제까지 정한 상담 대화"
       : currentConv?.purpose === "semester_review_consultation"
-      ? "학기말 점검 및 다음 학기 목표 조율 대화"
+      ? "학기말 점검 및 이번 학기 목표 조율 대화"
+      : currentConv?.purpose === "graduate_fit_consultation"
+      ? "확정된 생기부로 목표 학과 지원 전략을 다룬 대화"
       : "기록된 내 자료를 근거로 답합니다";
+
+  const renameInput = (
+    <input
+      aria-label="대화 이름"
+      autoFocus
+      className="w-full min-w-0 px-2 py-1 rounded-md border border-brand-300 bg-white text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+      disabled={savingTitle}
+      maxLength={60}
+      onBlur={() => void commitRename()}
+      onChange={(e) => setEditingTitle(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.nativeEvent.isComposing) return;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void commitRename();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancelRename();
+        }
+      }}
+      value={editingTitle}
+    />
+  );
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-[640px]">
@@ -208,46 +295,61 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
             <p className="text-xs text-gray-400 py-2">아직 대화가 없습니다.</p>
           ) : (
             conversations.map((conversation) => {
-              const isConsultation =
-                conversation.purpose === "initial_consultation" ||
-                conversation.purpose === "semester_review_consultation";
-              const defaultTitle =
-                conversation.purpose === "initial_consultation"
-                  ? "AI 입시 심층 컨설팅"
-                  : conversation.purpose === "semester_review_consultation"
-                  ? "학기 회고 컨설팅"
-                  : "새 대화";
-              const displayTitle = conversation.title?.trim() || defaultTitle;
+              const isConsultation = CONSULTATION_PURPOSES.has(conversation.purpose);
+              const displayTitle = conversation.title?.trim() || fallbackTitle(conversation.purpose);
               const isSelected = conversation.id === activeId;
+              const isEditing = editingId === conversation.id && editingWhere === "list";
 
               return (
-                <button
-                  className={`w-full text-left p-2.5 rounded-xl text-xs transition flex flex-col gap-1 border cursor-pointer ${
-                    isSelected
-                      ? "bg-blue-50/80 text-brand-950 font-bold border-blue-200/80 shadow-xs"
-                      : "text-gray-600 hover:bg-gray-50/80 border-gray-100 hover:border-gray-200/70"
-                  }`}
-                  key={conversation.id}
-                  onClick={() => void open(conversation.id)}
-                  type="button"
-                >
-                  <div className="flex items-center justify-between gap-1.5 w-full">
-                    <span className="truncate flex-1 font-semibold">{displayTitle}</span>
-                    {isConsultation && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100/70 text-brand-700 flex-none">
-                        {conversation.purpose === "initial_consultation" ? "입시 컨설팅" : "학기 컨설팅"}
+                <div className="relative group" key={conversation.id}>
+                  {isEditing ? (
+                    <div className="w-full p-2.5 rounded-xl border border-blue-200/80 bg-blue-50/80">
+                      {renameInput}
+                    </div>
+                  ) : (
+                    <button
+                      className={`w-full text-left p-2.5 pr-8 rounded-xl text-xs transition flex flex-col gap-1 border cursor-pointer ${
+                        isSelected
+                          ? "bg-blue-50/80 text-brand-950 font-bold border-blue-200/80 shadow-xs"
+                          : "text-gray-600 hover:bg-gray-50/80 border-gray-100 hover:border-gray-200/70"
+                      }`}
+                      onClick={() => void open(conversation.id)}
+                      onDoubleClick={() => startRename(conversation, "list")}
+                      title="두 번 누르면 이름을 바꿀 수 있어요"
+                      type="button"
+                    >
+                      <div className="flex items-center justify-between gap-1.5 w-full">
+                        <span className="truncate flex-1 font-semibold">{displayTitle}</span>
+                        {isConsultation && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100/70 text-brand-700 flex-none">
+                            {purposeBadge(conversation.purpose)}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-gray-400 font-normal">
+                        {new Date(conversation.updated_at).toLocaleDateString("ko-KR", {
+                          month: "numeric",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-gray-400 font-normal">
-                    {new Date(conversation.updated_at).toLocaleDateString("ko-KR", {
-                      month: "numeric",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </button>
+                    </button>
+                  )}
+                  {!isEditing && (
+                    <button
+                      aria-label={`${displayTitle} 이름 바꾸기`}
+                      className={`absolute right-2 bottom-2 w-5 h-5 rounded-md flex items-center justify-center text-[11px] text-gray-400 hover:text-brand-600 hover:bg-white transition cursor-pointer ${
+                        isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      }`}
+                      onClick={() => startRename(conversation, "list")}
+                      title="이름 바꾸기"
+                      type="button"
+                    >
+                      ✎
+                    </button>
+                  )}
+                </div>
               );
             })
           )}
@@ -259,10 +361,27 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
         <header className="p-3.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-none">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h4 className="text-xs font-bold text-gray-950 truncate">{activeTitle}</h4>
+              {currentConv && editingId === currentConv.id && editingWhere === "header" ? (
+                <div className="w-56 max-w-full">{renameInput}</div>
+              ) : (
+                <>
+                  <h4 className="text-xs font-bold text-gray-950 truncate">{activeTitle}</h4>
+                  {currentConv && (
+                    <button
+                      aria-label="대화 이름 바꾸기"
+                      className="text-[11px] text-gray-400 hover:text-brand-600 transition cursor-pointer flex-none"
+                      onClick={() => startRename(currentConv, "header")}
+                      title="이름 바꾸기"
+                      type="button"
+                    >
+                      ✎
+                    </button>
+                  )}
+                </>
+              )}
               {currentConv?.purpose && currentConv.purpose !== "general" && (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100/70 text-brand-700 flex-none">
-                  {currentConv.purpose === "initial_consultation" ? "입시 컨설팅" : "학기 컨설팅"}
+                  {purposeBadge(currentConv.purpose)}
                 </span>
               )}
             </div>
@@ -299,8 +418,12 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
         )}
 
         <ChatThread
-          bottomRef={bottomRef}
           bubbles={bubbles}
+          feedRef={feedRef}
+          onJump={jumpToBottom}
+          onScroll={onScroll}
+          showJump={showJump}
+          spacerRef={spacerRef}
           empty={
             <>
               무엇이든 물어보세요. 예를 들어 &ldquo;지금까지 활동 중 뭐가 제일 약해?&rdquo; 또는

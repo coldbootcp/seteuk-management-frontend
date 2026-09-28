@@ -22,72 +22,103 @@ export type ChatBubble = {
 
 export function ChatThread({
   bubbles,
-  bottomRef,
   empty,
+  feedRef,
+  spacerRef,
+  onScroll,
+  showJump,
+  onJump,
 }: {
   bubbles: ChatBubble[];
-  bottomRef: RefObject<HTMLDivElement | null>;
   empty: ReactNode;
+  // 스크롤은 lib/use-chat-scroll.ts가 맡는다 — 그 훅이 돌려준 값을 그대로 넘긴다.
+  feedRef: RefObject<HTMLDivElement | null>;
+  spacerRef: RefObject<HTMLDivElement | null>;
+  onScroll: () => void;
+  showJump: boolean;
+  onJump: () => void;
 }) {
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-3 bg-gray-50/40">
-      {bubbles.length === 0 ? (
-        <div className="h-full flex items-center justify-center">
-          <p className="max-w-sm text-center text-xs text-gray-500 leading-relaxed break-keep">{empty}</p>
-        </div>
-      ) : (
-        bubbles.map((bubble) => (
-          <div
-            className={`flex flex-col gap-1 ${bubble.role === "user" ? "items-end" : "items-start"}`}
-            key={bubble.id}
-          >
-            <div
-              className={
-                bubble.role === "user"
-                  ? "bg-brand-500 text-white text-xs p-3 rounded-xl max-w-md leading-relaxed whitespace-pre-wrap break-keep"
-                  : "bg-white border border-gray-200/80 text-gray-900 text-xs p-3.5 rounded-xl max-w-lg leading-relaxed break-keep"
-              }
-            >
-              {bubble.role === "assistant" ? <MarkdownText text={bubble.content} /> : bubble.content}
-              {bubble.streaming && !bubble.content && <em className="text-gray-400 not-italic">생각하는 중…</em>}
-            </div>
-
-            {(() => {
-              const visibleActions = bubble.actions.filter((action) => {
-                // 실패한 내부 도구 호출(✕)은 사용자에게 혼란을 주므로 숨김
-                if (action.result && "error" in action.result) return false;
-                // 내부 계획/신호/메모리 도구는 뱃지로 노출하지 않음
-                if (
-                  action.tool === "propose_draft_plan" ||
-                  action.tool === "signal_ready_to_conclude" ||
-                  action.tool === "propose_full_replan_exception" ||
-                  action.tool === "remember"
-                ) {
-                  return false;
-                }
-                return true;
-              });
-
-              if (visibleActions.length === 0) return null;
-
-              return (
-                <div className="flex flex-wrap gap-1.5">
-                  {visibleActions.map((action, index) => (
-                    <span
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                      key={index}
-                    >
-                      ✓ {TOOL_LABELS[action.tool] ?? action.tool}
-                    </span>
-                  ))}
-                </div>
-              );
-            })()}
+    <div className="relative flex-1 min-h-0 flex flex-col">
+      <div
+        className="relative flex-1 min-h-0 overflow-y-auto p-5 space-y-3 bg-gray-50/40"
+        onScroll={onScroll}
+        ref={feedRef}
+      >
+        {bubbles.length === 0 ? (
+          <div className="h-full flex items-center justify-center">
+            <p className="max-w-sm text-center text-xs text-gray-500 leading-relaxed break-keep">{empty}</p>
           </div>
-        ))
-      )}
-      <div ref={bottomRef} />
+        ) : (
+          bubbles.map((bubble) => (
+            <div
+              className={`flex flex-col gap-1 ${bubble.role === "user" ? "items-end" : "items-start"}`}
+              data-chat-role={bubble.role}
+              key={bubble.id}
+            >
+              <div
+                className={
+                  bubble.role === "user"
+                    ? "bg-brand-500 text-white text-xs p-3 rounded-xl max-w-md leading-relaxed whitespace-pre-wrap break-keep"
+                    : "bg-white border border-gray-200/80 text-gray-900 text-xs p-3.5 rounded-xl max-w-lg leading-relaxed break-keep"
+                }
+              >
+                {bubble.role === "assistant" ? <MarkdownText text={bubble.content} /> : bubble.content}
+                {bubble.streaming && !bubble.content && <em className="text-gray-400 not-italic">생각하는 중…</em>}
+              </div>
+
+              {(() => {
+                const visibleActions = bubble.actions.filter((action) => {
+                  // 실패한 내부 도구 호출(✕)은 사용자에게 혼란을 주므로 숨김
+                  if (action.result && "error" in action.result) return false;
+                  // 내부 계획/신호/메모리 도구는 뱃지로 노출하지 않음
+                  if (
+                    action.tool === "propose_draft_plan" ||
+                    action.tool === "signal_ready_to_conclude" ||
+                    action.tool === "propose_full_replan_exception" ||
+                    action.tool === "remember"
+                  ) {
+                    return false;
+                  }
+                  return true;
+                });
+
+                if (visibleActions.length === 0) return null;
+
+                return (
+                  <div className="flex flex-wrap gap-1.5">
+                    {visibleActions.map((action, index) => (
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                        key={index}
+                      >
+                        ✓ {TOOL_LABELS[action.tool] ?? action.tool}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          ))
+        )}
+        <div aria-hidden ref={spacerRef} />
+      </div>
+      {showJump && <JumpToBottomButton onClick={onJump} />}
     </div>
+  );
+}
+
+/** 읽을 내용이 아래에 남아 있을 때 피드 하단 가운데에 뜨는 버튼. */
+export function JumpToBottomButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      aria-label="맨 아래로"
+      className="absolute bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-white border border-gray-200 shadow-md text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition flex items-center justify-center text-sm"
+      onClick={onClick}
+      type="button"
+    >
+      ↓
+    </button>
   );
 }
 

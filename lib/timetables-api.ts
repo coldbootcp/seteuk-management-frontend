@@ -12,6 +12,7 @@ function toSlot(slot: TimetableSlot): TimetableSlotInput {
   return {
     id: slot.id,
     course_name: slot.courseName,
+    subject_code: slot.subjectCode ?? null,
     teacher: slot.teacher ?? null,
     room: slot.room ?? null,
     day: slot.day,
@@ -29,6 +30,7 @@ function fromSlot(slot: TimetableSlotInput): TimetableSlot {
   return {
     id: slot.id,
     courseName: slot.course_name,
+    subjectCode: slot.subject_code ?? undefined,
     teacher: slot.teacher ?? undefined,
     room: slot.room ?? undefined,
     day: slot.day,

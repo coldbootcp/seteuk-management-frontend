@@ -4,14 +4,26 @@ import { useState, useEffect, useMemo } from "react";
 import {
   DAYS_KR,
   PERIOD_TIMES,
-  SUBJECT_PRESETS,
   PALETTE_COLORS,
   getGroupColor,
   type TimetableSlot,
   type TimetableConfig,
-  type PresetCourse,
 } from "./types/academic";
 import type { StudentActivity } from "../lib/product-harness";
+import {
+  commonSubjects,
+  getCurrentCourses,
+  listSubjects,
+  saveCurrentCourses,
+  timetableCategoryOf,
+  timetableGroupOf,
+  type CatalogSubject,
+  type CurrentCourse,
+  type CurrentCourseInput,
+  type CurrentCourses,
+  type Curriculum,
+} from "../lib/subjects-api";
+import { SubjectSearchField } from "./course-picker";
 import { Icon } from "./icons";
 
 interface TimetableViewProps {
@@ -30,10 +42,81 @@ type CourseDraft = {
   teacher?: string;
   room?: string;
   units?: number;
-  preset?: PresetCourse;
+  /** 카탈로그에서 고른 과목. 없으면 목록에 없어 "기타"로 직접 적은 과목이다. */
+  subject?: CatalogSubject;
+  /** 오른쪽 블록에서 고른 과목이면 그 블록이 이미 가진 칸 내용(교사·강의실 포함)을 그대로 쓴다. */
+  fields?: SlotFields;
+};
+
+const CAREER_GROUPS = ["과학", "수학", "기술가정/정보"];
+
+/** 과목 한 칸의 과목 정보 — 카탈로그 과목이면 교과군·선택 구분을 카탈로그에서 가져온다. */
+function slotFieldsFor(course: CourseDraft): Pick<
+  TimetableSlot,
+  "courseName" | "subjectCode" | "teacher" | "room" | "category" | "group" | "units" | "colorIndex" | "isCareerRelated"
+> {
+  const group = course.subject ? timetableGroupOf(course.subject) : "기타";
+  return {
+    courseName: course.name,
+    subjectCode: course.subject?.code,
+    teacher: course.teacher,
+    room: course.room,
+    category: course.subject ? timetableCategoryOf(course.subject) : "교양/기타",
+    group,
+    units: course.units ?? course.subject?.default_units ?? 0,
+    colorIndex: courseColorIndex(course.name),
+    isCareerRelated: CAREER_GROUPS.includes(group),
+  };
+}
+
+type SlotFields = ReturnType<typeof slotFieldsFor>;
+
+/** 이미 시간표에 든 칸에서 위치(요일·교시)를 뺀 과목 내용만. */
+function fieldsOfSlot(slot: TimetableSlot): SlotFields {
+  return {
+    courseName: slot.courseName,
+    subjectCode: slot.subjectCode,
+    teacher: slot.teacher,
+    room: slot.room,
+    category: slot.category,
+    group: slot.group,
+    units: slot.units,
+    colorIndex: slot.colorIndex,
+    isCareerRelated: slot.isCareerRelated,
+  };
+}
+
+function newSlotId() {
+  return `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/**
+ * 오른쪽 과목 블록 하나. 끌어다 놓으면 이 내용으로 시간표 칸이 채워진다.
+ * 현재 학기는 학생이 등록한 이번 학기 수강 과목(온보딩·상담에서 고른 목록)과 시간표에
+ * 이미 들어간 과목을 합쳐 보여 주고, 다른 학기는 그 학기 시간표에 들어간 과목만 보여 준다.
+ */
+type PaletteCourse = {
+  key: string;
+  fields: SlotFields;
+  /** 이번 학기 수강 과목 목록에서 온 블록 — 빼기(✕)는 이 목록에서 뺀다. */
+  currentCourse?: CurrentCourse;
+  /** 이 학기 시간표에 들어간 칸 수 */
+  placedCount: number;
 };
 
 type Placement = { day: number; period: number };
+
+/** 같은 과목인지 가르는 기준 — 카탈로그 과목은 코드, "기타" 과목은 이름. */
+function courseKey(courseName: string, subjectCode?: string | null) {
+  return subjectCode ? subjectCode : `name:${courseName.trim()}`;
+}
+
+function toCourseInput(course: CurrentCourse): CurrentCourseInput {
+  return course.subject_code ? { subject_code: course.subject_code } : { custom_name: course.subject };
+}
+
+/** "+" 빈칸과 과목 블록 사이에 쓰는 끌기 데이터 형식. */
+const PALETTE_DRAG_TYPE = "application/x-seteuk-course";
 
 function courseColorIndex(courseName: string) {
   return Array.from(courseName).reduce((sum, character) => sum + character.charCodeAt(0), 0) % PALETTE_COLORS.length;
@@ -57,6 +140,8 @@ export function TimetableView({
   }, [currentGrade, currentSemester]);
 
   const [selGrade, selSemester] = selectedPeriod.split("-").map(Number);
+  // 과목 목록·예시는 백엔드 카탈로그에서 온다. 학생의 교육과정(2025 입학생부터 2022
+  // 개정)은 서버가 입학 학년도로 정하므로 여기서 따로 계산하지 않는다.
 
   // 현재 활성 시간표 (선택된 학기 기준 단일 시간표 고정)
   const activeTimetable =
@@ -70,10 +155,101 @@ export function TimetableView({
       updatedAt: "방금 전",
     };
   const slots = activeTimetable.slots;
+  const isCurrentPeriod = selectedPeriod === currentPeriod;
+
+  // 이번 학기 수강 과목(온보딩·상담에서 등록)과, 그 과목의 교과군을 찾을 카탈로그.
+  const [currentCourses, setCurrentCourses] = useState<CurrentCourses | null>(null);
+  const [catalogByCode, setCatalogByCode] = useState<Map<string, CatalogSubject>>(() => new Map());
+  const [paletteError, setPaletteError] = useState("");
+  // 오른쪽 "+" 블록으로 방금 추가했지만 아직 칸에 넣지 않은 과목(학기별). 현재 학기는 수강
+  // 과목에 저장되지만, 다른 학기는 시간표에 든 과목만 블록이 되므로 여기서 붙잡아 둔다.
+  const [addedCourses, setAddedCourses] = useState<Record<string, CourseDraft[]>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([getCurrentCourses(), listSubjects()])
+      .then(([courses, catalog]) => {
+        if (cancelled) return;
+        setCurrentCourses(courses);
+        setCatalogByCode(new Map(catalog.items.map((subject) => [subject.code, subject])));
+      })
+      .catch(() => {
+        // 못 불러와도 시간표는 쓸 수 있다 — 블록은 시간표에 든 과목만 보인다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentGrade, currentSemester]);
+
+  const paletteCourses = useMemo(() => {
+    const byKey = new Map<string, PaletteCourse>();
+    if (isCurrentPeriod && currentCourses) {
+      for (const course of currentCourses.courses) {
+        const subject = course.subject_code ? catalogByCode.get(course.subject_code) : undefined;
+        const key = courseKey(course.subject, course.subject_code);
+        byKey.set(key, {
+          key,
+          fields: slotFieldsFor({ name: course.subject, subject, units: course.units ?? undefined }),
+          currentCourse: course,
+          placedCount: 0,
+        });
+      }
+    }
+    for (const slot of slots) {
+      const key = courseKey(slot.courseName, slot.subjectCode);
+      const existing = byKey.get(key);
+      if (existing && existing.placedCount > 0) {
+        existing.placedCount += 1;
+        continue;
+      }
+      // 시간표에 이미 든 칸의 내용(교사·강의실)을 블록이 이어받아, 다른 시간에 넣어도 같게 보인다.
+      byKey.set(key, { key, fields: fieldsOfSlot(slot), currentCourse: existing?.currentCourse, placedCount: 1 });
+    }
+    for (const course of addedCourses[selectedPeriod] ?? []) {
+      const key = courseKey(course.name, course.subject?.code);
+      if (!byKey.has(key)) byKey.set(key, { key, fields: slotFieldsFor(course), placedCount: 0 });
+    }
+    return Array.from(byKey.values());
+  }, [isCurrentPeriod, currentCourses, catalogByCode, slots, addedCourses, selectedPeriod]);
+
+  // 색은 과목 이름 순서로 나눠 준다. 아직 시간표에 없는 블록도 넣어 계산해야, 블록을 칸에
+  // 놓는 순간 다른 과목들의 색이 바뀌지 않는다.
   const courseColorMap = useMemo(() => {
-    const names = Array.from(new Set(slots.map((slot) => slot.courseName))).sort((a, b) => a.localeCompare(b));
+    const names = Array.from(new Set(paletteCourses.map((course) => course.fields.courseName))).sort((a, b) =>
+      a.localeCompare(b),
+    );
     return new Map(names.map((name, index) => [name, index % PALETTE_COLORS.length]));
-  }, [slots]);
+  }, [paletteCourses]);
+
+  /**
+   * 시간표에서 새로 추가한 과목을 이번 학기 수강 과목에도 넣는다(현재 학기만 — 수강 과목
+   * 목록은 현재 학기 것이다). 다른 학기는 시간표에 든 과목이 곧 블록이라 따로 저장할 게 없다.
+   */
+  async function rememberCourse(course: CourseDraft) {
+    if (!isCurrentPeriod || !currentCourses) return;
+    const key = courseKey(course.name, course.subject?.code);
+    if (currentCourses.courses.some((existing) => courseKey(existing.subject, existing.subject_code) === key)) return;
+    const added: CurrentCourseInput = course.subject ? { subject_code: course.subject.code } : { custom_name: course.name };
+    try {
+      setCurrentCourses(await saveCurrentCourses([...currentCourses.courses.map(toCourseInput), added]));
+      setPaletteError("");
+    } catch {
+      setPaletteError("수강 과목 목록에 저장하지 못했어요. 시간표에는 그대로 들어갔어요.");
+    }
+  }
+
+  async function forgetCourse(course: CurrentCourse) {
+    if (!currentCourses) return;
+    if (!window.confirm(`'${course.subject}'을(를) 이번 학기 수강 과목에서 뺄까요?`)) return;
+    try {
+      setCurrentCourses(
+        await saveCurrentCourses(currentCourses.courses.filter((existing) => existing.id !== course.id).map(toCourseInput)),
+      );
+      setPaletteError("");
+    } catch {
+      setPaletteError("수강 과목에서 빼지 못했어요. 잠시 후 다시 시도해 주세요.");
+    }
+  }
 
   // 학기 변경 핸들러
   const handlePeriodChange = (newPeriod: string) => {
@@ -99,7 +275,6 @@ export function TimetableView({
   const [selectedSlot, setSelectedSlot] = useState<TimetableSlot | null>(null);
 
   // 모달 상태
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isDirectAddModalOpen, setIsDirectAddModalOpen] = useState(false);
   const [placementCourse, setPlacementCourse] = useState<CourseDraft | null>(null);
   const [directPlacement, setDirectPlacement] = useState<Placement | null>(null);
@@ -107,6 +282,10 @@ export function TimetableView({
   const [draggingLunch, setDraggingLunch] = useState(false);
   const [lunchHoverAfterPeriod, setLunchHoverAfterPeriod] = useState<number | null>(null);
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
+  const [draggingPaletteKey, setDraggingPaletteKey] = useState<string | null>(null);
+  // 빈칸의 "+"를 눌렀을 때 — 그 칸에 넣을 과목 블록을 고르는 창.
+  const [cellChooser, setCellChooser] = useState<Placement | null>(null);
+  const [dropTarget, setDropTarget] = useState<Placement | null>(null);
   const [editingSlot, setEditingSlot] = useState<TimetableSlot | null>(null);
 
   // 등록된 고유 과목 목록
@@ -118,9 +297,14 @@ export function TimetableView({
   };
 
   const handleAddSlots = (newSlots: TimetableSlot[]) => {
+    commitSlots([...activeTimetable.slots, ...newSlots]);
+  };
+
+  /** 이 학기 시간표의 칸 전체를 바꿔 저장한다(아직 없던 학기면 새로 만든다). */
+  const commitSlots = (nextSlots: TimetableSlot[]) => {
     const updated = {
       ...activeTimetable,
-      slots: [...activeTimetable.slots, ...newSlots],
+      slots: nextSlots,
       updatedAt: "방금 전",
     };
     const exists = timetables.some((t) => t.grade === selGrade && t.semester === selSemester);
@@ -128,6 +312,28 @@ export function TimetableView({
       ? timetables.map((t) => (t.grade === selGrade && t.semester === selSemester ? updated : t))
       : [...timetables, updated];
     onTimetablesChange(updatedAll);
+  };
+
+  /** 오른쪽 블록을 칸에 놓았을 때. 빈칸이면 채우고, 다른 과목이 있으면 확인 후 바꾼다. */
+  const handlePlaceFromPalette = (key: string, day: number, period: number) => {
+    const course = paletteCourses.find((candidate) => candidate.key === key);
+    if (!course) return;
+    const covered = slots.some((slot) => slot.day === day && slot.startPeriod < period && slot.startPeriod + slot.periodSpan > period);
+    if (covered) return;
+    const target = slots.find((slot) => slot.day === day && slot.startPeriod === period);
+    if (!target) {
+      handleAddSlot({ id: newSlotId(), ...course.fields, day, startPeriod: period, periodSpan: 1 });
+      return;
+    }
+    if (courseKey(target.courseName, target.subjectCode) === key) return;
+    if (!window.confirm(`${DAYS_KR[day]}요일 ${period}교시의 '${target.courseName}'을(를) '${course.fields.courseName}'(으)로 바꿀까요?`)) return;
+    commitSlots(slots.map((slot) => (slot.id === target.id ? { ...slot, ...course.fields } : slot)));
+    if (selectedSlot?.id === target.id) setSelectedSlot(null);
+  };
+
+  const endPaletteDrag = () => {
+    setDraggingPaletteKey(null);
+    setDropTarget(null);
   };
 
   const handleMoveSlot = (slotId: string, day: number, period: number) => {
@@ -212,6 +418,23 @@ export function TimetableView({
           );
           const palette = slot ? getGroupColor(slot.group, courseColorMap.get(slot.courseName) ?? courseColorIndex(slot.courseName)) : null;
           const isSelected = Boolean(slot && selectedSlot?.id === slot.id);
+          const isDropTarget = Boolean(draggingPaletteKey && dropTarget?.day === dayIdx && dropTarget.period === period);
+          const acceptDrag = (event: React.DragEvent<HTMLElement>) => {
+            if (!draggingSlotId && !draggingPaletteKey) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = draggingPaletteKey ? "copy" : "move";
+            if (draggingPaletteKey && (dropTarget?.day !== dayIdx || dropTarget.period !== period)) {
+              setDropTarget({ day: dayIdx, period });
+            }
+          };
+          const dropHere = (event: React.DragEvent<HTMLElement>) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (draggingPaletteKey) handlePlaceFromPalette(draggingPaletteKey, dayIdx, period);
+            else if (draggingSlotId) handleMoveSlot(draggingSlotId, dayIdx, period);
+            setDraggingSlotId(null);
+            endPaletteDrag();
+          };
 
           return (
             <div className="p-1.5 border-r border-gray-100 last:border-r-0 flex flex-col" key={`${dayIdx}-${period}`}>
@@ -222,12 +445,12 @@ export function TimetableView({
                   onClick={() => setSelectedSlot(slot)}
                   onDragStart={(event) => { event.stopPropagation(); setDraggingSlotId(slot.id); }}
                   onDragEnd={() => setDraggingSlotId(null)}
-                  onDragOver={(event) => { if (draggingSlotId) event.preventDefault(); }}
-                  onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (draggingSlotId) handleMoveSlot(draggingSlotId, dayIdx, period); setDraggingSlotId(null); }}
+                  onDragOver={acceptDrag}
+                  onDrop={dropHere}
                   style={{
                     backgroundColor: palette.bg,
-                    borderColor: isSelected ? "#3182F6" : palette.border,
-                    boxShadow: isSelected ? "0 0 0 2px rgba(49,130,246,0.25)" : undefined,
+                    borderColor: isSelected || isDropTarget ? "#3182F6" : palette.border,
+                    boxShadow: isSelected || isDropTarget ? "0 0 0 2px rgba(49,130,246,0.25)" : undefined,
                     color: palette.text,
                   }}
                   type="button"
@@ -249,10 +472,16 @@ export function TimetableView({
                 </button>
               ) : (
                 <button
-                  className="flex-1 w-full rounded-xl border border-dashed border-gray-200 hover:border-brand-400 hover:bg-blue-50/40 transition flex items-center justify-center text-gray-300 hover:text-brand-500 text-xs font-bold"
-                  onClick={() => { setDirectPlacement({ day: dayIdx, period }); setIsDirectAddModalOpen(true); }}
-                  onDragOver={(event) => { if (draggingSlotId) event.preventDefault(); }}
-                  onDrop={(event) => { event.preventDefault(); if (draggingSlotId) handleMoveSlot(draggingSlotId, dayIdx, period); setDraggingSlotId(null); }}
+                  className={`flex-1 w-full rounded-xl border border-dashed transition flex items-center justify-center text-xs font-bold ${
+                    isDropTarget
+                      ? "border-brand-500 bg-blue-50 text-brand-500"
+                      : draggingPaletteKey
+                        ? "border-brand-200 bg-blue-50/30 text-brand-300"
+                        : "border-gray-200 text-gray-300 hover:border-brand-400 hover:bg-blue-50/40 hover:text-brand-500"
+                  }`}
+                  onClick={() => setCellChooser({ day: dayIdx, period })}
+                  onDragOver={acceptDrag}
+                  onDrop={dropHere}
                   title="과목 추가하기"
                   type="button"
                 >
@@ -262,6 +491,86 @@ export function TimetableView({
             </div>
           );
         })}
+      </div>
+    );
+  }
+
+  /**
+   * 과목 블록 목록 + 맨 끝의 "+" 블록. 오른쪽 카드와 빈칸 "+"의 선택 창이 같은 모양을 쓴다.
+   * draggable이면 블록을 시간표 칸으로 끌어 놓을 수 있다.
+   */
+  function renderCourseBlocks({
+    draggable,
+    onPick,
+    onAdd,
+  }: {
+    draggable: boolean;
+    onPick: (course: PaletteCourse) => void;
+    onAdd: () => void;
+  }) {
+    return (
+      <div className="grid grid-cols-3 gap-1.5">
+        {paletteCourses.map((course) => {
+          const colors = getGroupColor(
+            course.fields.group,
+            courseColorMap.get(course.fields.courseName) ?? courseColorIndex(course.fields.courseName),
+          );
+          const removable = Boolean(course.currentCourse && !course.currentCourse.locked && course.placedCount === 0);
+          return (
+            <button
+              className={`group relative min-h-[48px] px-1.5 py-1.5 rounded-lg border text-left transition hover:shadow-md flex flex-col justify-between ${
+                draggable ? "cursor-grab active:cursor-grabbing" : ""
+              } ${draggingPaletteKey === course.key ? "opacity-50" : ""}`}
+              draggable={draggable}
+              key={course.key}
+              onClick={() => onPick(course)}
+              onDragEnd={draggable ? endPaletteDrag : undefined}
+              onDragStart={
+                draggable
+                  ? (event) => {
+                      event.dataTransfer.effectAllowed = "copy";
+                      event.dataTransfer.setData(PALETTE_DRAG_TYPE, course.key);
+                      event.dataTransfer.setData("text/plain", course.fields.courseName);
+                      setDraggingSlotId(null);
+                      setDraggingPaletteKey(course.key);
+                    }
+                  : undefined
+              }
+              style={{ backgroundColor: colors.bg, borderColor: colors.border, color: colors.text }}
+              title={draggable ? `${course.fields.courseName} — 끌어다 시간표에 넣기` : course.fields.courseName}
+              type="button"
+            >
+              <span className="flex items-start justify-between gap-0.5 w-full">
+                <span className="font-bold text-[11px] leading-tight break-keep">{course.fields.courseName}</span>
+                {draggable && removable && course.currentCourse && (
+                  <span
+                    className="text-[10px] leading-none opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-none"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (course.currentCourse) void forgetCourse(course.currentCourse);
+                    }}
+                    role="presentation"
+                    title="수강 과목에서 빼기"
+                  >
+                    ✕
+                  </span>
+                )}
+              </span>
+              <span className="text-[9px] opacity-75 font-medium mt-0.5 block truncate">
+                {course.placedCount > 0 ? `주 ${course.placedCount}시간` : "미배치"}
+              </span>
+            </button>
+          );
+        })}
+        <button
+          aria-label="새 과목 추가"
+          className="min-h-[48px] rounded-lg border border-dashed border-gray-300 hover:border-brand-400 hover:bg-blue-50/40 text-gray-400 hover:text-brand-500 transition flex items-center justify-center text-base font-bold"
+          onClick={onAdd}
+          title="새 과목 추가"
+          type="button"
+        >
+          +
+        </button>
       </div>
     );
   }
@@ -285,24 +594,6 @@ export function TimetableView({
           <h2 className="text-2xl font-bold text-gray-950 tracking-tight">주간 학업 시간표</h2>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            className="px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow transition flex items-center gap-1.5"
-            onClick={() => { setDirectPlacement(null); setIsDirectAddModalOpen(true); }}
-            type="button"
-          >
-            <span>+</span>
-            <span>과목 직접 등록</span>
-          </button>
-          <button
-            className="px-3 py-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
-            onClick={() => setIsSearchModalOpen(true)}
-            type="button"
-          >
-            <Icon name="search" size={14} />
-            <span>과목 검색·불러오기</span>
-          </button>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
@@ -367,8 +658,8 @@ export function TimetableView({
           </div>
         </div>
 
-        {/* 우측 패널 */}
-        <div className="xl:col-span-4 space-y-4">
+        {/* 우측 패널 — 과목 블록을 끌어 내리는 동안 보이도록 넓은 화면에서는 따라 내려온다. */}
+        <div className="xl:col-span-4 space-y-4 xl:sticky xl:top-4">
           {/* 학기 선택 */}
           <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
             <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
@@ -385,6 +676,30 @@ export function TimetableView({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* 과목 블록 — 시간표 칸과 같은 모양. 끌어다 칸에 놓으면 그 과목이 들어간다.
+              새 과목은 맨 끝의 "+" 블록에서만 추가한다. */}
+          <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-900">
+                {isCurrentPeriod ? "이번 학기 수강 과목" : "이 학기 과목"}
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-600">
+                {paletteCourses.length}개
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 leading-relaxed break-keep">
+              {paletteCourses.length === 0
+                ? "아래 + 블록으로 과목을 추가하면, 끌어다 시간표에 넣을 수 있어요."
+                : "블록을 시간표 칸으로 끌어다 놓으세요."}
+            </p>
+            {renderCourseBlocks({
+              draggable: true,
+              onPick: (course) => setPlacementCourse({ name: course.fields.courseName, fields: course.fields }),
+              onAdd: () => { setDirectPlacement(null); setIsDirectAddModalOpen(true); },
+            })}
+            {paletteError && <p className="text-[11px] font-semibold text-red-600 break-keep">{paletteError}</p>}
           </div>
 
           {/* 이 학기의 시간표 */}
@@ -496,46 +811,53 @@ export function TimetableView({
         </div>
       )}
 
+      {cellChooser && (
+        <div className="tt-modal-backdrop" onClick={() => setCellChooser(null)}>
+          <div className="tt-dialog-box" onClick={(event) => event.stopPropagation()}>
+            <div className="tt-dialog-header">
+              <div>
+                <h3>{DAYS_KR[cellChooser.day]}요일 {cellChooser.period}교시</h3>
+                <p className="text-xs text-gray-500 mt-1">이 칸에 넣을 과목을 고르세요.</p>
+              </div>
+              <button type="button" onClick={() => setCellChooser(null)}>✕</button>
+            </div>
+            {renderCourseBlocks({
+              draggable: false,
+              onPick: (course) => {
+                handlePlaceFromPalette(course.key, cellChooser.day, cellChooser.period);
+                setCellChooser(null);
+              },
+              onAdd: () => {
+                setDirectPlacement(cellChooser);
+                setCellChooser(null);
+                setIsDirectAddModalOpen(true);
+              },
+            })}
+          </div>
+        </div>
+      )}
+
       {editingSlot && (
         <CourseEditModal slot={editingSlot} onClose={() => setEditingSlot(null)} onSave={handleUpdateSlot} />
       )}
 
-      {isSearchModalOpen && (
-        <CourseSearchModal
-          onClose={() => setIsSearchModalOpen(false)}
-          onSelectCourse={(course) => {
-            setPlacementCourse({ name: course.name, units: course.defaultUnits, preset: course });
-            setIsSearchModalOpen(false);
-          }}
-        />
-      )}
 
       {isDirectAddModalOpen && (
         <DirectAddModal
           onClose={() => setIsDirectAddModalOpen(false)}
-          currentGrade={currentGrade}
-          currentSemester={currentSemester}
+          grade={selGrade}
+          semester={selSemester}
           initialPlacement={directPlacement}
           onAddCourse={(course, placement) => {
+            void rememberCourse(course);
+            if (!isCurrentPeriod) {
+              setAddedCourses((current) => ({
+                ...current,
+                [selectedPeriod]: [...(current[selectedPeriod] ?? []), course],
+              }));
+            }
             if (placement) {
-              const preset = course.preset;
-              handleAddSlot({
-                id: `slot-${Date.now()}`,
-                courseName: course.name,
-                teacher: course.teacher,
-                room: course.room,
-                category: preset?.category ?? "일반선택",
-                group: preset?.group ?? "기타",
-                units: course.units ?? 0,
-                day: placement.day,
-                startPeriod: placement.period,
-                periodSpan: 1,
-                colorIndex: courseColorIndex(course.name),
-                isCareerRelated: Boolean(preset && ["과학", "수학", "기술가정/정보"].includes(preset.group)),
-              });
-              setPlacementCourse(course);
-            } else {
-              setPlacementCourse({ ...course, units: course.units ?? course.preset?.defaultUnits ?? 0 });
+              handleAddSlot({ id: newSlotId(), ...slotFieldsFor(course), day: placement.day, startPeriod: placement.period, periodSpan: 1 });
             }
             setDirectPlacement(null);
             setIsDirectAddModalOpen(false);
@@ -549,20 +871,13 @@ export function TimetableView({
           onClose={() => setPlacementCourse(null)}
           existingSlots={slots}
           onPlace={(placements) => {
-            const preset = placementCourse.preset;
+            const fields = placementCourse.fields ?? slotFieldsFor(placementCourse);
             const additions = placements.map(({ day, period }, index) => ({
               id: `slot-${Date.now()}-${index}`,
-              courseName: placementCourse.name,
-              teacher: placementCourse.teacher,
-              room: placementCourse.room,
-              category: preset?.category ?? "일반선택",
-              group: preset?.group ?? "기타",
-              units: placementCourse.units ?? preset?.defaultUnits ?? 0,
+              ...fields,
               day,
               startPeriod: period,
               periodSpan: 1,
-              colorIndex: courseColorIndex(placementCourse.name),
-              isCareerRelated: Boolean(preset && ["과학", "수학", "기술가정/정보"].includes(preset.group)),
             }));
             handleAddSlots(additions);
           }}
@@ -583,7 +898,13 @@ function CourseEditModal({ slot, onClose, onSave }: { slot: TimetableSlot; onClo
       <div className="tt-dialog-box" onClick={(event) => event.stopPropagation()}>
         <div className="tt-dialog-header"><h3>과목 정보 수정</h3><button type="button" onClick={onClose}>✕</button></div>
         <form className="tt-dialog-form" onSubmit={(event) => { event.preventDefault(); if (!courseName.trim()) return; onSave({ ...slot, courseName: courseName.trim(), teacher: teacher.trim() || undefined, room: room.trim() || undefined, units: units === "later" ? 0 : Number(units), colorIndex: courseColorIndex(courseName.trim()) }); }}>
-          <label><span>과목명 *</span><input required value={courseName} onChange={(event) => setCourseName(event.target.value)} /></label>
+          {/* 목록에서 고른 과목은 이름을 바꾸면 과목 정보와의 연결이 끊기므로 고정한다. 과목을
+              바꾸려면 이 칸을 지우고 새로 추가한다. 기타 과목과 예전 칸만 이름을 고칠 수 있다. */}
+          {slot.subjectCode ? (
+            <label><span>과목명</span><input readOnly value={courseName} className="bg-gray-50 text-gray-500" /><em className="text-[11px] text-gray-400 not-italic">목록에서 고른 과목이라 이름은 바꿀 수 없어요. 다른 과목이면 지우고 새로 추가해 주세요.</em></label>
+          ) : (
+            <label><span>과목명 *</span><input required value={courseName} onChange={(event) => setCourseName(event.target.value)} /></label>
+          )}
           <div className="tt-form-row">
             <label><span>교사명 <em>(선택)</em></span><input value={teacher} onChange={(event) => setTeacher(event.target.value)} /></label>
             <label><span>강의실 <em>(선택)</em></span><input value={room} onChange={(event) => setRoom(event.target.value)} /></label>
@@ -597,141 +918,68 @@ function CourseEditModal({ slot, onClose, onSave }: { slot: TimetableSlot; onClo
 }
 
 /* ──────────────────────────────────────────────
-   CourseSearchModal (개설 과목 검색 바텀시트)
-   ────────────────────────────────────────────── */
-function CourseSearchModal({
-  onClose,
-  onSelectCourse,
-}: {
-  onClose: () => void;
-  onSelectCourse: (course: PresetCourse) => void;
-}) {
-  const [filterGroup, setFilterGroup] = useState<string>("all");
-  const [searchKeyword, setSearchKeyword] = useState<string>("");
-
-  const filteredCourses = SUBJECT_PRESETS.filter((c) => {
-    const matchGroup = filterGroup === "all" || c.group === filterGroup;
-    const matchKeyword = !searchKeyword || c.name.toLowerCase().includes(searchKeyword.toLowerCase());
-    return matchGroup && matchKeyword;
-  });
-
-  return (
-    <div className="tt-modal-backdrop" onClick={onClose}>
-      <div className="tt-bottom-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="tt-sheet-header">
-          <div>
-            <h3>2022 개정 교육과정 개설 과목 검색</h3>
-            <small>시간표에 추가할 과목을 선택하세요</small>
-          </div>
-          <button type="button" className="tt-sheet-close" onClick={onClose}>
-            닫기
-          </button>
-        </div>
-
-        <p className="text-xs text-gray-500 mb-3">과목을 고른 뒤 요일과 교시를 한 번 더 선택합니다.</p>
-
-        {/* 검색 필터 바 (에브리타임 스타일) */}
-        <div className="tt-sheet-filters">
-          <div className="tt-filter-tabs">
-            {["all", "과학", "수학", "기술가정/정보", "국어", "영어", "사회"].map((grp) => (
-              <button
-                key={grp}
-                type="button"
-                className={`tt-filter-pill ${filterGroup === grp ? "active" : ""}`}
-                onClick={() => setFilterGroup(grp)}
-              >
-                {grp === "all" ? "전체" : grp}
-              </button>
-            ))}
-          </div>
-
-          <div className="tt-search-input-box">
-            <input
-              type="text"
-              placeholder="과목명 검색 (예: 물리학, 기하, 미적분, 정보...)"
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* 과목 목록 테이블 */}
-        <div className="tt-course-table-container">
-          <table className="tt-course-table">
-            <thead>
-              <tr>
-                <th>코드</th>
-                <th>교과구분</th>
-                <th>과목명</th>
-                <th>교과군</th>
-                <th>단위수</th>
-                <th>설명</th>
-                <th>담기</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCourses.map((course) => (
-                <tr key={course.code}>
-                  <td><span className="tt-code-badge">{course.code}</span></td>
-                  <td><span className="tt-cat-badge">{course.category}</span></td>
-                  <td><strong>{course.name}</strong></td>
-                  <td>{course.group}</td>
-                  <td>{course.defaultUnits}학점(단위)</td>
-                  <td className="tt-desc-cell">{course.description || "-"}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="tt-btn-add-course"
-                      onClick={() => onSelectCourse(course)}
-                    >
-                      + 담기
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────
    DirectAddModal (직접 과목 추가 모달)
+   과목명은 자유 입력이 아니라 카탈로그 후보에서 고른다. 목록에 없는 학교 자체 과목만
+   "기타"로 이름을 직접 적는다 — 온보딩의 수강 과목 등록과 같은 규칙이다.
    ────────────────────────────────────────────── */
 function DirectAddModal({
   onClose,
   onAddCourse,
-  currentGrade,
-  currentSemester,
+  grade,
+  semester,
   initialPlacement,
 }: {
   onClose: () => void;
   onAddCourse: (course: CourseDraft, placement: Placement | null) => void;
-  currentGrade: number;
-  currentSemester: number;
+  /** 지금 보고 있는 시간표의 학년·학기 — 학생의 현재 학기가 아닐 수 있다. */
+  grade: number;
+  semester: number;
   initialPlacement: Placement | null;
 }) {
-  const [courseName, setCourseName] = useState("");
+  const [picked, setPicked] = useState<{ name: string; subject?: CatalogSubject } | null>(null);
   const [teacher, setTeacher] = useState("");
   const [room, setRoom] = useState("");
   const [units, setUnits] = useState("");
-  const commonCourses = commonCoursesForSemester(currentGrade, currentSemester);
+  const [commonCourses, setCommonCourses] = useState<CatalogSubject[]>([]);
+  const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    commonSubjects(grade, semester)
+      .then((response) => {
+        if (cancelled) return;
+        setCommonCourses(response.items);
+        setCurriculum(response.curriculum);
+      })
+      .catch(() => {
+        // 예시는 도움일 뿐이라 못 불러와도 검색으로 고를 수 있다.
+        if (!cancelled) setCommonCourses([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [grade, semester]);
+
+  const pickSubject = (subject: CatalogSubject) => {
+    setPicked({ name: subject.name, subject });
+    // 학점을 아직 안 골랐으면 과목의 기본 학점을 채워 준다.
+    setUnits((current) => current || String(Math.min(Math.max(subject.default_units, 1), 5)));
+    setError("");
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!courseName.trim()) {
-      alert("과목명을 입력해주세요.");
+    if (!picked) {
+      setError("과목을 목록에서 골라 주세요. 목록에 없으면 기타로 직접 입력할 수 있어요.");
       return;
     }
-    const preset = SUBJECT_PRESETS.find((course) => course.name === courseName.trim());
     onAddCourse({
-      name: courseName.trim(),
+      name: picked.name,
+      subject: picked.subject,
       teacher: teacher.trim() || undefined,
       room: room.trim() || undefined,
-      units: units === "later" ? 0 : Number(units),
-      preset,
+      units: units === "later" || units === "" ? 0 : Number(units),
     }, initialPlacement);
   };
 
@@ -739,36 +987,54 @@ function DirectAddModal({
     <div className="tt-modal-backdrop" onClick={onClose}>
       <div className="tt-dialog-box" onClick={(e) => e.stopPropagation()}>
         <div className="tt-dialog-header">
-          <h3>수업 직접 추가</h3>
+          <h3>새 과목 추가</h3>
           <button type="button" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit} className="tt-dialog-form">
-          <label>
-            <span>과목명 *</span>
-            <input
-              type="text"
-              required
-              placeholder="예: 물리학Ⅱ"
-              value={courseName}
-              onChange={(e) => setCourseName(e.target.value)}
-            />
-          </label>
           <div className="space-y-2">
-            <span className="block text-xs font-bold text-gray-700">이 학기에 많이 듣는 과목 예시</span>
-            <div className="flex flex-wrap gap-2">
-              {commonCourses.map((course) => (
-                <button
-                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${course.name === courseName ? "border-brand-400 bg-brand-50 text-brand-700" : "border-gray-200 bg-gray-50 text-gray-600 hover:border-brand-300 hover:bg-brand-50"}`}
-                  key={course.code}
-                  onClick={() => setCourseName(course.name)}
-                  type="button"
-                >
-                  {course.name}
+            <span className="block text-xs font-bold text-gray-700">과목 *</span>
+            {picked ? (
+              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border border-brand-300 bg-brand-50">
+                <span className="text-xs font-bold text-brand-800 truncate">
+                  {picked.name}
+                  <span className="ml-1.5 font-medium text-gray-500">
+                    {picked.subject ? `${picked.subject.group} · ${picked.subject.track ?? picked.subject.category}` : "기타(직접 입력)"}
+                  </span>
+                </span>
+                <button className="text-[11px] font-bold text-gray-500 hover:text-gray-800 flex-none" onClick={() => setPicked(null)} type="button">
+                  다시 고르기
                 </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-gray-400">학교마다 개설 과목이 다를 수 있어요. 목록에 없으면 직접 입력하세요.</p>
+              </div>
+            ) : (
+              <SubjectSearchField
+                autoFocus
+                onPickCustom={(name) => { setPicked({ name }); setError(""); }}
+                onPickSubject={pickSubject}
+              />
+            )}
+            {error && <p className="text-[11px] font-semibold text-red-600">{error}</p>}
           </div>
+          {!picked && commonCourses.length > 0 && (
+            <div className="space-y-2">
+              <span className="block text-xs font-bold text-gray-700">
+                {grade}학년 {semester}학기에 흔히 듣는 과목 예시
+                {curriculum && <span className="ml-1 font-medium text-gray-400">({curriculum} 개정 교육과정)</span>}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {commonCourses.map((subject) => (
+                  <button
+                    className="px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition border-gray-200 bg-gray-50 text-gray-600 hover:border-brand-300 hover:bg-brand-50"
+                    key={subject.code}
+                    onClick={() => pickSubject(subject)}
+                    type="button"
+                  >
+                    {subject.name}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-400">학교마다 개설 과목이 달라요. 위 검색칸에서 찾아 고르세요.</p>
+            </div>
+          )}
           <div className="tt-form-row">
             <label>
               <span>교사명 <em>(선택)</em></span>
@@ -799,30 +1065,19 @@ function DirectAddModal({
               </select>
             </label>
           </div>
-          <p className="text-[11px] text-gray-400">{initialPlacement ? "입력하면 위 위치에 바로 추가되고, 이후 다른 시간에도 추가할 수 있습니다." : "입력 후 시간표에서 배치 위치를 선택합니다."}</p>
+          <p className="text-[11px] text-gray-400">{initialPlacement ? "고른 칸에 바로 들어가고, 오른쪽 과목 블록에도 생겨 다른 시간에도 넣을 수 있어요." : "오른쪽 과목 블록에 추가돼요. 블록을 끌어다 시간표에 넣으세요."}</p>
           <div className="tt-dialog-footer">
             <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>
               취소
             </button>
-            <button type="submit" className="btn btn-primary btn-sm">
-              시간표에 추가
+            <button type="submit" className="btn btn-primary btn-sm" disabled={!picked}>
+              {initialPlacement ? "이 칸에 추가" : "과목 블록에 추가"}
             </button>
           </div>
         </form>
       </div>
     </div>
   );
-}
-
-function commonCoursesForSemester(grade: number, semester: number): PresetCourse[] {
-  const names = grade === 1
-    ? ["공통국어", "공통수학", "공통영어", "통합사회", "통합과학", "과학탐구실험"]
-    : grade === 2
-      ? ["수학Ⅰ", "수학Ⅱ", "영어Ⅰ", "물리학Ⅰ", "화학Ⅰ", "확률과 통계"]
-      : semester === 1
-        ? ["미적분", "기하", "물리학Ⅱ", "화학Ⅱ", "영어 독해와 작문"]
-        : ["미적분", "확률과 통계", "인공지능 수학", "프로그래밍"];
-  return names.map((name) => SUBJECT_PRESETS.find((course) => course.name === name)).filter((course): course is PresetCourse => Boolean(course));
 }
 
 function PlacementModal({

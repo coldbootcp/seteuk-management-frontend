@@ -519,7 +519,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Upload */
+        /**
+         * Create Upload
+         * @description mode=replace는 설정 탭의 올리기·교체다. 파싱이 끝나면 학생 기록과 대조해, 이상·충돌이
+         *     없으면 서버가 바로 반영하고 있으면 상태의 review에 남기고 멈춘다.
+         */
         post: operations["create_upload_api_v1_seteuk_uploads_post"];
         delete?: never;
         options?: never;
@@ -709,6 +713,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/profile/current-courses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Current Courses
+         * @description 지금 학년·학기에 듣는 과목. 상담 챗봇이 이번 학기 주제를 과목과 연결하는 근거다.
+         */
+        get: operations["get_current_courses_api_v1_profile_current_courses_get"];
+        /**
+         * Set Current Courses
+         * @description 이번 학기 수강 과목을 학생이 고른 목록으로 맞춘다. 과목은 카탈로그 코드로 고르고,
+         *     목록에 없는 학교 자체 과목만 이름으로 받는다. 생기부·성적으로 이미 있는 과목은
+         *     지우지 않는다.
+         */
+        put: operations["set_current_courses_api_v1_profile_current_courses_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/subjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Subjects
+         * @description 이 학생 교육과정의 과목 전체(수백 개). 시간표의 과목 둘러보기처럼 교과군별로
+         *     훑어볼 때 쓴다 — 검색은 /subjects/search가 더 빠르다.
+         */
+        get: operations["list_subjects_api_v1_subjects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/subjects/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Subjects
+         * @description "수"를 치면 공통수학1, 수학Ⅰ… 이 학생의 교육과정 과목만 돌려준다.
+         */
+        get: operations["search_subjects_api_v1_subjects_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/subjects/common": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Common Subjects
+         * @description 그 학년·학기에 흔히 편성되는 과목 예시(학교마다 다르다).
+         */
+        get: operations["common_subjects_api_v1_subjects_common_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/education-policies/me": {
         parameters: {
             query?: never;
@@ -872,10 +963,36 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Session Messages
+         * @description 세션에 오간 대화를 시간순으로 돌려준다. 화면이 상담을 다시 열 때 이 기록으로
+         *     이전 대화를 복원하고, 비어 있으면 첫 인사(opening)를 새로 요청한다.
+         */
+        get: operations["list_session_messages_api_v1_consultation_sessions__session_id__messages_get"];
         put?: never;
         /** Send Message */
         post: operations["send_message_api_v1_consultation_sessions__session_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consultation/sessions/{session_id}/opening": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Opening
+         * @description 새로 열린 세션의 첫 인사를 챗봇이 먼저 건네게 한다. 화면은 세션에 메시지가
+         *     하나도 없을 때만 부른다(이미 대화가 있으면 서비스가 조용히 넘긴다).
+         */
+        post: operations["send_opening_api_v1_consultation_sessions__session_id__opening_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -899,6 +1016,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/consultation/sessions/{session_id}/confirm-flow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Flow
+         * @description 상담 화면의 3개년 흐름 카드에서 학생이 '이 흐름으로 확정'(또는 '다시 조율')을
+         *     눌렀을 때. 흐름이 확정돼야 챗봇이 이번 학기 목표로 넘어갈 수 있다.
+         */
+        post: operations["confirm_flow_api_v1_consultation_sessions__session_id__confirm_flow_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/consultation/sessions/{session_id}/conclude": {
         parameters: {
             query?: never;
@@ -910,6 +1048,27 @@ export interface paths {
         put?: never;
         /** Conclude Session */
         post: operations["conclude_session_api_v1_consultation_sessions__session_id__conclude_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consultation/record-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Or Resume Record Review
+         * @description 확인을 기다리는 교체 업로드(설정 탭 생기부 올리기)의 확인 상담을 열거나 이어 간다.
+         *     확인할 생기부가 없으면 409(CONSULTATION_NOT_READY).
+         */
+        post: operations["create_or_resume_record_review_api_v1_consultation_record_review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1749,7 +1908,11 @@ export interface paths {
         delete: operations["delete_conversation_api_v1_conversations__conversation_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename Conversation
+         * @description 대화 제목을 학생이 직접 고친다. 고친 제목은 자동 제목 생성이 덮어쓰지 않는다.
+         */
+        patch: operations["rename_conversation_api_v1_conversations__conversation_id__patch"];
         trace?: never;
     };
     "/api/v1/conversations/{conversation_id}/messages": {
@@ -1843,6 +2006,8 @@ export interface components {
             note?: string | null;
             /** Roadmap Node Id */
             roadmap_node_id?: string | null;
+            /** Subject Code */
+            subject_code?: string | null;
         };
         /** AcademicPerformanceItem */
         AcademicPerformanceItem: {
@@ -1909,6 +2074,8 @@ export interface components {
             note: string | null;
             /** Roadmap Node Id */
             roadmap_node_id: string | null;
+            /** Subject Code */
+            subject_code?: string | null;
         };
         /** AcademicPerformanceUpdate */
         AcademicPerformanceUpdate: {
@@ -1938,6 +2105,8 @@ export interface components {
             note?: string | null;
             /** Roadmap Node Id */
             roadmap_node_id?: string | null;
+            /** Subject Code */
+            subject_code?: string | null;
         };
         /** AccessTokenResponse */
         AccessTokenResponse: {
@@ -2862,6 +3031,8 @@ export interface components {
         Body_create_upload_api_v1_seteuk_uploads_post: {
             /** File */
             file: string;
+            /** @default onboarding */
+            mode: components["schemas"]["UploadMode"];
         };
         /** Body_upload_attachment_api_v1_activities__activity_id__attachments_post */
         Body_upload_attachment_api_v1_activities__activity_id__attachments_post: {
@@ -3006,6 +3177,11 @@ export interface components {
          * @enum {string}
          */
         ChatMode: "normal" | "edit";
+        /** ConfirmFlowRequest */
+        ConfirmFlowRequest: {
+            /** Confirmed */
+            confirmed: boolean;
+        };
         /** ConfirmFullReplanRequest */
         ConfirmFullReplanRequest: {
             /** Confirmed */
@@ -3046,6 +3222,28 @@ export interface components {
              * @default false
              */
             full_replan_confirmed: boolean;
+            /**
+             * Stage
+             * @default flow
+             */
+            stage: string;
+            /** Flow */
+            flow?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Flow Confirmed
+             * @default false
+             */
+            flow_confirmed: boolean;
+            /** Semester Goal */
+            semester_goal?: {
+                [key: string]: unknown;
+            } | null;
+            /** Record Review */
+            record_review?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ConsultationStatusResponse
@@ -3055,7 +3253,7 @@ export interface components {
             /** Satisfied */
             satisfied: boolean;
             /** Required Kind */
-            required_kind?: ("initial" | "semester_review") | null;
+            required_kind?: ("initial" | "semester_review" | "graduate_fit") | null;
             /** Target Grade */
             target_grade?: number | null;
             /** Target Semester */
@@ -3074,6 +3272,8 @@ export interface components {
             title: string | null;
             /** Purpose */
             purpose: string;
+            /** Title Source */
+            title_source?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -3084,6 +3284,61 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * ConversationUpdate
+         * @description 학생이 대화 제목을 직접 고칠 때. 앞뒤 공백을 걷어낸 뒤 비어 있으면 거부한다.
+         */
+        ConversationUpdate: {
+            /** Title */
+            title: string;
+        };
+        /**
+         * CurrentCourseInput
+         * @description 이번 학기 수강 과목 하나. 카탈로그 후보를 골랐으면 subject_code만, 목록에 없는
+         *     학교 자체 과목이면 custom_name만 채운다. 둘 다 채우거나 둘 다 비우면 거부한다.
+         */
+        CurrentCourseInput: {
+            /** Subject Code */
+            subject_code?: string | null;
+            /** Custom Name */
+            custom_name?: string | null;
+        };
+        /** CurrentCourseRead */
+        CurrentCourseRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Subject */
+            subject: string;
+            /** Subject Code */
+            subject_code: string | null;
+            /** Category */
+            category: string;
+            /** Units */
+            units: number | null;
+            /** Is Custom */
+            is_custom: boolean;
+            /** Locked */
+            locked: boolean;
+        };
+        /** CurrentCoursesRequest */
+        CurrentCoursesRequest: {
+            /** Courses */
+            courses: components["schemas"]["CurrentCourseInput"][];
+        };
+        /** CurrentCoursesResponse */
+        CurrentCoursesResponse: {
+            /** Grade */
+            grade: number;
+            /** Semester */
+            semester: number;
+            /** Curriculum */
+            curriculum: string;
+            /** Courses */
+            courses: components["schemas"]["CurrentCourseRead"][];
         };
         /** DiagnosisCreateResponse */
         DiagnosisCreateResponse: {
@@ -3445,6 +3700,9 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** @default onboarding */
+            mode: components["schemas"]["UploadMode"];
+            review?: components["schemas"]["RecordReview"] | null;
         };
         /** ListResponse[AcademicPerformanceRead] */
         ListResponse_AcademicPerformanceRead_: {
@@ -3980,6 +4238,107 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * RecordAnomaly
+         * @description 생기부가 이 학생의 지금 상황과 맞지 않아 보이는 점. 서버가 코드로 판정한다 —
+         *     챗봇이 해명을 요청하는 근거이고, 하나라도 있으면 자동 반영하지 않는다.
+         */
+        RecordAnomaly: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "name_mismatch" | "freshman_year_mismatch" | "future_period" | "stale_record" | "activity_match_unavailable";
+            /** Message */
+            message: string;
+        };
+        /**
+         * RecordConflict
+         * @description 생기부 항목과 학생이 직접 입력한 기록이 같은 것을 가리키는데 내용이 다른 경우.
+         *
+         *     parsed_index는 반영 단계와 같은 기준(현재 학기 이후를 거른 결과)의 순번이다.
+         */
+        RecordConflict: {
+            /** Id */
+            id: string;
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "academic_performance" | "activities";
+            /** Parsed Index */
+            parsed_index: number;
+            /**
+             * Existing Id
+             * Format: uuid
+             */
+            existing_id: string;
+            /** Grade */
+            grade: number;
+            /** Semester */
+            semester?: number | null;
+            /** Title */
+            title: string;
+            /** Record Summary */
+            record_summary: string;
+            /** Existing Summary */
+            existing_summary: string;
+            /**
+             * Differences
+             * @default []
+             */
+            differences: string[];
+        };
+        /**
+         * RecordReview
+         * @description 교체 업로드의 대조 결과.
+         *
+         *     - clean_imported: 이상·충돌이 없어 서버가 바로 반영했다.
+         *     - needs_review: 이상이나 충돌이 있어 반영하지 않고 확인을 기다린다.
+         *     - resolved / discarded: 생기부 확인 상담에서 정한 대로 반영했다 / 반영하지 않기로 했다.
+         */
+        RecordReview: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "clean_imported" | "needs_review" | "resolved" | "discarded";
+            /**
+             * Anomalies
+             * @default []
+             */
+            anomalies: components["schemas"]["RecordAnomaly"][];
+            /**
+             * Conflicts
+             * @default []
+             */
+            conflicts: components["schemas"]["RecordConflict"][];
+            /**
+             * Import Plan
+             * @default {}
+             */
+            import_plan: {
+                [key: string]: number[];
+            };
+            /**
+             * Fill Placeholders
+             * @default {}
+             */
+            fill_placeholders: {
+                [key: string]: number;
+            };
+            /**
+             * Skipped Duplicates
+             * @default {}
+             */
+            skipped_duplicates: {
+                [key: string]: number;
+            };
+            /** Imported */
+            imported?: {
+                [key: string]: number;
+            } | null;
+        };
         /** RefreshRequest */
         RefreshRequest: {
             /** Refresh Token */
@@ -4198,6 +4557,8 @@ export interface components {
         };
         /** SeteukAnalysisResult */
         SeteukAnalysisResult: {
+            /** Student Name */
+            student_name?: string | null;
             /** Freshman Academic Year */
             freshman_academic_year?: number | null;
             /**
@@ -4257,6 +4618,35 @@ export interface components {
             access_token: string;
             /** Refresh Token */
             refresh_token: string;
+        };
+        /** SubjectListResponse */
+        SubjectListResponse: {
+            /** Curriculum */
+            curriculum: string;
+            /** Items */
+            items: components["schemas"]["SubjectRead"][];
+        };
+        /** SubjectRead */
+        SubjectRead: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Curriculum */
+            curriculum: string;
+            /** Group */
+            group: string;
+            /** Category */
+            category: string;
+            /** Default Units */
+            default_units: number;
+            /** Track */
+            track?: string | null;
+            /**
+             * Verified
+             * @default true
+             */
+            verified: boolean;
         };
         /** SuggestRequest */
         SuggestRequest: {
@@ -4323,6 +4713,8 @@ export interface components {
             id: string;
             /** Course Name */
             course_name: string;
+            /** Subject Code */
+            subject_code?: string | null;
             /** Teacher */
             teacher?: string | null;
             /** Room */
@@ -4435,6 +4827,11 @@ export interface components {
             status: components["schemas"]["UploadStatus"];
         };
         /**
+         * UploadMode
+         * @enum {string}
+         */
+        UploadMode: "onboarding" | "replace";
+        /**
          * UploadStatus
          * @enum {string}
          */
@@ -4448,6 +4845,9 @@ export interface components {
             imported_at?: string | null;
             /** Failure Reason */
             failure_reason?: string | null;
+            /** @default onboarding */
+            mode: components["schemas"]["UploadMode"];
+            review?: components["schemas"]["RecordReview"] | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -5867,6 +6267,156 @@ export interface operations {
             };
         };
     };
+    get_current_courses_api_v1_profile_current_courses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentCoursesResponse"];
+                };
+            };
+        };
+    };
+    set_current_courses_api_v1_profile_current_courses_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CurrentCoursesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentCoursesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_subjects_api_v1_subjects_get: {
+        parameters: {
+            query?: {
+                curriculum?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubjectListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_subjects_api_v1_subjects_search_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                curriculum?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubjectListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    common_subjects_api_v1_subjects_common_get: {
+        parameters: {
+            query: {
+                grade: number;
+                semester: number;
+                curriculum?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubjectListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     resolve_my_education_policy_api_v1_education_policies_me_get: {
         parameters: {
             query?: never;
@@ -6080,6 +6630,37 @@ export interface operations {
             };
         };
     };
+    list_session_messages_api_v1_consultation_sessions__session_id__messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_message_api_v1_consultation_sessions__session_id__messages_post: {
         parameters: {
             query?: never;
@@ -6094,6 +6675,37 @@ export interface operations {
                 "application/json": components["schemas"]["ConsultationMessageCreate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_opening_api_v1_consultation_sessions__session_id__opening_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -6150,6 +6762,41 @@ export interface operations {
             };
         };
     };
+    confirm_flow_api_v1_consultation_sessions__session_id__confirm_flow_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmFlowRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsultationSessionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     conclude_session_api_v1_consultation_sessions__session_id__conclude_post: {
         parameters: {
             query?: never;
@@ -6177,6 +6824,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_or_resume_record_review_api_v1_consultation_record_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsultationSessionRead"];
                 };
             };
         };
@@ -8350,6 +9017,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_conversation_api_v1_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationRead"];
+                };
             };
             /** @description Validation Error */
             422: {
