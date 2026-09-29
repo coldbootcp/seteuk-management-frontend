@@ -6794,3 +6794,158 @@
   display: flex;
   justify-content: flex-end;
 }
+
+/* ── 처음 사용 투어 ──
+   가리키는 요소에 테두리를 두르고 옆에 흰 말풍선을 붙인다. 나머지 화면은 옅게만 어둡게 한다.
+   데스크톱 전용이라(모바일은 사이드바가 서랍이라 가리킬 메뉴가 없다) 768px 이하에서는 감춘다. */
+/* 바깥의 큰 그림자가 강조한 곳 외의 화면을 옅게 어둡게 한다(짙게 덮지 않는다). */
+.tour-ring {
+  border: 2px solid var(--color-brand-500, #3182F6);
+  border-radius: 14px;
+  box-shadow: 0 0 0 4px rgba(49, 130, 246, 0.14), 0 0 0 200vmax rgba(15, 23, 42, 0.16);
+  animation: tour-fade-in 0.24s ease-out;
+  pointer-events: none;
+  position: fixed;
+  z-index: 60;
+}
+
+/* 다음 블록으로 옮겨 갈 때만 미끄러지듯 움직인다. 스크롤을 따라갈 때는 지연 없이 붙어야
+   내용보다 뒤처져 보이지 않는다. 시간은 guided-tour.tsx의 MOVE_MS와 맞춘다. */
+.tour-ring.is-moving {
+  transition:
+    top 0.36s cubic-bezier(0.22, 0.8, 0.3, 1),
+    left 0.36s cubic-bezier(0.22, 0.8, 0.3, 1),
+    width 0.36s cubic-bezier(0.22, 0.8, 0.3, 1),
+    height 0.36s cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+
+.tour-bubble {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(25, 31, 40, 0.14), 0 2px 6px rgba(25, 31, 40, 0.06);
+  opacity: 0;
+  padding: 16px 16px 12px;
+  pointer-events: none;
+  position: fixed;
+  transform: translateY(6px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  z-index: 61;
+}
+
+/* 테두리가 자리를 잡은 뒤 살짝 늦게 떠오른다. */
+.tour-bubble.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  transition: opacity 0.22s ease 0.12s, transform 0.22s cubic-bezier(0.22, 0.8, 0.3, 1) 0.12s;
+}
+
+@keyframes tour-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tour-arrow {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  height: 12px;
+  position: absolute;
+  width: 12px;
+}
+.tour-bubble-right  .tour-arrow { border-right: 0; border-top: 0; left: -7px; margin-top: -6px; transform: rotate(45deg); }
+.tour-bubble-left   .tour-arrow { border-left: 0; border-bottom: 0; right: -7px; margin-top: -6px; transform: rotate(45deg); }
+.tour-bubble-bottom .tour-arrow { border-right: 0; border-bottom: 0; top: -7px; margin-left: -6px; transform: rotate(45deg); }
+.tour-bubble-top    .tour-arrow { border-left: 0; border-top: 0; bottom: -7px; margin-left: -6px; transform: rotate(45deg); }
+
+.tour-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.tour-body {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 6px;
+}
+
+.tour-footer {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.tour-count {
+  color: var(--subtle);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.tour-actions { align-items: center; display: flex; gap: 4px; }
+
+.tour-skip,
+.tour-prev {
+  border-radius: 8px;
+  color: var(--subtle);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 10px;
+  transition: background 0.15s, color 0.15s;
+}
+.tour-prev { color: var(--muted); }
+.tour-skip:hover,
+.tour-prev:hover { background: var(--color-brand-50, #F0F7FF); color: var(--text); }
+
+.tour-next {
+  background: var(--color-brand-500, #3182F6);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 14px;
+  transition: background 0.15s;
+}
+.tour-next:hover { background: var(--color-brand-600, #1B64DA); }
+.tour-next:focus-visible,
+.tour-skip:focus-visible,
+.tour-prev:focus-visible { outline: 2px solid var(--color-brand-500, #3182F6); outline-offset: 2px; }
+
+/* 직접 눌러 보는 단계에서 누를 곳. 앱이 className을 바꿔도 남도록 data 속성으로 붙인다. */
+/* 표시는 요소 안쪽에 그린다 — 스크롤 목록 안의 항목도 잘리지 않게. 파란 테두리 안에 흰 줄을
+   한 겹 더 둬서, 흰 카드 위에서도 파란 버튼 위에서도 보이게 한다. */
+[data-tour-action] {
+  animation: tour-action-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tour-action-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgba(49, 130, 246, 1), inset 0 0 0 4px rgba(255, 255, 255, 0.9); }
+  50% { box-shadow: inset 0 0 0 2px rgba(49, 130, 246, 0.3), inset 0 0 0 4px rgba(255, 255, 255, 0.3); }
+}
+
+/* 버튼처럼 보이면 눌러 보게 되므로, 배경 없는 안내 글자로 둔다. */
+.tour-hint {
+  color: var(--color-brand-600, #1B64DA);
+  cursor: default;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 4px 7px 8px;
+  user-select: none;
+}
+
+@media (max-width: 768px) {
+  .tour-ring,
+  .tour-bubble { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-ring,
+  .tour-ring.is-moving,
+  .tour-bubble,
+  .tour-bubble.is-visible,
+  [data-tour-action] { animation: none; transition: none; transform: none; }
+}
