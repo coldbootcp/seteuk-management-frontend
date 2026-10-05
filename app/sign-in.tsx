@@ -419,7 +419,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
                   id="auth-password"
                   minLength={8}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="영문+숫자 포함 8자 이상"
+                  placeholder={mode === "signup" ? "영문+숫자 포함 8자 이상" : "영문 또는 숫자 8자 이상"}
                   required
                   type={showPassword ? "text" : "password"}
                   value={password}
