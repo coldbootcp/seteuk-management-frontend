@@ -1149,80 +1149,6 @@ export interface paths {
         patch: operations["update_record_api_v1_academic_performance__record_id__patch"];
         trace?: never;
     };
-    "/api/v1/reading-activities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Records */
-        get: operations["list_records_api_v1_reading_activities_get"];
-        put?: never;
-        /** Create Record */
-        post: operations["create_record_api_v1_reading_activities_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/reading-activities/{record_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Record */
-        get: operations["get_record_api_v1_reading_activities__record_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Record */
-        delete: operations["delete_record_api_v1_reading_activities__record_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Record */
-        patch: operations["update_record_api_v1_reading_activities__record_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/awards": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Records */
-        get: operations["list_records_api_v1_awards_get"];
-        put?: never;
-        /** Create Record */
-        post: operations["create_record_api_v1_awards_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/awards/{record_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Record */
-        get: operations["get_record_api_v1_awards__record_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Record */
-        delete: operations["delete_record_api_v1_awards__record_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Record */
-        patch: operations["update_record_api_v1_awards__record_id__patch"];
-        trace?: never;
-    };
     "/api/v1/volunteer-records": {
         parameters: {
             query?: never;
@@ -1538,7 +1464,7 @@ export interface paths {
         put?: never;
         /**
          * Complete Plan
-         * @description 계획을 실제 기록으로 승격 — 활동/독서 탭에 행이 생기고 계보가 이어진다.
+         * @description 계획을 실제 기록으로 승격 — 활동 탭에 행이 생기고 계보가 이어진다.
          */
         post: operations["complete_plan_api_v1_plans__plan_id__complete_post"];
         delete?: never;
@@ -2947,86 +2873,6 @@ export interface components {
             /** Note */
             note?: string | null;
         };
-        /** AwardCreate */
-        AwardCreate: {
-            /** Name */
-            name: string;
-            /** Rank */
-            rank?: string | null;
-            /** Participants */
-            participants?: string | null;
-            /** Date */
-            date?: string | null;
-            /** Raw Date */
-            raw_date?: string | null;
-            /** Grade */
-            grade?: number | null;
-            /** Semester */
-            semester?: number | null;
-        };
-        /** AwardItem */
-        AwardItem: {
-            /** Name */
-            name: string;
-            /** Rank */
-            rank?: string | null;
-            /** Date */
-            date?: string | null;
-            /** Raw Date */
-            raw_date?: string | null;
-            /** Participants */
-            participants?: string | null;
-            /** Grade */
-            grade?: number | null;
-            /** Semester */
-            semester?: number | null;
-        };
-        /** AwardRead */
-        AwardRead: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Source Upload Id */
-            source_upload_id: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Name */
-            name: string;
-            /** Rank */
-            rank: string | null;
-            /** Date */
-            date: string | null;
-            /** Raw Date */
-            raw_date: string | null;
-            /** Grade */
-            grade: number | null;
-            /** Semester */
-            semester: number | null;
-            /** Participants */
-            participants: string | null;
-        };
-        /** AwardUpdate */
-        AwardUpdate: {
-            /** Grade */
-            grade?: number | null;
-            /** Semester */
-            semester?: number | null;
-            /** Name */
-            name?: string | null;
-            /** Rank */
-            rank?: string | null;
-            /** Participants */
-            participants?: string | null;
-            /** Date */
-            date?: string | null;
-            /** Raw Date */
-            raw_date?: string | null;
-        };
         /** Body_create_upload_api_v1_seteuk_uploads_post */
         Body_create_upload_api_v1_seteuk_uploads_post: {
             /** File */
@@ -3624,10 +3470,6 @@ export interface components {
             attendance?: number[] | null;
             /** Academic Performance */
             academic_performance?: number[] | null;
-            /** Reading Activities */
-            reading_activities?: number[] | null;
-            /** Awards */
-            awards?: number[] | null;
             /** Volunteer Records */
             volunteer_records?: number[] | null;
             /** Activities */
@@ -3725,13 +3567,6 @@ export interface components {
             /** Total */
             total: number;
         };
-        /** ListResponse[AwardRead] */
-        ListResponse_AwardRead_: {
-            /** Items */
-            items: components["schemas"]["AwardRead"][];
-            /** Total */
-            total: number;
-        };
         /** ListResponse[CalendarEventRead] */
         ListResponse_CalendarEventRead_: {
             /** Items */
@@ -3750,13 +3585,6 @@ export interface components {
         ListResponse_PlanItemRead_: {
             /** Items */
             items: components["schemas"]["PlanItemRead"][];
-            /** Total */
-            total: number;
-        };
-        /** ListResponse[ReadingActivityRead] */
-        ListResponse_ReadingActivityRead_: {
-            /** Items */
-            items: components["schemas"]["ReadingActivityRead"][];
             /** Total */
             total: number;
         };
@@ -3843,16 +3671,12 @@ export interface components {
             activity_type?: components["schemas"]["ActivityType"] | null;
             /** Description */
             description?: string | null;
-            /** Author */
-            author?: string | null;
         };
         /** PlanItemCompleteResponse */
         PlanItemCompleteResponse: {
             plan_item: components["schemas"]["PlanItemRead"];
             /** Created Activity Id */
             created_activity_id?: string | null;
-            /** Created Reading Id */
-            created_reading_id?: string | null;
         };
         /** PlanItemCreate */
         PlanItemCreate: {
@@ -3912,8 +3736,6 @@ export interface components {
             source_recommendation_id: string | null;
             /** Completed Activity Id */
             completed_activity_id: string | null;
-            /** Completed Reading Id */
-            completed_reading_id: string | null;
             /** Keywords */
             keywords: string[];
             /**
@@ -3938,11 +3760,11 @@ export interface components {
         PlanItemStatus: "planned" | "in_progress" | "done" | "dropped";
         /**
          * PlanItemType
-         * @description 어느 탭에 속한 계획인지. 활동/독서/수행평가처럼 완료 시 실제 기록 행으로
+         * @description 어느 탭에 속한 계획인지. 활동/수행평가처럼 완료 시 실제 기록 행으로
          *     승격되는 타입과, 성적 목표처럼 승격 대상이 없는 타입이 섞여 있다.
          * @enum {string}
          */
-        PlanItemType: "activity" | "reading" | "assessment" | "grade" | "volunteer" | "award" | "other";
+        PlanItemType: "activity" | "assessment" | "grade" | "volunteer" | "other";
         /** PlanItemUpdate */
         PlanItemUpdate: {
             item_type?: components["schemas"]["PlanItemType"] | null;
@@ -4093,70 +3915,6 @@ export interface components {
             readiness: string;
             /** Missing Fields */
             missing_fields: string[];
-        };
-        /** ReadingActivityCreate */
-        ReadingActivityCreate: {
-            /** Grade */
-            grade: number;
-            /** Semester */
-            semester?: number | null;
-            /** Subject */
-            subject?: string | null;
-            /** Title */
-            title: string;
-            /** Author */
-            author?: string | null;
-        };
-        /** ReadingActivityItem */
-        ReadingActivityItem: {
-            /** Grade */
-            grade: number;
-            /** Semester */
-            semester?: number | null;
-            /** Subject */
-            subject?: string | null;
-            /** Title */
-            title: string;
-            /** Author */
-            author?: string | null;
-        };
-        /** ReadingActivityRead */
-        ReadingActivityRead: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Source Upload Id */
-            source_upload_id: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Grade */
-            grade: number;
-            /** Semester */
-            semester: number | null;
-            /** Subject */
-            subject: string | null;
-            /** Title */
-            title: string;
-            /** Author */
-            author: string | null;
-        };
-        /** ReadingActivityUpdate */
-        ReadingActivityUpdate: {
-            /** Grade */
-            grade?: number | null;
-            /** Semester */
-            semester?: number | null;
-            /** Subject */
-            subject?: string | null;
-            /** Title */
-            title?: string | null;
-            /** Author */
-            author?: string | null;
         };
         /** RecommendationOption */
         RecommendationOption: {
@@ -4550,8 +4308,6 @@ export interface components {
             semester: number;
             /** Grades Review */
             grades_review: string;
-            /** Reading Review */
-            reading_review: string;
             /** Activities Review */
             activities_review: string;
         };
@@ -4559,6 +4315,8 @@ export interface components {
         SeteukAnalysisResult: {
             /** Student Name */
             student_name?: string | null;
+            /** Name Matches Account */
+            name_matches_account?: boolean | null;
             /** Freshman Academic Year */
             freshman_academic_year?: number | null;
             /**
@@ -4571,16 +4329,6 @@ export interface components {
              * @default []
              */
             academic_performance: components["schemas"]["AcademicPerformanceItem"][];
-            /**
-             * Reading Activities
-             * @default []
-             */
-            reading_activities: components["schemas"]["ReadingActivityItem"][];
-            /**
-             * Awards
-             * @default []
-             */
-            awards: components["schemas"]["AwardItem"][];
             /**
              * Volunteer Records
              * @default []
@@ -7160,329 +6908,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AcademicPerformanceRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_records_api_v1_reading_activities_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-                grade?: number | null;
-                semester?: number | null;
-                subject?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListResponse_ReadingActivityRead_"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_record_api_v1_reading_activities_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReadingActivityCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReadingActivityRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_record_api_v1_reading_activities__record_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                record_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReadingActivityRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_record_api_v1_reading_activities__record_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                record_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_record_api_v1_reading_activities__record_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                record_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReadingActivityUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReadingActivityRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_records_api_v1_awards_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListResponse_AwardRead_"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_record_api_v1_awards_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AwardCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AwardRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_record_api_v1_awards__record_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                record_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AwardRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_record_api_v1_awards__record_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                record_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_record_api_v1_awards__record_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                record_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AwardUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AwardRead"];
                 };
             };
             /** @description Validation Error */

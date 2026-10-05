@@ -57,7 +57,7 @@ export type RoadmapNode = {
 export type RoadmapPlanEvent = {
   id: string;
   monthDay: string;
-  category: "상장" | "활동" | "봉사" | "독서" | "시험";
+  category: "활동" | "봉사" | "시험";
   subject: string;
   priority: "core" | "optional";
   title: string;
@@ -103,9 +103,9 @@ export type StudentActivity = {
   periodLabel?: string;
   createdAt?: string;
   /** 이 기록이 백엔드의 어느 테이블에서 왔는지. 후속 추천(`/recommendations/follow-up`)은
-   *  `activities` 테이블 행만 근거로 받을 수 있어, 상장·봉사·독서(각자의 테이블)와
+   *  `activities` 테이블 행만 근거로 받을 수 있어, 봉사(자기 테이블)와
    *  구분해야 한다. */
-  recordKind?: "activity" | "award" | "volunteer" | "reading";
+  recordKind?: "activity" | "volunteer";
 };
 
 export type ActivityAttachment = {
@@ -164,7 +164,6 @@ export type SemesterReview = {
   grade: number;
   semester: number;
   gradesReview: string;
-  readingReview: string;
   activitiesReview: string;
 };
 

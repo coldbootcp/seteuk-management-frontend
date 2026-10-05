@@ -507,7 +507,7 @@ export function ConsultationGate({
             <div className="space-y-2 text-left bg-gray-50 p-4 rounded-xl border border-gray-100 text-xs text-gray-600">
               {[
                 "학기별 성적 추이와 이수 단위 정리",
-                "학기별 성적·독서·활동 리뷰 생성",
+                "학기별 성적·활동 리뷰 생성",
                 "활동 인벤토리와 지식 연계 그래프 구성",
                 "강점·약점·기회·반복 패턴 종합",
               ].map((item) => (

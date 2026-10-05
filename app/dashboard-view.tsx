@@ -342,7 +342,7 @@ export function DashboardView({
               valueLabel={`${linkedTopicCount} / ${plannedTopicCount || "-"} 건`}
             />
             <ProgressBlock
-              caption="지금까지 남긴 활동·수상·봉사·독서 기록 전체"
+              caption="지금까지 남긴 활동·봉사 기록 전체"
               label="누적 기록"
               onClick={() => onNavigate("activities")}
               total={Math.max(activities.length, 1)}

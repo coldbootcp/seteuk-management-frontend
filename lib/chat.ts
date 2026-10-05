@@ -37,10 +37,8 @@ export type StoredMessage = {
 
 /** 수정 모드에서 챗봇이 실제로 무엇을 했는지 학생에게 한국어로 되짚어 준다. */
 export const TOOL_LABELS: Record<string, string> = {
-  add_reading: "독서 기록 추가",
   add_activity: "활동 추가",
   update_activity: "활동 수정",
-  add_award: "수상 추가",
   add_volunteer_record: "봉사 추가",
   add_academic_performance: "성적 추가",
   add_plan: "계획 추가",

@@ -28,9 +28,9 @@ test("the product exposes every primary surface", async () => {
   }
 
   assert.match(app, /활동 & 세특|활동 기록/);
-  assert.match(app, /상장/);
   assert.match(app, /봉사/);
-  assert.match(app, /독서/);
+  // 수상·독서는 대입에 반영되지 않아 서비스에서 없앴다 — 기록 갈래로 되살아나면 안 된다.
+  assert.doesNotMatch(app, /상장\(대회\)|<option>독서<\/option>|readingAuthor|awardRank/);
   assert.match(app, /활동 주제 제안/);
   assert.doesNotMatch(app, /Codex is working|react-loading-skeleton|codex-preview/);
 });
@@ -95,7 +95,8 @@ test("the school record review stays client-side and states the real storage pol
   // 응답 JSON을 화면용 초안으로 빚는 헬퍼는 프론트에 남았다.
   assert.match(parser, /50MB/);
   assert.match(parser, /academic_performance/);
-  assert.match(parser, /reading_activities/);
+  assert.match(parser, /volunteer_records/);
+  assert.doesNotMatch(parser, /reading_activities|result\.awards/);
   assert.match(parser, /result\.activities/);
   assert.match(parser, /dateBasis/);
   assert.match(parser, /인식 신뢰도|confidence/);

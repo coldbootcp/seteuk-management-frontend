@@ -1,4 +1,4 @@
-export type SchoolRecordCategory = "상장" | "활동" | "봉사" | "독서" | "시험";
+export type SchoolRecordCategory = "활동" | "봉사" | "시험";
 
 // The parser buffers the PDF in memory, so keep this below the Worker memory ceiling.
 export const SCHOOL_RECORD_MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -47,15 +47,6 @@ export type SchoolRecordPeriod = {
   semester: number;
 };
 
-type SeteukReadingActivity = {
-  author?: unknown;
-  grade?: unknown;
-  rank?: unknown;
-  semester?: unknown;
-  subject?: unknown;
-  title?: unknown;
-};
-
 type SeteukAcademicPerformance = {
   // 백엔드가 주는 이름은 achievement_grade다. 예전에는 achievement로 읽어서 성적이
   // 한 건도 검토 화면에 오르지 못했고, "교과 성적을 찾지 못했습니다" 경고만 떴다.
@@ -68,14 +59,6 @@ type SeteukAcademicPerformance = {
   semester?: unknown;
   subject?: unknown;
   units?: unknown;
-};
-
-type SeteukAward = {
-  date?: unknown;
-  grade?: unknown;
-  name?: unknown;
-  rank?: unknown;
-  semester?: unknown;
 };
 
 type SeteukVolunteerRecord = {
@@ -101,10 +84,8 @@ export type SeteukAnalysisResult = {
   academic_performance?: SeteukAcademicPerformance[];
   activities?: SeteukActivity[];
   attendance?: unknown[];
-  awards?: SeteukAward[];
   errors?: unknown[];
   freshman_academic_year?: unknown;
-  reading_activities?: SeteukReadingActivity[];
   student_name?: unknown;
   time_logs?: unknown[];
   volunteer_records?: SeteukVolunteerRecord[];
@@ -131,9 +112,7 @@ function detectSubject(line: string) {
 }
 
 function detectCategory(line: string, section: string): SchoolRecordCategory | null {
-  if (/수상|상장|우수상|표창/.test(line) || section === "수상") return "상장";
   if (/봉사/.test(line)) return "봉사";
-  if (/독서|도서|읽고|책을/.test(line) || section === "독서") return "독서";
   if (/중간고사|기말고사|정기고사|시험/.test(line)) return "시험";
   if (/대회|경진|발표회|공모전|수행평가|프로젝트|실험평가|보고서|탐구|세부능력|특기사항|발표|조사/.test(line) || section === "세특") return "활동";
   return null;
@@ -177,10 +156,8 @@ function entryTitle(line: string, category: SchoolRecordCategory, subject: strin
   const compact = withoutSubject.replace(/\s+/g, " ");
   if (compact.length >= 4 && !SECTION_TITLES.test(compact)) return compact.slice(0, 56);
   const defaults: Record<SchoolRecordCategory, string> = {
-    상장: "수상 기록",
     활동: `${subject} 활동 기록`,
     봉사: "봉사활동 기록",
-    독서: `${subject} 독서 활동`,
     시험: `${subject} 시험 기록`,
   };
   return defaults[category];
@@ -218,11 +195,11 @@ function periodIsKnown(value: unknown) {
 /**
  * 활동 영역에서 온 기록의 갈래.
  *
- * 예전에는 이름·설명·키워드를 이어 붙여 "수상|상장|봉사|독서"를 찾아 분류했다.
+ * 예전에는 이름·설명·키워드를 이어 붙여 "수상|상장|봉사|독서"를 찾아 분류했다(수상·독서는 이제 서비스에서 없앴다).
  * 부분 문자열 매칭이라 엉뚱한 곳에 걸린다 — 실제로 산업체 견학 활동의 설명에 있던
  * "영**상장**치"가 상장으로 읽혀, 수상경력에 견학 활동이 올라갔다.
  *
- * 추측할 이유가 없다. 백엔드가 수상·봉사·독서·성적을 각자의 영역으로 이미 나눠서
+ * 추측할 이유가 없다. 백엔드가 봉사·성적을 각자의 영역으로 이미 나눠서
  * 주므로, activities에 담겨 온 것은 정의상 활동이다. 그 안의 activity_category
  * (자율활동·동아리활동·진로활동·과목세부특기사항·행동특성및종합의견) 중 어느 것도
  * 다른 갈래에 속하지 않는다.
@@ -234,7 +211,7 @@ function apiActivityCategory(_item: SeteukActivity): SchoolRecordCategory {
 function isSeteukAnalysisResult(value: unknown): value is SeteukAnalysisResult {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as SeteukAnalysisResult;
-  return ["academic_performance", "activities", "awards", "reading_activities", "volunteer_records"].some((key) =>
+  return ["academic_performance", "activities", "volunteer_records"].some((key) =>
     Array.isArray(candidate[key as keyof SeteukAnalysisResult]),
   );
 }
@@ -268,50 +245,8 @@ export function parseSchoolRecordJson(
   const result: SeteukAnalysisResult = isSeteukAnalysisResult(jsonData)
     ? jsonData
     : Array.isArray(jsonData)
-      ? { reading_activities: jsonData, academic_performance: jsonData, activities: jsonData }
+      ? { academic_performance: jsonData, activities: jsonData }
       : {};
-
-  (result.reading_activities ?? []).forEach((item, index) => {
-    const title = textValue(item.title);
-    const author = textValue(item.author);
-    if (title && author) {
-      const grade = gradeValue(item.grade);
-      const semester = semesterValue(item.semester);
-      if (!isWithinMaxPeriod(grade, semester, maxPeriod)) return;
-      const subject = textValue(item.subject, "독서");
-
-      const id = `${grade}-${semester}-${subject}`;
-      const parsedRank = Number.parseInt(textValue(item.rank), 10);
-      // 구 교육과정 생기부에는 9등급 석차가 올 수 있다. 5등급제라고 가정해
-      // 잘라내지 말고, 실제 적용 한도는 입학 연도 정책을 읽는 성적 화면·서버가
-      // 결정한다.
-      const rank = Number.isInteger(parsedRank) && parsedRank >= 1 && parsedRank <= 9 ? parsedRank : null;
-      const existingCourse = courses.get(id);
-      if (!existingCourse) {
-        courses.set(id, { id, grade, semester, subject, rank });
-      } else if (rank !== null) {
-        courses.set(id, { ...existingCourse, rank });
-      }
-
-      const entryId = keyFor(grade, semester, subject, title);
-      if (!entries.has(entryId)) {
-        entries.set(entryId, {
-          id: `json-read-${index}-${entryId}`,
-          selected: true,
-          grade,
-          semester,
-          category: "독서",
-          subject,
-          title: `${title} (${author})`,
-          summary: `${author} 저. ${subject} 관련 독서 활동.`,
-          completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
-          confidence: 100,
-          dateBasis: "unknown",
-          periodBasis: "document",
-        });
-      }
-    }
-  });
 
   (result.academic_performance ?? []).forEach((item, index) => {
     const achievement = textValue(item.achievement_grade) || textValue(item.achievement);
@@ -351,39 +286,6 @@ export function parseSchoolRecordJson(
         });
       }
     }
-  });
-
-  (result.awards ?? []).forEach((item, index) => {
-    const name = textValue(item.name);
-    if (!name) return;
-
-    const rank = textValue(item.rank);
-    const parsedDate = parseApiDate(item.date);
-    const inferredPeriod = parsedDate && academicStartYear != null
-      ? periodFromDate(parsedDate, academicStartYear)
-      : null;
-    const grade = gradeValue(item.grade ?? inferredPeriod?.grade);
-    const semester = semesterValue(item.semester ?? inferredPeriod?.semester);
-    if (grade && !isWithinMaxPeriod(grade, semester, maxPeriod)) return;
-    const subject = "수상경력";
-    const title = rank ? `${name} · ${rank}` : name;
-    const entryId = keyFor(grade, semester, subject, title);
-    if (entries.has(entryId)) return;
-
-    entries.set(entryId, {
-      id: `json-award-${index}-${entryId}`,
-      selected: true,
-      grade,
-      semester,
-      category: "상장",
-      subject,
-      title,
-      summary: rank ? `${name}에서 ${rank}을 수상했습니다.` : `${name} 수상 기록입니다.`,
-      completedAt: parsedDate ?? "",  // 문서에 날짜가 없으면 지어내지 않는다.
-      confidence: parsedDate ? 100 : 86,
-      dateBasis: parsedDate ? "document" : "unknown",
-      periodBasis: "document",
-    });
   });
 
   (result.volunteer_records ?? []).forEach((item, index) => {
@@ -482,7 +384,7 @@ export function parseSchoolRecordJson(
   if (upstreamErrors.length) {
     warnings.push(`분석 과정에서 확인이 필요한 항목이 ${upstreamErrors.length}개 있습니다.`);
   }
-  if (!courses.size) warnings.push("교과 성적 또는 독서 과목을 찾지 못했습니다.");
+  if (!courses.size) warnings.push("교과 성적을 찾지 못했습니다.");
   if (!entries.size) warnings.push("분석 결과에서 반영 가능한 학생부 활동을 찾지 못했습니다.");
   if (entries.size) warnings.push("학생부 API는 활동의 정확한 날짜를 제공하지 않아 학기 안의 임시 날짜에 배치했습니다. 반영 전에 수정할 수 있습니다.");
   // 생기부의 세특은 과목당 한 덩어리로 쓰여 있어 어느 활동이 몇 학기인지 문서가

@@ -445,7 +445,7 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
           onSend={() => void send()}
           placeholder={
             mode === "edit"
-              ? "예: 어제 이기적 유전자 다 읽었어 (독서 기록에 추가됩니다)"
+              ? "예: 어제 지역아동센터에서 2시간 봉사했어 (봉사 기록에 추가됩니다)"
               : "예: 2학년 활동 중에 진로랑 가장 안 맞는 게 뭐야?"
           }
           streaming={streaming}
