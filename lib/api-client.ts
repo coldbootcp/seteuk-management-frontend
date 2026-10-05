@@ -36,6 +36,9 @@ export const tokens = {
   },
 };
 
+/** 로그인이 끝났음을 화면에 알리는 이벤트 이름(WorkspaceApp이 듣는다). */
+export const SESSION_EXPIRED_EVENT = "seteuk:session-expired";
+
 export class ApiError extends Error {
   constructor(readonly status: number, readonly errorCode: string, message: string) {
     super(message);
@@ -101,6 +104,14 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
       message = payload.message ?? message;
     } catch {
       /* 비-JSON 응답이면 기본 메시지 */
+    }
+    // 갱신으로도 살릴 수 없는 로그인(만료, 다른 기기에서 비밀번호 변경·탈퇴 등). 예전에는
+    // 오류만 던져서, 로그인된 줄 아는 화면이 데이터를 못 불러 온보딩으로 잘못 가고
+    // "유효하지 않은 토큰입니다"만 보였다. 저장된 로그인을 지우고 화면에 알린다.
+    // 비밀번호 확인 실패(INVALID_CREDENTIALS) 같은 401은 로그인 만료가 아니므로 제외한다.
+    if (response.status === 401 && access && code === "INVALID_TOKEN") {
+      tokens.clear();
+      if (typeof window !== "undefined") window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     }
     throw new ApiError(response.status, code, message);
   }

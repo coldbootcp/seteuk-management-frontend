@@ -9,6 +9,7 @@ import {
   logout,
   tokens,
   type AccountStatus,
+  SESSION_EXPIRED_EVENT,
 } from "../lib/api-client";
 import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
@@ -3953,6 +3954,8 @@ export function WorkspaceApp() {
   const [signedIn, setSignedIn] = useState(false);
   /** 랜딩에서 로그인/시작하기를 눌렀는지. 누르기 전에는 인증 화면을 띄우지 않는다. */
   const [authOpen, setAuthOpen] = useState(false);
+  /** 로그인이 만료돼 로그인 화면으로 돌아왔을 때 보여 줄 안내. */
+  const [sessionNotice, setSessionNotice] = useState("");
   // null이면 아직 확인 전, satisfied=false면 진단+상담 관문이 메인 화면을 막는다.
   const [consultationStatus, setConsultationStatus] = useState<ConsultationStatus | null>(null);
   // 이메일 인증·탈퇴 유예 상태. null이면 아직 확인 전이거나(로그인 전) 문제
@@ -4077,6 +4080,21 @@ export function WorkspaceApp() {
     });
   }, [signedIn, accountStatus, consultationStatus, workspace]);
 
+  useEffect(() => {
+    const onExpired = () => {
+      setWorkspace(null);
+      setConsultationStatus(null);
+      setAccountStatus(null);
+      setError("");
+      setLoading(false);
+      setSignedIn(false);
+      setAuthOpen(true);
+      setSessionNotice("로그인이 만료되었어요. 다시 로그인해 주세요.");
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, []);
+
   const loadingCopy = useMemo(() => (loading ? "학생 작업공간을 불러오는 중…" : ""), [loading]);
 
   // 조기 반환은 훅을 전부 부른 뒤에 온다. 훅보다 앞에 두면 로그인 전후로 호출
@@ -4086,7 +4104,9 @@ export function WorkspaceApp() {
     if (!authOpen) return <LandingView onGoToLogin={() => setAuthOpen(true)} />;
     return (
       <SignIn
+        notice={sessionNotice}
         onSignedIn={() => {
+          setSessionNotice("");
           setSignedIn(true);
           checkAccountThenGate();
         }}
