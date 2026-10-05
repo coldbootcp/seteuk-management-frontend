@@ -151,6 +151,10 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await api("/auth/password/forgot", { method: "POST", body: { email } });
 }
 
+export async function joinWaitlist(email: string): Promise<void> {
+  await api("/auth/waitlist", { method: "POST", body: { email } });
+}
+
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
   await api("/auth/password/reset", {
     method: "POST",

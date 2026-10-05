@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   ApiError,
   GOOGLE_CLIENT_ID,
+  joinWaitlist,
   login,
   loginWithGoogle,
   requestPasswordReset,
@@ -23,6 +24,13 @@ import { PasswordHints } from "./password-hints";
  */
 
 type Mode = "login" | "signup" | "forgot";
+
+/**
+ * 회원가입 공개 여부. 오픈 전에는 "회원가입"을 누르면 준비 중 안내만 보인다.
+ * 열 때는 `NEXT_PUBLIC_SIGNUP_OPEN=true`로 빌드한다. 백엔드 쪽 차단은
+ * `ACCESS_ALLOWLIST`가 따로 맡는다 — 이 값은 화면 안내일 뿐이다.
+ */
+const SIGNUP_OPEN = process.env.NEXT_PUBLIC_SIGNUP_OPEN === "true";
 
 /**
  * 인증 실패를 사람이 읽을 말로 옮긴다. 백엔드는 로그인 실패를 한 가지 코드로만
@@ -63,6 +71,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
   const [forgotSent, setForgotSent] = useState(false);
+  const [waitlistSent, setWaitlistSent] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -100,6 +109,20 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     try {
       await requestPasswordReset(email);
       setForgotSent(true);
+    } catch (caught) {
+      setError(readableAuthError(caught, mode));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitWaitlist(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await joinWaitlist(email);
+      setWaitlistSent(true);
     } catch (caught) {
       setError(readableAuthError(caught, mode));
     } finally {
@@ -211,6 +234,74 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "signup" && !SIGNUP_OPEN) {
+    return (
+      <div className="min-h-screen bg-surface-bg flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center space-y-3">
+            <div className="flex items-center justify-center gap-2">
+              <img alt="세특연구소 로고" className="w-9 h-9 object-contain" src="/logo.png?v=2" />
+              <span className="text-xl font-extrabold text-gray-950 tracking-tight">세특연구소</span>
+            </div>
+            <h2 className="text-2xl font-extrabold text-gray-950 tracking-tight">서비스 준비 중입니다</h2>
+          </div>
+
+          <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl border border-gray-200/90 shadow-xl space-y-5 text-center">
+            <p className="text-xs text-gray-700 leading-relaxed">
+              세특연구소는 아직 오픈을 준비하고 있습니다.
+              <br />
+              정식으로 열면 누구나 무료로 가입할 수 있어요.
+            </p>
+            {waitlistSent ? (
+              <p className="text-xs text-gray-700 leading-relaxed">
+                <strong className="text-gray-950">{email}</strong>을(를) 남겨주셨어요. 오픈하면
+                알려드릴게요.
+              </p>
+            ) : (
+              <form className="space-y-3 text-left" onSubmit={submitWaitlist}>
+                <label className="block text-xs font-bold text-gray-700" htmlFor="waitlist-email">
+                  오픈 소식을 받을 메일주소 (선택)
+                </label>
+                <input
+                  autoComplete="email"
+                  className={fieldClass}
+                  id="waitlist-email"
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="name@example.com"
+                  required
+                  type="email"
+                  value={email}
+                />
+                {error && (
+                  <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
+                    {error}
+                  </div>
+                )}
+                <button
+                  className="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl transition disabled:opacity-60"
+                  disabled={busy}
+                  type="submit"
+                >
+                  {busy ? "등록 중…" : "오픈 알림 받기"}
+                </button>
+              </form>
+            )}
+            <button
+              className="text-xs text-gray-500 hover:text-gray-700 font-semibold"
+              onClick={() => {
+                setError("");
+                setMode("login");
+              }}
+              type="button"
+            >
+              로그인으로 돌아가기
+            </button>
           </div>
         </div>
       </div>
