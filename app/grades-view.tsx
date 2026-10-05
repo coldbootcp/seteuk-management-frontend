@@ -15,6 +15,7 @@ import {
 import { api } from "../lib/api-client";
 import type { components } from "../lib/api-types";
 import { Icon } from "./icons";
+import type { StudentActivity } from "../lib/product-harness";
 
 type EducationPolicyResolution = components["schemas"]["EducationPolicyResolutionRead"];
 
@@ -26,7 +27,11 @@ interface GradesViewProps {
   onNavigateToTimetable: () => void;
   onNavigateToActivities?: (subjectName: string) => void;
   onRecordsChanged?: () => void;
+  /** 세특 연계를 세는 근거. 과목·학년·학기가 맞는 과목세부특기사항 기록 수를 센다. */
+  activities?: StudentActivity[];
 }
+
+const normalizeSubject = (name: string) => name.replace(/\s+/g, "").toLowerCase();
 
 /**
  * 6개 학기의 빈 뼈대. 예전에는 이 자리에 목업 성적 40여 과목이 하드코딩돼 있어서,
@@ -126,7 +131,27 @@ export function GradesView({
   onNavigateToTimetable,
   onNavigateToActivities,
   onRecordsChanged,
+  activities = [],
 }: GradesViewProps) {
+  // 과목별 세특 수. 예전에는 행마다 0으로 고정돼 있어, 생기부에 세특이 있어도 모든 과목이
+  // "세특 0건", 연계율이 0%로 보였다. 학기가 비어 있는 세특(1학년 세특 등)은 그 학년의
+  // 두 학기 모두에 센다.
+  const seteukCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const activity of activities) {
+      if (activity.activityCategory !== "과목세부특기사항" || !activity.subject) continue;
+      const subject = normalizeSubject(activity.subject);
+      const semesters = activity.semester ? [activity.semester] : [1, 2];
+      for (const semester of semesters) {
+        const key = `${activity.grade}-${semester}-${subject}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [activities]);
+  const seteukOf = (grade: number, semester: number, courseName: string) =>
+    seteukCounts.get(`${grade}-${semester}-${normalizeSubject(courseName)}`) ?? 0;
+
   const [semestersData, setSemestersData] = useState<SemesterGradeData[]>(() =>
     syncTimetableWithSemesters(emptySemesters(), defaultTimetable).updatedData
   );
@@ -324,9 +349,10 @@ export function GradesView({
       sem.items.forEach((item) => {
         totalCourses += 1;
         if (item.rank !== null || item.achievement !== null) gradedCourses += 1;
-        if (item.seteukCount > 0) linkedCourses += 1;
+        const seteuk = seteukOf(sem.grade, sem.semester, item.courseName);
+        if (seteuk > 0) linkedCourses += 1;
         if (sem.grade === currentGrade && sem.semester === currentSemester) {
-          currentSemesterSeteuk += item.seteukCount;
+          currentSemesterSeteuk += seteuk;
         }
       });
     });
@@ -342,7 +368,9 @@ export function GradesView({
       linkRate: totalCourses ? Math.round((linkedCourses / totalCourses) * 100) : 0,
       currentSemesterSeteuk,
     };
-  }, [semestersData, currentGrade, currentSemester, rankOptions]);
+    // seteukOf는 seteukCounts로만 바뀐다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [semestersData, currentGrade, currentSemester, rankOptions, seteukCounts]);
 
   // 현재 선택된 학기의 요약 통계 (전체 평점, 국수영 평점)
   const currentSemStats = useMemo(() => {
@@ -1008,11 +1036,11 @@ export function GradesView({
                     <td className="text-center">
                       <button
                         type="button"
-                        className={`seteuk-link-badge ${item.seteukCount > 0 ? "linked" : "empty"}`}
+                        className={`seteuk-link-badge ${seteukOf(activeGrade, activeSem, item.courseName) > 0 ? "linked" : "empty"}`}
                         onClick={() => onNavigateToActivities?.(item.courseName)}
                         title="이 과목 세특 기록 보러가기"
                       >
-                        {item.seteukCount > 0 ? `세특 ${item.seteukCount}건` : "세특 0건"}
+                        {`세특 ${seteukOf(activeGrade, activeSem, item.courseName)}건`}
                       </button>
                     </td>
 

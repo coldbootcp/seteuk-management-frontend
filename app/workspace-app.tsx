@@ -3920,6 +3920,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
                 startActivity({ title: `${subject} 세특 활동`, subject });
               }}
               onRecordsChanged={onRefresh}
+              activities={workspace.activities}
             />
           )}
           {tab === "portfolio" && <ApplicationPreparationView workspace={workspace} />}
