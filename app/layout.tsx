@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AnalyticsInit } from "./analytics-init";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,7 +33,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <AnalyticsInit />
+        {children}
+      </body>
     </html>
   );
 }

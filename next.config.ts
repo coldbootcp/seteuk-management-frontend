@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
       "https://accounts.google.com",
       "https://vercel.live",
       "wss://ws-us3.pusher.com",
+      // Amplitude 이벤트 전송(lib/analytics.ts). 원격 설정·진단 전송은 꺼 두어 이 두 곳만 쓴다.
+      "https://api2.amplitude.com",
+      "https://api.eu.amplitude.com",
       apiOrigin,
     ]
       .filter(Boolean)

@@ -14,6 +14,7 @@ import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
 import { fetchTimetables, saveTimetables } from "../lib/timetables-api";
 import { replacementStatus, rerunDiagnosis, type ReplacementStatus } from "../lib/school-record-api";
+import { track } from "../lib/analytics";
 import { SignIn } from "./sign-in";
 import { LandingView } from "./landing-view";
 import { ConsultationGate } from "./consultation-view";
@@ -3327,6 +3328,10 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
   onRefresh: () => void;
 }) {
   const [tab, setTab] = useState<TabId>("overview");
+  // 어느 경로로 탭이 바뀌든(사이드바·카드 버튼·챗봇 안내) 한 번씩 남긴다. 탭 이름만 싣는다.
+  useEffect(() => {
+    track("Tab Viewed", { tab });
+  }, [tab]);
   const [activityDraft, setActivityDraft] = useState<ActivityDraft | null>(null);
 
   // 768px 이하에서는 사이드바가 화면 밖 서랍이 된다. 예전에는 사이드바를 그냥 숨겨서
