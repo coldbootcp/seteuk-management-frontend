@@ -11,6 +11,7 @@ import {
   resendVerificationEmail,
   signup,
 } from "../lib/api-client";
+import { track } from "../lib/analytics";
 import { PasswordHints } from "./password-hints";
 
 /**
@@ -94,6 +95,7 @@ export function SignIn({ onGoHome, onSignedIn }: { onGoHome: () => void; onSigne
         onSignedIn();
       } else if (mode === "login") {
         await login(email, password, rememberMe);
+        track("Login Completed", { method: "email" });
         onSignedIn();
       }
     } catch (caught) {
@@ -128,6 +130,7 @@ export function SignIn({ onGoHome, onSignedIn }: { onGoHome: () => void; onSigne
     setBusy(true);
     try {
       await joinWaitlist(email);
+      track("Waitlist Joined");
       setWaitlistSent(true);
     } catch (caught) {
       setError(readableAuthError(caught, mode));
@@ -152,6 +155,7 @@ export function SignIn({ onGoHome, onSignedIn }: { onGoHome: () => void; onSigne
     setBusy(true);
     try {
       await loginWithGoogle();
+      track("Login Completed", { method: "google" });
       onSignedIn();
     } catch (caught) {
       // 사용자가 구글 창을 그냥 닫은 것은 실패가 아니다 — 조용히 돌아온다.
@@ -531,6 +535,7 @@ export function SignIn({ onGoHome, onSignedIn }: { onGoHome: () => void; onSigne
             <button
               className="text-xs text-gray-600 hover:text-brand-600 font-semibold transition"
               onClick={() => {
+                if (mode === "login") track("Signup Clicked", { signup_open: SIGNUP_OPEN });
                 setMode(mode === "login" ? "signup" : "login");
                 setError("");
                 setVerificationEmail(null);

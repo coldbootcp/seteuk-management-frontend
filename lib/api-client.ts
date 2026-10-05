@@ -1,5 +1,7 @@
 "use client";
 
+import { identifyFromToken, resetAnalytics } from "./analytics";
+
 /**
  * 백엔드(FastAPI) 호출과 인증.
  *
@@ -24,11 +26,13 @@ export const tokens = {
   set(access: string, refresh?: string | null) {
     localStorage.setItem(ACCESS_KEY, access);
     if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
+    identifyFromToken(access);
   },
   clear() {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem("seteuk.active_chat_id");
+    resetAnalytics();
   },
 };
 
