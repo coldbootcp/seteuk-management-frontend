@@ -45,9 +45,31 @@ function shouldTrackClick(_actionType: unknown, element: unknown): boolean {
   return text.length > 0 && text.length <= MAX_CLICK_TEXT;
 }
 
+/**
+ * 클릭 이벤트에 Amplitude가 덧붙이는 "주변 제목 글자"(Parent Label)는 지운다 — 로그인 뒤
+ * 화면에서는 학생 이름이나 활동 제목이 든 제목일 수 있다. 접근성 이름(Aria Label)도 버튼
+ * 이름으로 보기엔 긴 글자면 지운다.
+ */
+const stripNearbyText: amplitude.Types.EnrichmentPlugin = {
+  name: "seteuk-strip-nearby-text",
+  type: "enrichment",
+  async execute(event) {
+    const props = event.event_properties as Record<string, unknown> | undefined;
+    if (props) {
+      delete props["[Amplitude] Element Parent Label"];
+      const aria = props["[Amplitude] Element Aria Label"];
+      if (typeof aria === "string" && aria.length > MAX_CLICK_TEXT) {
+        delete props["[Amplitude] Element Aria Label"];
+      }
+    }
+    return event;
+  },
+};
+
 export function initAnalytics(): void {
   if (started || !API_KEY || typeof window === "undefined") return;
   started = true;
+  amplitude.add(stripNearbyText);
   amplitude.add(
     sessionReplayPlugin({
       sampleRate: REPLAY_SAMPLE_RATE,
