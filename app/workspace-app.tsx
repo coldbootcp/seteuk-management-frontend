@@ -14,7 +14,7 @@ import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
 import { fetchTimetables, saveTimetables } from "../lib/timetables-api";
 import { replacementStatus, rerunDiagnosis, type ReplacementStatus } from "../lib/school-record-api";
-import { track } from "../lib/analytics";
+import { setUserProperties, track } from "../lib/analytics";
 import { SignIn } from "./sign-in";
 import { LandingView } from "./landing-view";
 import { ConsultationGate } from "./consultation-view";
@@ -4042,6 +4042,25 @@ export function WorkspaceApp() {
     });
   }, []);
 
+
+  // 분석용 사용자 속성. 상태값만 싣고 학생이 쓴 글(이름·진로 희망 등)은 넣지 않는다.
+  useEffect(() => {
+    if (!signedIn) return;
+    setUserProperties({
+      email_verified: accountStatus?.email_verified,
+      has_password: accountStatus?.has_password,
+      google_linked: accountStatus?.google_linked,
+      kakao_linked: accountStatus?.kakao_linked,
+      consultation_satisfied: consultationStatus?.satisfied,
+      onboarded: workspace ? true : undefined,
+      grade: workspace?.profile.grade,
+      semester: workspace?.profile.semester,
+      freshman_year: workspace?.profile.freshmanAcademicYear ?? undefined,
+      has_school_record: workspace ? workspace.schoolRecordCourses.length > 0 : undefined,
+      has_diagnosis: workspace ? Boolean(workspace.dna.narrative) : undefined,
+      activity_count: workspace?.activities.length,
+    });
+  }, [signedIn, accountStatus, consultationStatus, workspace]);
 
   const loadingCopy = useMemo(() => (loading ? "학생 작업공간을 불러오는 중…" : ""), [loading]);
 

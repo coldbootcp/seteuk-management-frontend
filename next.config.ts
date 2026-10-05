@@ -17,9 +17,13 @@ const nextConfig: NextConfig = {
       "https://accounts.google.com",
       "https://vercel.live",
       "wss://ws-us3.pusher.com",
-      // Amplitude 이벤트 전송(lib/analytics.ts). 원격 설정·진단 전송은 꺼 두어 이 두 곳만 쓴다.
+      // Amplitude(lib/analytics.ts): 이벤트 전송, 세션 리플레이 전송과 그 설정 조회.
       "https://api2.amplitude.com",
       "https://api.eu.amplitude.com",
+      "https://api-sr.amplitude.com",
+      "https://api-sr.eu.amplitude.com",
+      "https://sr-client-cfg.amplitude.com",
+      "https://sr-client-cfg.eu.amplitude.com",
       apiOrigin,
     ]
       .filter(Boolean)
@@ -36,6 +40,8 @@ const nextConfig: NextConfig = {
       "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com",
       `connect-src ${connectSrc}`,
       "frame-src https://accounts.google.com https://vercel.live",
+      // 세션 리플레이가 녹화 데이터를 압축하는 Web Worker를 blob URL로 띄운다.
+      "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
