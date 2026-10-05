@@ -632,7 +632,7 @@ export function TimetableView({
                       <span className="h-0.5 w-4 rounded-full bg-amber-700" />
                       <span className="h-0.5 w-4 rounded-full bg-amber-700" />
                     </span>
-                    <span>🍽</span><span>점심시간 · 휴식</span>
+                    <span>점심시간 · 휴식</span>
                   </div>
                 )}
                 {periodRow(period)}
@@ -651,7 +651,7 @@ export function TimetableView({
                     <span className="h-0.5 w-4 rounded-full bg-amber-700" />
                     <span className="h-0.5 w-4 rounded-full bg-amber-700" />
                   </span>
-                  <span>🍽</span><span>점심시간 · 휴식</span>
+                  <span>점심시간 · 휴식</span>
                 </div>
               </>
             )}

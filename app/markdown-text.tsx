@@ -5,7 +5,7 @@
  *
  * 백엔드 프롬프트가 굵게·목록·제목을 쓰라고 지시하지 않아도 모델이 습관적으로 쓰기
  * 때문에, 렌더러가 없으면 말풍선에 `**이렇게**` 원문이 그대로 찍힌다. 라이브러리를
- * 더하지 않고 굵게/기울임/인라인 코드/글머리 기호/번호 목록/제목만 처리한다 —
+ * 더하지 않고 굵게/기울임/인라인 코드/글머리 기호/번호 목록/제목/구분선만 처리한다 —
  * 채팅에서 실제로 쓰이는 것이 그 정도이고, 그 이상은 HTML 주입 위험만 키운다.
  *
  * **문자열을 HTML로 만들지 않는다.** 전부 React 노드로 쪼개므로 사용자 입력이나
@@ -75,7 +75,14 @@ export function MarkdownText({ text }: { text: string }) {
   };
 
   lines.forEach((rawLine, lineIndex) => {
-    const line = rawLine.trimEnd();
+    // 모델이 수식을 LaTeX처럼 `$x^2$`로 감싸 보내면 달러 기호가 그대로 찍힌다 — 감싼
+    // 기호만 걷어 낸다(수식 렌더러는 두지 않는다).
+    const line = rawLine.trimEnd().replace(/\$\$?([^$\n]+?)\$\$?/g, "$1");
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      flushList(`list-${lineIndex}`);
+      blocks.push(<hr className="my-2 border-gray-200" key={`hr-${lineIndex}`} />);
+      return;
+    }
     const bullet = /^\s*[-*•]\s+(.*)$/.exec(line);
     const ordered = /^\s*(\d+)[.)]\s+(.*)$/.exec(line);
     const heading = /^\s*#{1,6}\s+(.*)$/.exec(line);

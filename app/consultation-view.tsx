@@ -214,7 +214,10 @@ export function ConsultationGate({
       try {
         const latest = await api<DiagnosisResult>("/diagnosis/latest").catch(() => null);
         if (latest?.status === "done") {
-          if (!cancelled) setDiagnosis(latest);
+          // cancelled여도 반영한다. StrictMode(dev)에서는 이 이펙트가 정리된 뒤 ref
+          // 가드 때문에 다시 돌지 않으므로, 여기서 건너뛰면 아무도 진단을 넣지 않아
+          // 상담 중 새로고침한 학생이 "정밀 분석하는 중"에 영영 갇힌다.
+          setDiagnosis(latest);
           return;
         }
         // 진단 전 설문은 없다. 기록으로 진단을 먼저 만든 뒤, 필요한 확인만
@@ -753,8 +756,8 @@ export function ConsultationGate({
               <div className="lg:col-span-8 flex flex-col bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden h-[740px] md:h-[820px]">
                 {/* 헤더 */}
                 <div className="p-4 px-5 border-b border-gray-200/80 bg-white flex items-center gap-3 flex-none">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-gray-900 to-gray-700 text-white flex items-center justify-center text-lg font-bold shadow-xs flex-none">
-                    🎓
+                  <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-lg font-bold shadow-xs flex-none">
+                    <img alt="" className="w-3/5 h-3/5 object-contain" src="/logo.png?v=2" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -764,7 +767,7 @@ export function ConsultationGate({
                         실시간 1:1 상담 중
                       </span>
                     </div>
-                    <p className="text-[11px] text-gray-500">서울대·카이스트 등 상위권 공학계열 학종 로드맵 전담</p>
+                    <p className="text-[11px] text-gray-500">생기부와 진로를 바탕으로 3개년 로드맵을 함께 짜요</p>
                   </div>
                 </div>
 
@@ -796,9 +799,9 @@ export function ConsultationGate({
 
                       return (
                         <div className="flex items-start gap-2.5" key={msg.id}>
-                          <div className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold text-xs flex-none mt-1 shadow-xs">
-                            🎓
-                          </div>
+                          <div className="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center font-bold text-xs flex-none mt-1 shadow-xs">
+                    <img alt="" className="w-3/5 h-3/5 object-contain" src="/logo.png?v=2" />
+                  </div>
                           <div className="flex flex-col items-start max-w-[88%] space-y-2.5">
                             <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
                               <span className="font-bold text-gray-900">세특연구소 수석 컨설턴트 AI</span>
@@ -952,9 +955,9 @@ export function ConsultationGate({
                     {/* AI 타이핑 인디케이터 */}
                     {streaming && (
                       <div className="flex items-start gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold text-xs flex-none mt-1 shadow-xs">
-                          🎓
-                        </div>
+                        <div className="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center font-bold text-xs flex-none mt-1 shadow-xs">
+                    <img alt="" className="w-3/5 h-3/5 object-contain" src="/logo.png?v=2" />
+                  </div>
                         <div className="flex flex-col items-start space-y-1">
                           <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
                             <span className="font-bold text-gray-900">세특연구소 수석 컨설턴트 AI</span>
@@ -982,7 +985,7 @@ export function ConsultationGate({
                 {!streaming && quickReplies.length > 0 && (
                   <div className="px-5 py-2.5 bg-white border-t border-gray-100 flex flex-wrap gap-2 items-center flex-none">
                     <span className="text-[11px] text-gray-400 font-semibold flex items-center gap-1 flex-none mr-1">
-                      <span>💡</span> 추천 답변:
+                      추천 답변:
                     </span>
                     {quickReplies.map((replyText, idx) => (
                       <button
@@ -991,7 +994,6 @@ export function ConsultationGate({
                         onClick={() => void send(replyText)}
                         className="px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50/70 hover:bg-blue-100 border border-blue-200/80 text-brand-700 transition shadow-2xs cursor-pointer flex items-center gap-1"
                       >
-                        <span>💬</span>
                         <span>{replyText}</span>
                       </button>
                     ))}

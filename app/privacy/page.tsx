@@ -5,7 +5,7 @@ import Link from "next/link";
  * 실제로 안 하는 일을 적지 않는다(예: 생기부 개인정보 가리기는 아직 운영에 나가지 않아
  * 적지 않았다). 수집 범위가 바뀌면(새 외부 서비스, 새 수집 항목) 이 페이지도 같이 고칠 것:
  * - 서버·DB: Fly.io 도쿄(nrt) 리전 / 화면: Vercel
- * - AI: DeepSeek(중국) / 메일: Resend / 이용 분석·세션 녹화: Amplitude(US 데이터센터,
+ * - AI: Google Gemini API(미국) / 메일: Resend / 이용 분석·세션 녹화: Amplitude(US 데이터센터,
  *   lib/analytics.ts — 글자·입력 가림, 이메일 대신 사용자 UUID)
  */
 
@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
       <div className="max-w-2xl mx-auto bg-white rounded-3xl border border-gray-200/90 p-10 space-y-8 text-sm text-gray-700 leading-relaxed">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-950 mb-1">개인정보 처리방침</h1>
-          <p className="text-xs text-gray-400">시행일: 2026-10-05</p>
+          <p className="text-xs text-gray-400">시행일: 2026-10-06</p>
         </div>
 
         <p>
@@ -110,7 +110,7 @@ export default function PrivacyPolicyPage() {
                   <td className={cell}>웹 화면 제공(접속 기록 처리)</td>
                 </tr>
                 <tr>
-                  <td className={cell}>DeepSeek</td>
+                  <td className={cell}>Google LLC (Gemini API)</td>
                   <td className={cell}>생활기록부 분석, 진단·로드맵 생성, AI 챗봇 응답</td>
                 </tr>
                 <tr>
@@ -158,10 +158,13 @@ export default function PrivacyPolicyPage() {
                   <td className={cell}>웹 화면 제공</td>
                 </tr>
                 <tr>
-                  <td className={cell}>DeepSeek (privacy@deepseek.com)</td>
-                  <td className={cell}>중국</td>
                   <td className={cell}>
-                    생활기록부의 학업·활동 기록, 진로 희망, 학생이 입력한 기록과 대화 내용
+                    Google LLC (policies.google.com/privacy의 개인정보 문의 양식)
+                  </td>
+                  <td className={cell}>미국</td>
+                  <td className={cell}>
+                    생활기록부의 학업·활동 기록(이름·학교 등 식별 정보는 지운 뒤 전송), 이름, 진로
+                    희망, 학생이 입력한 기록과 대화 내용
                   </td>
                   <td className={cell}>AI 분석·진단·상담 응답 생성</td>
                 </tr>
@@ -288,8 +291,8 @@ export default function PrivacyPolicyPage() {
         <section className="space-y-2">
           <h2 className="text-base font-bold text-gray-950">15. 처리방침의 변경</h2>
           <p>
-            이 방침은 2026년 10월 5일부터 적용됩니다. 내용이 바뀌면 시행 7일 전에 서비스
-            화면으로 알립니다. 이전 방침은 2026년 9월 15일부터 적용되었습니다.
+            이 방침은 2026년 10월 6일부터 적용됩니다. 내용이 바뀌면 시행 7일 전에 서비스
+            화면으로 알립니다. 이전 방침은 2026년 9월 15일, 10월 5일부터 적용되었습니다.
           </p>
         </section>
 

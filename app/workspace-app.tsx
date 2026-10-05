@@ -263,18 +263,23 @@ async function analyzeSchoolRecordPdf(file: File, signal?: AbortSignal, onProgre
     signal,
   });
   if (!initial.task_id) throw new Error("분석 작업 ID를 발급받지 못했습니다.");
+  return waitForSchoolRecordAnalysis(initial.task_id, signal, onProgress);
+}
 
+/** 이미 올린 생기부의 분석이 끝나기를 기다린다. 새로고침 뒤 이어 볼 때도 쓴다. */
+async function waitForSchoolRecordAnalysis(taskId: string, signal?: AbortSignal, onProgress?: (state: SchoolRecordProgress) => void) {
   // 상태 조회 자체가 실패하는 것(네트워크 끊김 등)과 분석이 실제로 실패로
   // 끝난 것(status === "failed")은 서로 다르다 — 전자만 몇 번 재시도한다.
   // 후자는 재시도해도 똑같은 결과이므로 바로 사용자에게 이유를 보여준다.
   let temporaryFailures = 0;
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  // 1.5초 × 200 = 5분. 아래 시간 초과 안내와 맞춘다(예전에는 90초에서 끊겼다).
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 1500));
     if (signal?.aborted) throw new Error("생기부 분석을 취소했습니다.");
 
     let task: SchoolRecordProgress;
     try {
-      task = await jsonRequest<SchoolRecordProgress>(`/api/school-record/status/${encodeURIComponent(initial.task_id)}`, { signal });
+      task = await jsonRequest<SchoolRecordProgress>(`/api/school-record/status/${encodeURIComponent(taskId)}`, { signal });
       temporaryFailures = 0;
     } catch (error) {
       temporaryFailures += 1;
@@ -451,11 +456,14 @@ function summarizeOnboardingRecord(parsed: SchoolRecordParseResult, completedGra
   const isInScope = (item: { grade: number }) => !completedGrade || item.grade <= completedGrade;
   const courses = parsed.courses.filter(isInScope);
   const entries = parsed.entries.filter(isInScope);
-  const subjects = [...new Set(courses.map((course) => course.subject).filter((subject) => subject && subject !== "교과 외 활동"))].slice(0, 8);
+  const allSubjects = [...new Set(courses.map((course) => course.subject).filter((subject) => subject && subject !== "교과 외 활동"))];
+  // 관심 과목 칸에는 앞의 8개만 채운다. 개수 안내는 잘리기 전 전체로 한다.
+  const subjects = allSubjects.slice(0, 8);
   const entryLabels = entries.slice(0, 8).map((entry) => `${entry.category}: ${entry.title}`);
 
   return {
     subjects,
+    subjectCount: allSubjects.length,
     entries,
     currentActivities: entryLabels.length ? `생기부에서 확인된 기록\n${entryLabels.join("\n")}` : "",
   };
@@ -601,14 +609,19 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       return changed ? next : cur;
     });
 
-    const detectedMessage = completedGrade ? ` 생기부는 ${completedGrade}학년까지 확정된 기록으로 보았습니다.` : "";
-    const gradeMessage = expectedCurrentGrade ? ` 생기부 기준 현재 상태 후보는 ${gradeLabel(expectedCurrentGrade)}입니다. 입력한 학년·학기와 다르면 직접 수정해 주세요.` : "";
-    setOnboardingRecordMessage(`생기부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 기록에 반영합니다.${detectedMessage}${gradeMessage}`);
+    const detectedMessage = completedGrade ? ` 생기부에는 ${completedGrade}학년까지의 기록이 있습니다.` : "";
+    const gradeMessage = expectedCurrentGrade ? ` 그래서 지금 학년을 ${gradeLabel(expectedCurrentGrade)}으로 골라 두었습니다. 다르면 아래에서 바꿔 주세요.` : "";
+    setOnboardingRecordMessage(`생기부를 읽었습니다. 과목 ${summary.subjectCount}개와 활동·세특 기록 ${summary.entries.length}건을 찾았습니다.${detectedMessage}${gradeMessage}`);
   }, [form.grade, onboardingRecordAutoFields, onboardingRecordParse]);
 
-  async function analyzeOnboardingRecord(file: File | undefined) {
-    if (!file) return;
-    if (file.size > SCHOOL_RECORD_MAX_FILE_SIZE) {
+  /**
+   * 생기부 분석. `resume`이 있으면 새로 올리지 않고 이미 올린 업로드를 이어 기다린다 —
+   * 분석 중이나 반영 전에 새로고침해도 처음부터 다시 올리지 않게 하기 위해서다.
+   */
+  async function analyzeOnboardingRecord(file: File | undefined, resume?: { taskId: string; fileName: string }) {
+    if (!file && !resume) return;
+    const fileName = file?.name ?? resume?.fileName ?? "생기부.pdf";
+    if (file && file.size > SCHOOL_RECORD_MAX_FILE_SIZE) {
       setError(`파일이 너무 큽니다. ${SCHOOL_RECORD_MAX_FILE_SIZE_LABEL} 이하의 PDF를 선택해주세요.`);
       if (onboardingRecordRef.current) onboardingRecordRef.current.value = "";
       return;
@@ -617,16 +630,19 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     onboardingRecordAbortRef.current?.abort();
     const controller = new AbortController();
     onboardingRecordAbortRef.current = controller;
-    setOnboardingRecordBusy(true); setOnboardingRecordFile(file.name); setOnboardingRecordMessage(""); setError("");
-    setOnboardingRecordStage("업로드 완료 · 분석 준비 중");
+    setOnboardingRecordBusy(true); setOnboardingRecordFile(fileName); setOnboardingRecordMessage(""); setError("");
+    setOnboardingRecordStage(resume ? "올려 둔 생기부의 분석을 이어서 확인하는 중" : "업로드 완료 · 분석 준비 중");
     try {
       // PDF 학적사항이 알려준 입학 연도 또는 학생이 직접 입력한 값만 쓴다. 현재
       // 달력으로 거꾸로 계산하면 과거 졸업생 생기부의 날짜·학년이 틀어질 수 있다.
       const providedFreshmanYear = Number(form.freshmanAcademicYear);
       const manualFreshmanYear = isValidFreshmanYear(providedFreshmanYear) ? providedFreshmanYear : undefined;
-      const resultJson = await analyzeSchoolRecordPdf(file, controller.signal, (state) => {
+      const onProgress = (state: SchoolRecordProgress) => {
         if (state.stage) setOnboardingRecordStage(state.stage);
-      });
+      };
+      const resultJson = file
+        ? await analyzeSchoolRecordPdf(file, controller.signal, onProgress)
+        : await waitForSchoolRecordAnalysis(resume!.taskId, controller.signal, onProgress);
       if (controller.signal.aborted) return;
       const parsedFreshmanYear = Number(resultJson.freshman_academic_year);
       const freshmanAcademicYear = isValidFreshmanYear(parsedFreshmanYear)
@@ -650,7 +666,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
         grade: targetMaxGrade,
         semester: targetMaxSemester,
       });
-      parsed.fileName = file.name;
+      parsed.fileName = fileName;
       const summary = summarizeOnboardingRecord(parsed, completedGrade);
 
       // 생기부에서 읽은 기본 정보는 이 화면에서 잠기므로(recordLocked), 빈 칸일
@@ -684,7 +700,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       const graduatedByYear = expectedCurrentGrade != null && isGraduatedGrade(expectedCurrentGrade);
       setOnboardingRecordMessage(graduatedByYear
         ? `입학 연도 기준으로 이미 졸업 시점(${freshmanAcademicYear ? `${freshmanAcademicYear}학년도 입학 · ${freshmanAcademicYear + 2}학년도 졸업` : "졸업"})으로 확인했습니다. 분석·정리한 생기부 기록을 보여드립니다.${nameMessage}${periodMessage}`
-        : `생기부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}${policyMessage}`);
+        : `생기부를 읽었습니다. 과목 ${summary.subjectCount}개와 활동·세특 기록 ${summary.entries.length}건을 찾았습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}${policyMessage}`);
     } catch (e) {
       if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : "생기부를 분석하지 못했습니다. 건너뛰고 시작해도 됩니다.");
@@ -792,6 +808,27 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     setStep("profile");
     void analyzeOnboardingRecord(file);
   }
+
+  // 반영하기 전에 새로고침했거나 창을 닫았다 다시 온 경우, 서버에 남아 있는 마지막
+  // 온보딩 업로드를 이어 본다. 예전에는 처음 화면으로 돌아가 같은 파일을 다시 올려야
+  // 했다(하루 업로드 한도도 그만큼 줄었다).
+  useEffect(() => {
+    let cancelled = false;
+    jsonRequest<{ latest: { uploadId: string; status: string; fileName: string | null; importedAt: string | null; mode?: string } | null }>("/api/school-record/latest")
+      .then(({ latest }) => {
+        if (cancelled || !latest || latest.importedAt || latest.mode !== "onboarding") return;
+        if (latest.status !== "processing" && latest.status !== "done") return;
+        setSkippedRecord(false);
+        setStep("profile");
+        void analyzeOnboardingRecord(undefined, { taskId: latest.uploadId, fileName: latest.fileName ?? "생기부.pdf" });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // 화면이 처음 열릴 때 한 번만 확인한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 기본 정보 뒤에는 별도 사전 질문 없이 상담 관문으로 이어진다. */
   function stepper() {
@@ -1961,7 +1998,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
                     <div className="flex flex-wrap gap-2">
                       {workspace.dna.riskFlags.map((flag) => (
                         <span className="px-3 py-1 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 font-semibold flex items-center gap-1.5" key={flag}>
-                          <span className="font-bold">⚠️ 주의:</span> {flag}
+                          <span className="font-bold">주의:</span> {flag}
                         </span>
                       ))}
                     </div>
@@ -1970,7 +2007,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
                     <div className="flex flex-wrap gap-2">
                       {workspace.dna.opportunities.map((item) => (
                         <span className="px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-semibold flex items-center gap-1.5" key={item}>
-                          <span className="font-bold">💡 기회:</span> {item}
+                          <span className="font-bold">기회:</span> {item}
                         </span>
                       ))}
                     </div>
