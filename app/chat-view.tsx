@@ -357,7 +357,7 @@ export function ChatView({ onRecordsChanged }: { onRecordsChanged: () => void })
       </aside>
 
       {/* 대화 창 */}
-      <section className="md:col-span-3 bg-white rounded-xl border border-gray-200/80 flex flex-col overflow-hidden min-h-0">
+      <section className="md:col-span-3 bg-white rounded-xl border border-gray-200/80 flex flex-col overflow-hidden min-h-0" data-tour="chat-window">
         <header className="p-3.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-none">
           <div className="min-w-0">
             <div className="flex items-center gap-2">

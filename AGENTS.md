@@ -39,3 +39,24 @@
 동작을 바꾼 뒤에는 `npm run typecheck`, `npm run build`, `npm test`를 돌리세요.
 파일럿 도메인·추천 루브릭을 건드리기 전에는 `docs/semiconductor-pilot-v0.3.md`와
 `docs/semiconductor-evaluation-set-v0.1.md`를 먼저 읽으세요.
+
+## 배포 — dev/prod 분리
+
+`main` = 운영(`seteuk.site`/`www.seteuk.site`/`manage.seteuk.site`, 백엔드
+`seteuk-backend.fly.dev`), `dev` = 개발(`dev-manage.seteuk.site`, 백엔드
+`seteuk-backend-dev.fly.dev`). 각 환경의 `NEXT_PUBLIC_API_BASE_URL`은 Vercel
+프로젝트의 Production/Preview 환경변수로 갈라 둠. Vercel의 GitHub App이 아직
+`coldbootcp` 조직에 연결되지 않아 push해도 자동 배포되지 않는다 — 지금은
+직접 배포해야 한다.
+
+```bash
+# dev
+vercel deploy
+vercel alias set <방금 나온 배포 URL> dev-manage.seteuk.site
+
+# prod
+vercel deploy --prod
+```
+
+`next.config.ts`의 CSP는 빌드 시점의 `NEXT_PUBLIC_API_BASE_URL`을
+`connect-src`에 그대로 넣으므로, 환경변수가 바뀌면 재배포해야 CSP도 따라간다.

@@ -19,6 +19,7 @@ import { LandingView } from "./landing-view";
 import { ConsultationGate } from "./consultation-view";
 import { AccountSection, EmailVerificationGate, WithdrawalPendingGate } from "./account-gate";
 import { GateFrame } from "./gate-frame";
+import { GuidedTour, type TourStep } from "./guided-tour";
 import { ChatView } from "./chat-view";
 import { CurrentCoursePicker } from "./course-picker";
 import { RecordReviewScreen } from "./record-review-chat";
@@ -1399,7 +1400,7 @@ function ThreeYearJourney({ workspace, onNavigate }: { workspace: ProductWorkspa
 
   return (
     <div className="space-y-6">
-      <section className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200/80 shadow-xs">
+      <section className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200/80 shadow-xs" data-tour="journey">
         <div className="flex items-start justify-between gap-5 flex-wrap">
           <div className="max-w-2xl">
             <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-brand-600">3-YEAR JOURNEY</span>
@@ -1602,7 +1603,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
     <div className="space-y-6">
       {/* Current Semester Plans (Mission Hero) */}
       <section className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200/80 shadow-xs space-y-6">
-        <div className="space-y-3">
+        <div className="space-y-3" data-tour="overview-goal">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-brand-600 bg-brand-50 px-3 py-1 rounded-full border border-brand-200/60 inline-flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
@@ -1644,7 +1645,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
         </div>
 
         {/* 활동 주제 제안: 10개 카드 격자 나열을 탈피한 인터랙티브 토픽 스포트라이트 탐색기 */}
-        <div className="pt-5 border-t border-gray-100 space-y-4">
+        <div className="pt-5 border-t border-gray-100 space-y-4" data-tour="overview-topics">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <Icon className="text-amber-500" name="lightbulb" size={18} />
@@ -1699,7 +1700,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
             return (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
                 {/* 좌측: 슬림한 인터랙티브 토픽 리스트 (5 cols) */}
-                <div className="lg:col-span-5 flex flex-col gap-1.5 max-h-[420px] overflow-y-auto pr-1">
+                <div className="lg:col-span-5 flex flex-col gap-1.5 max-h-[420px] overflow-y-auto pr-1" data-tour="overview-topic-list">
                   {filteredTopics.map((ev, idx) => {
                     const isSelected = ev.id === currentTopic.id;
                     const isCore = ev.priority === "core";
@@ -1757,7 +1758,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
                 </div>
 
                 {/* 우측: 단 하나의 스포트라이트 포커스 카드 (7 cols) */}
-                <div className="lg:col-span-7 bg-gradient-to-br from-gray-50/90 via-blue-50/20 to-white p-6 md:p-7 rounded-2xl border border-gray-200/90 flex flex-col justify-between space-y-5 shadow-2xs">
+                <div className="lg:col-span-7 bg-gradient-to-br from-gray-50/90 via-blue-50/20 to-white p-6 md:p-7 rounded-2xl border border-gray-200/90 flex flex-col justify-between space-y-5 shadow-2xs" data-tour="overview-spotlight">
                   <div className="space-y-3.5">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full border border-brand-200/60 inline-flex items-center gap-1.5">
@@ -1804,6 +1805,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
                     </button>
                     <button
                       className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      data-tour="overview-connect"
                       onClick={() => {
                         if (active) {
                           onConvertPlan({ title: currentTopic.title, subject: currentTopic.subject, planEventId: currentTopic.id, roadmapNodeId: active.id });
@@ -2236,14 +2238,29 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
   );
 }
 
+/** 투어용 예시임을 분명히 밝히는 틀. 실제 기록과 헷갈리지 않게 점선과 '예시' 표시를 단다. */
+function TourSampleNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-dashed border-gray-300 p-3 space-y-2">
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500">
+        <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-bold">예시</span>
+        안내를 위한 예시예요. 저장되지 않고 안내가 끝나면 사라져요.
+      </p>
+      {children}
+    </div>
+  );
+}
+
 /* ──────────────────────────────────────────────
    ActivitiesView
    ────────────────────────────────────────────── */
-function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
+function ActivitiesView({ workspace, onWorkspace, draft, clearDraft, showTourSample = false }: {
   workspace: ProductWorkspace;
   onWorkspace: (workspace: ProductWorkspace) => void;
   draft: ActivityDraft | null;
   clearDraft: () => void;
+  /** 처음 사용 투어 중에만 켠다 — 빈 타임라인·검토 결과 자리에 예시를 보여준다. */
+  showTourSample?: boolean;
 }) {
   const currentSemesterCourseSubjects = workspace.semesterCourses
     .filter((course) => course.grade === workspace.profile.grade && course.semester === workspace.profile.semester)
@@ -2294,6 +2311,15 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   const selectedPlanIsOutsideCurrentSemester = !!planEventId && !currentSemesterPlans.some((plan) => plan.id === planEventId);
   const [showAllPlanOptions, setShowAllPlanOptions] = useState(selectedPlanIsOutsideCurrentSemester);
   const selectablePlans = showAllPlanOptions ? allSelectablePlans : currentSemesterPlans;
+  // 투어 예시는 이 학생의 이번 학기 첫 주제를 빌려 쓴다(없으면 일반 예시). 저장하지 않고,
+  // 실제 기록이 하나라도 있으면 보여주지 않는다 — 없는 기록을 있는 것처럼 섞지 않기 위해서다.
+  const tourSamplePlan = currentSemesterPlans[0];
+  const tourSample = showTourSample && workspace.activities.length === 0
+    ? {
+        subject: tourSamplePlan?.subject || "탐구 과목",
+        title: tourSamplePlan?.title || "수행평가 탐구 보고서",
+      }
+    : null;
 
   const loadSavedPlans = useCallback(async () => {
     try {
@@ -2471,7 +2497,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
       {/* Form */}
-      <div className="activity-form-card md:col-span-1">
+      <div className="activity-form-card md:col-span-1" data-tour="activity-form">
         <h2>활동 간편 등록</h2>
         {savedPlans.length > 0 && (
           <section className="mb-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3" aria-label="이번 학기에 저장한 계획">
@@ -2612,7 +2638,7 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
 
       {/* History */}
       <div className="md:col-span-2 space-y-4">
-        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs space-y-3" data-tour="activity-timeline">
           <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
             <div>
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">ACTIVITY TIMELINE</span>
@@ -2620,7 +2646,25 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
             </div>
             <span className="text-[11px] text-gray-400">{workspace.activities.length}건</span>
           </div>
-          {workspace.activities.length ? (
+          {tourSample ? (
+            <TourSampleNotice>
+              <div className="bg-white p-4 rounded-xl border border-gray-200/80 space-y-2">
+                <span className="text-xs font-bold text-brand-600">{tourSample.subject}</span>
+                <div className="history-info">
+                  <h3 className="text-sm font-semibold text-gray-900">{tourSample.title}</h3>
+                  <p>주제를 정한 뒤 자료를 찾아 실험 계획을 세우고, 측정한 결과를 표와 그래프로 정리해 보고서로 제출했다.</p>
+                  <div className="activity-reflection">
+                    <strong>배운 점과 느낀 점</strong>
+                    <p>처음 세운 가설과 결과가 달라 원인을 다시 찾아보면서, 변수를 하나씩 통제하는 것이 왜 중요한지 알게 되었다.</p>
+                  </div>
+                  <div className="concept-tags">
+                    <span className="concept-tag">변수 통제</span>
+                    <span className="concept-tag">데이터 해석</span>
+                  </div>
+                </div>
+              </div>
+            </TourSampleNotice>
+          ) : workspace.activities.length ? (
             <div className="space-y-3">
               {workspace.activities.map((activity) => {
                 const match = workspace.reconciliations.find((log) => log.activityId === activity.id);
@@ -2724,12 +2768,24 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
           )}
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs space-y-3">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-xs space-y-3" data-tour="activity-review">
           <div className="pb-3 border-b border-gray-100">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-600">AI ACTIVITY REVIEW</span>
             <h3 className="text-base font-extrabold text-gray-950 mt-0.5">AI 활동 검토 결과</h3>
           </div>
-          {workspace.activityReviews.length ? (
+          {tourSample && workspace.activityReviews.length === 0 ? (
+            <TourSampleNotice>
+              <div className="recon-log-item">
+                <div className="recon-log-top">
+                  <span className="recon-log-type aligned">연결 적합</span>
+                  <span className="recon-log-conf">{tourSample.title}</span>
+                </div>
+                <p className="recon-log-rationale">이번 학기 주제와 자연스럽게 이어지는 활동이에요. 무엇을 어떻게 했는지 구체적으로 적혀 있어 세특 근거로 쓰기 좋아요.</p>
+                <p className="recon-log-action">근거: 실험 계획 · 결과 정리 · 가설 수정 과정</p>
+                <p className="recon-log-action">보완: 발표자료나 보고서 파일을 첨부해 두세요</p>
+              </div>
+            </TourSampleNotice>
+          ) : workspace.activityReviews.length ? (
             <div className="history-list">
               {workspace.activityReviews.map((review) => {
                 const activity = workspace.activities.find((item) => item.id === review.activityId);
@@ -2830,12 +2886,13 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft }: {
   );
 }
 
-function ProfileView({ workspace, onNavigate, onOpenRecordReview, onRefresh }: {
+function ProfileView({ workspace, onNavigate, onOpenRecordReview, onRefresh, onStartTour }: {
   workspace: ProductWorkspace;
   onNavigate: (tab: TabId) => void;
   /** 생기부 연동 화면(전체 화면)으로 넘어간다. file이 null이면 이미 올린 것을 이어 본다. */
   onOpenRecordReview: (file: File | null) => void;
   onRefresh: () => void;
+  onStartTour: () => void;
 }) {
   const hasDiagnosis = Boolean(workspace.dna.narrative);
   const hasSchoolRecord = workspace.schoolRecordCourses.length > 0;
@@ -2899,6 +2956,15 @@ function ProfileView({ workspace, onNavigate, onOpenRecordReview, onRefresh }: {
           </span>
           <h2 className="text-xl font-bold text-gray-950 tracking-tight mt-1.5">학생 프로필 및 진로 설정</h2>
         </div>
+        {/* 투어는 데스크톱 전용이라 모바일에서는 버튼도 감춘다. */}
+        <button
+          className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 transition cursor-pointer"
+          onClick={onStartTour}
+          type="button"
+        >
+          <Icon name="compass" size={14} />
+          <span>사용 안내 다시 보기</span>
+        </button>
       </div>
 
       {/* 상단 공지 안내 배너 */}
@@ -3142,6 +3208,115 @@ function ProfileView({ workspace, onNavigate, onOpenRecordReview, onRefresh }: {
 }
 
 /* ──────────────────────────────────────────────
+   처음 사용 투어 — 핵심 흐름(계획 → 활동 → 기록 → 상담)에 필요한 곳만 짚는다.
+   시간표·캘린더 같은 보조 탭은 넣지 않는다.
+   ────────────────────────────────────────────── */
+const TOUR_STEPS: TourStep<TabId>[] = [
+  {
+    tab: "overview",
+    target: '[data-tour="nav"]',
+    title: "주요 화면은 왼쪽 메뉴에",
+    body: "세특연구소의 화면은 모두 이 메뉴에 모여 있어요. 자주 쓰는 곳을 순서대로 짚어 드릴게요.",
+    placement: "right",
+  },
+  {
+    tab: "overview",
+    target: '[data-tour="overview-goal"]',
+    title: "이번 학기 목표",
+    body: "상담에서 확정한 이번 학기 목표예요. 이번 학기 활동은 모두 이 목표를 향해 이어져요.",
+    placement: "bottom",
+  },
+  {
+    tab: "overview",
+    target: '[data-tour="overview-topics"]',
+    action: '[data-tour="overview-topic-list"] button',
+    actionHighlight: '[data-tour="overview-topic-list"] button:nth-of-type(2)',
+    title: "주제 골라 보기",
+    body: "진단 결과를 근거로 고른 활동 주제 후보예요. 목록에서 다른 주제를 하나 눌러 보세요. 오른쪽 내용이 그 주제로 바뀌어요.",
+    placement: "top",
+  },
+  {
+    tab: "overview",
+    target: '[data-tour="overview-spotlight"]',
+    action: '[data-tour="overview-connect"]',
+    title: "주제로 활동 시작하기",
+    body: "고른 주제가 왜 나에게 맞는지 여기서 볼 수 있어요. 실제로 활동할 기회가 생기면 이 버튼으로 기록을 시작해요. 지금 ‘이 주제를 실제 활동에 연결하기’를 눌러 보세요.",
+    placement: "left",
+  },
+  {
+    tab: "activities",
+    target: '[data-tour="activity-form"]',
+    title: "활동 기록하기",
+    body: "방금 고른 주제가 연결된 기록 양식이에요. 활동을 마치면 무엇을 어떻게 했는지 여기에 남겨요. 지금은 저장하지 않아도 돼요.",
+    placement: "right",
+  },
+  {
+    tab: "activities",
+    target: '[data-tour="activity-timeline"]',
+    title: "활동 타임라인",
+    body: "저장한 기록은 여기에 쌓여요. 어떤 활동에서 어떤 활동이 이어졌는지도 함께 보여 줘요.",
+    placement: "left",
+  },
+  {
+    tab: "activities",
+    target: '[data-tour="activity-review"]',
+    title: "AI 검토 결과",
+    body: "기록을 저장하면 AI가 생기부 내용과 잘 이어지는지 살펴보고, 보완할 점을 알려 줘요.",
+    placement: "top",
+  },
+  {
+    target: '[data-tour="nav"]',
+    action: "#nav-journey",
+    title: "3개년 흐름 열기",
+    body: "쌓인 기록은 3년의 흐름 속에서 이어져요. 왼쪽 메뉴에서 ‘3개년 흐름’을 눌러 보세요.",
+    placement: "right",
+  },
+  {
+    tab: "journey",
+    target: '[data-tour="journey"]',
+    title: "3개년 흐름",
+    body: "지난 학기는 실제 기록으로, 이번 학기는 실행할 주제로, 다음 학기는 방향으로 보여 줘요. 학기를 누르면 자세히 볼 수 있어요.",
+    placement: "bottom",
+    insideCorner: "top-right",
+  },
+  {
+    target: '[data-tour="nav"]',
+    action: "#nav-chat",
+    title: "AI 컨설턴트 열기",
+    body: "다음 활동이 고민될 때는 AI 컨설턴트에게 물어볼 수 있어요. 메뉴에서 ‘AI 컨설턴트’를 눌러 보세요.",
+    placement: "right",
+  },
+  {
+    tab: "chat",
+    target: '[data-tour="chat-window"]',
+    title: "AI 컨설턴트",
+    body: "궁금한 걸 편하게 물어보세요. 수정 모드를 켜면 대화만으로 기록을 남길 수 있어요. 이 안내는 프로필 설정에서 다시 볼 수 있어요.",
+    placement: "left",
+  },
+];
+
+/** 투어를 봤는지는 이 기기에만 남긴다 — 못 읽으면(사생활 보호 모드 등) 다시 보여 줘도 괜찮다. */
+function tourSeenKey(studentId: string) {
+  return `seteuk-tour-seen-${studentId}`;
+}
+
+function hasSeenTour(studentId: string) {
+  try {
+    return window.localStorage.getItem(tourSeenKey(studentId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markTourSeen(studentId: string) {
+  try {
+    window.localStorage.setItem(tourSeenKey(studentId), "1");
+  } catch {
+    // 저장하지 못하면 다음에 한 번 더 보일 뿐이다.
+  }
+}
+
+/* ──────────────────────────────────────────────
    ProductShell
    ────────────────────────────────────────────── */
 function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
@@ -3211,6 +3386,19 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
       window.scrollTo({ top: 0 });
     }
   }
+
+  // 처음 들어온 학생에게 한 번 투어를 띄운다. 모바일(사이드바가 서랍)에서는 띄우지 않는다.
+  // 이 셸은 작업공간을 불러온 뒤 브라우저에서만 그려지므로 첫 렌더에서 바로 판단한다.
+  const isDesktop = () => window.matchMedia("(min-width: 769px)").matches;
+  const [tourOpen, setTourOpen] = useState(() => isDesktop() && !hasSeenTour(workspace.profile.id));
+  // 끝내거나 건너뛰면 늘 보던 첫 화면으로 돌아온다. 투어 중에 눌러 본 '활동에 연결하기'가
+  // 남긴 기록 양식 초안도 지운다 — 학생이 실제로 시작한 활동이 아니다.
+  const closeTour = useCallback(() => {
+    markTourSeen(workspace.profile.id);
+    setTourOpen(false);
+    setActivityDraft(null);
+    setTab("overview");
+  }, [workspace.profile.id]);
 
   const studentId = workspace.profile.id;
   const storageKey = `seteuk-timetables-${studentId}`;
@@ -3522,7 +3710,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               </span>
             </button>
 
-            <nav className="space-y-1">
+            <nav className="space-y-1" data-tour="nav">
               {tabs.map((item) => {
                 const isActive = tab === item.id;
                 return (
@@ -3697,6 +3885,7 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               onWorkspace={onWorkspace}
               draft={activityDraft}
               clearDraft={() => setActivityDraft(null)}
+              showTourSample={tourOpen}
             />
           )}
           {tab === "grades"     && (
@@ -3720,10 +3909,14 @@ function ProductShell({ workspace, onWorkspace, onNewStudent, onRefresh }: {
               onNavigate={setTab}
               onOpenRecordReview={(file) => setRecordReview({ file })}
               onRefresh={onRefresh}
+              onStartTour={() => {
+                if (isDesktop()) setTourOpen(true);
+              }}
             />
           )}
         </div>
       </section>
+      {tourOpen && <GuidedTour lockSelector=".product-shell" steps={TOUR_STEPS} onNavigate={setTab} onClose={closeTour} />}
     </div>
   );
 }
