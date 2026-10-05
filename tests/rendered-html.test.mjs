@@ -43,7 +43,7 @@ test("the onboarding moves from profile directly into the AI consultation and al
 
   // 방향 맞추기 질문을 별도 관문으로 만들지 않는다. 프로필 저장 뒤 상담에서
   // 학생이 필요한 만큼 대화하며 구체화한다.
-  assert.match(app, /학생부 올리고 시작하기/);
+  assert.match(app, /생기부 올리고 시작하기/);
   assert.match(app, /기본 정보로 시작하기/);
   assert.match(app, /AI 상담 시작하기/);
   assert.match(app, /onClick=\{\(\) => void confirmOnboarding\(\)\}/);

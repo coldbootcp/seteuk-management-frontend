@@ -924,6 +924,7 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
           file_name: string | null;
           imported_at: string | null;
           failure_reason: string | null;
+          mode: string;
         } | null>("/seteuk/uploads/latest"),
       );
       if (!latest) return { latest: null };
@@ -940,6 +941,7 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
           fileName: latest.file_name,
           importedAt: latest.imported_at,
           error: latest.failure_reason,
+          mode: latest.mode,
           result,
         },
       };

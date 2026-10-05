@@ -9,6 +9,7 @@ import {
   logout,
   tokens,
   type AccountStatus,
+  SESSION_EXPIRED_EVENT,
 } from "../lib/api-client";
 import type { components } from "../lib/api-types";
 import { getConsultationStatus, handleLegacyRoute, loadWorkspace } from "../lib/workspace-adapter";
@@ -256,25 +257,30 @@ type SchoolRecordProgress = {
 async function analyzeSchoolRecordPdf(file: File, signal?: AbortSignal, onProgress?: (state: SchoolRecordProgress) => void) {
   const payload = new FormData();
   payload.append("file", file);
-  if (signal?.aborted) throw new Error("학생부 분석을 취소했습니다.");
+  if (signal?.aborted) throw new Error("생기부 분석을 취소했습니다.");
   const initial = await jsonRequest<{ task_id?: string }>("/api/school-record/parse", {
     method: "POST",
     body: payload,
     signal,
   });
   if (!initial.task_id) throw new Error("분석 작업 ID를 발급받지 못했습니다.");
+  return waitForSchoolRecordAnalysis(initial.task_id, signal, onProgress);
+}
 
+/** 이미 올린 생기부의 분석이 끝나기를 기다린다. 새로고침 뒤 이어 볼 때도 쓴다. */
+async function waitForSchoolRecordAnalysis(taskId: string, signal?: AbortSignal, onProgress?: (state: SchoolRecordProgress) => void) {
   // 상태 조회 자체가 실패하는 것(네트워크 끊김 등)과 분석이 실제로 실패로
   // 끝난 것(status === "failed")은 서로 다르다 — 전자만 몇 번 재시도한다.
   // 후자는 재시도해도 똑같은 결과이므로 바로 사용자에게 이유를 보여준다.
   let temporaryFailures = 0;
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  // 1.5초 × 200 = 5분. 아래 시간 초과 안내와 맞춘다(예전에는 90초에서 끊겼다).
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 1500));
-    if (signal?.aborted) throw new Error("학생부 분석을 취소했습니다.");
+    if (signal?.aborted) throw new Error("생기부 분석을 취소했습니다.");
 
     let task: SchoolRecordProgress;
     try {
-      task = await jsonRequest<SchoolRecordProgress>(`/api/school-record/status/${encodeURIComponent(initial.task_id)}`, { signal });
+      task = await jsonRequest<SchoolRecordProgress>(`/api/school-record/status/${encodeURIComponent(taskId)}`, { signal });
       temporaryFailures = 0;
     } catch (error) {
       temporaryFailures += 1;
@@ -287,7 +293,7 @@ async function analyzeSchoolRecordPdf(file: File, signal?: AbortSignal, onProgre
       if (!task.result) throw new Error("분석 결과가 비어 있습니다.");
       return task.result;
     }
-    if (task.status === "failed") throw new Error(task.error || "학생부 분석 중 오류가 발생했습니다.");
+    if (task.status === "failed") throw new Error(task.error || "생기부 분석 중 오류가 발생했습니다.");
   }
   throw new Error("분석 시간이 5분을 초과했습니다. 잠시 후 다시 시도해주세요.");
 }
@@ -451,13 +457,16 @@ function summarizeOnboardingRecord(parsed: SchoolRecordParseResult, completedGra
   const isInScope = (item: { grade: number }) => !completedGrade || item.grade <= completedGrade;
   const courses = parsed.courses.filter(isInScope);
   const entries = parsed.entries.filter(isInScope);
-  const subjects = [...new Set(courses.map((course) => course.subject).filter((subject) => subject && subject !== "교과 외 활동"))].slice(0, 8);
+  const allSubjects = [...new Set(courses.map((course) => course.subject).filter((subject) => subject && subject !== "교과 외 활동"))];
+  // 관심 과목 칸에는 앞의 8개만 채운다. 개수 안내는 잘리기 전 전체로 한다.
+  const subjects = allSubjects.slice(0, 8);
   const entryLabels = entries.slice(0, 8).map((entry) => `${entry.category}: ${entry.title}`);
 
   return {
     subjects,
+    subjectCount: allSubjects.length,
     entries,
-    currentActivities: entryLabels.length ? `학생부에서 확인된 기록\n${entryLabels.join("\n")}` : "",
+    currentActivities: entryLabels.length ? `생기부에서 확인된 기록\n${entryLabels.join("\n")}` : "",
   };
 }
 
@@ -501,9 +510,9 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   const [onboardingRecordFile, setOnboardingRecordFile] = useState("");
   const [onboardingRecordBusy, setOnboardingRecordBusy] = useState(false);
   /**
-   * "학생부 없이 새로 시작"을 눌렀는지. 이 경로에서는 기본 정보 화면에 학생부 PDF
-   * 업로드 칸을 아예 두지 않는다 — 학생부를 올릴 생각이 없다고 이미 밝힌 학생에게
-   * 굳이 같은 선택을 다시 들이밀지 않는다. 학생부는 나중에 [활동 & 세특] 화면에서
+   * "생기부 없이 새로 시작"을 눌렀는지. 이 경로에서는 기본 정보 화면에 생기부 PDF
+   * 업로드 칸을 아예 두지 않는다 — 생기부를 올릴 생각이 없다고 이미 밝힌 학생에게
+   * 굳이 같은 선택을 다시 들이밀지 않는다. 생기부는 나중에 [활동 & 세특] 화면에서
    * 언제든 올릴 수 있다는 안내는 그대로 유지한다.
    */
   const [skippedRecord, setSkippedRecord] = useState(false);
@@ -590,7 +599,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     setForm((cur) => {
       let changed = false;
       const next = { ...cur };
-      if (summary.currentActivities && (!cur.currentEngagement.trim() || cur.currentEngagement.startsWith("학생부에서 확인된 기록\n")) && cur.currentEngagement !== summary.currentActivities) {
+      if (summary.currentActivities && (!cur.currentEngagement.trim() || cur.currentEngagement.startsWith("생기부에서 확인된 기록\n")) && cur.currentEngagement !== summary.currentActivities) {
         next.currentEngagement = summary.currentActivities;
         changed = true;
       }
@@ -601,14 +610,19 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       return changed ? next : cur;
     });
 
-    const detectedMessage = completedGrade ? ` 학생부는 ${completedGrade}학년까지 확정된 기록으로 보았습니다.` : "";
-    const gradeMessage = expectedCurrentGrade ? ` 학생부 기준 현재 상태 후보는 ${gradeLabel(expectedCurrentGrade)}입니다. 입력한 학년·학기와 다르면 직접 수정해 주세요.` : "";
-    setOnboardingRecordMessage(`학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 기록에 반영합니다.${detectedMessage}${gradeMessage}`);
+    const detectedMessage = completedGrade ? ` 생기부에는 ${completedGrade}학년까지의 기록이 있습니다.` : "";
+    const gradeMessage = expectedCurrentGrade ? ` 그래서 지금 학년을 ${gradeLabel(expectedCurrentGrade)}으로 골라 두었습니다. 다르면 아래에서 바꿔 주세요.` : "";
+    setOnboardingRecordMessage(`생기부를 읽었습니다. 과목 ${summary.subjectCount}개와 활동·세특 기록 ${summary.entries.length}건을 찾았습니다.${detectedMessage}${gradeMessage}`);
   }, [form.grade, onboardingRecordAutoFields, onboardingRecordParse]);
 
-  async function analyzeOnboardingRecord(file: File | undefined) {
-    if (!file) return;
-    if (file.size > SCHOOL_RECORD_MAX_FILE_SIZE) {
+  /**
+   * 생기부 분석. `resume`이 있으면 새로 올리지 않고 이미 올린 업로드를 이어 기다린다 —
+   * 분석 중이나 반영 전에 새로고침해도 처음부터 다시 올리지 않게 하기 위해서다.
+   */
+  async function analyzeOnboardingRecord(file: File | undefined, resume?: { taskId: string; fileName: string }) {
+    if (!file && !resume) return;
+    const fileName = file?.name ?? resume?.fileName ?? "생기부.pdf";
+    if (file && file.size > SCHOOL_RECORD_MAX_FILE_SIZE) {
       setError(`파일이 너무 큽니다. ${SCHOOL_RECORD_MAX_FILE_SIZE_LABEL} 이하의 PDF를 선택해주세요.`);
       if (onboardingRecordRef.current) onboardingRecordRef.current.value = "";
       return;
@@ -617,16 +631,19 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
     onboardingRecordAbortRef.current?.abort();
     const controller = new AbortController();
     onboardingRecordAbortRef.current = controller;
-    setOnboardingRecordBusy(true); setOnboardingRecordFile(file.name); setOnboardingRecordMessage(""); setError("");
-    setOnboardingRecordStage("업로드 완료 · 분석 준비 중");
+    setOnboardingRecordBusy(true); setOnboardingRecordFile(fileName); setOnboardingRecordMessage(""); setError("");
+    setOnboardingRecordStage(resume ? "올려 둔 생기부의 분석을 이어서 확인하는 중" : "업로드 완료 · 분석 준비 중");
     try {
       // PDF 학적사항이 알려준 입학 연도 또는 학생이 직접 입력한 값만 쓴다. 현재
       // 달력으로 거꾸로 계산하면 과거 졸업생 생기부의 날짜·학년이 틀어질 수 있다.
       const providedFreshmanYear = Number(form.freshmanAcademicYear);
       const manualFreshmanYear = isValidFreshmanYear(providedFreshmanYear) ? providedFreshmanYear : undefined;
-      const resultJson = await analyzeSchoolRecordPdf(file, controller.signal, (state) => {
+      const onProgress = (state: SchoolRecordProgress) => {
         if (state.stage) setOnboardingRecordStage(state.stage);
-      });
+      };
+      const resultJson = file
+        ? await analyzeSchoolRecordPdf(file, controller.signal, onProgress)
+        : await waitForSchoolRecordAnalysis(resume!.taskId, controller.signal, onProgress);
       if (controller.signal.aborted) return;
       const parsedFreshmanYear = Number(resultJson.freshman_academic_year);
       const freshmanAcademicYear = isValidFreshmanYear(parsedFreshmanYear)
@@ -650,10 +667,10 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
         grade: targetMaxGrade,
         semester: targetMaxSemester,
       });
-      parsed.fileName = file.name;
+      parsed.fileName = fileName;
       const summary = summarizeOnboardingRecord(parsed, completedGrade);
 
-      // 학생부에서 읽은 기본 정보는 이 화면에서 잠기므로(recordLocked), 빈 칸일
+      // 생기부에서 읽은 기본 정보는 이 화면에서 잠기므로(recordLocked), 빈 칸일
       // 때만 채우는 게 아니라 문서가 밝힌 값으로 항상 세팅해 화면과 어긋나지
       // 않게 한다. 이름은 파서가 실제로 읽었을 때만 넣는다.
       if (expectedCurrentGrade) {
@@ -683,11 +700,11 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       // 연도상 재학 중이면(현역 고3) 졸업자로 안내하지 않는다.
       const graduatedByYear = expectedCurrentGrade != null && isGraduatedGrade(expectedCurrentGrade);
       setOnboardingRecordMessage(graduatedByYear
-        ? `입학 연도 기준으로 이미 졸업 시점(${freshmanAcademicYear ? `${freshmanAcademicYear}학년도 입학 · ${freshmanAcademicYear + 2}학년도 졸업` : "졸업"})으로 확인했습니다. 분석·정리한 학생부 기록을 보여드립니다.${nameMessage}${periodMessage}`
-        : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}${policyMessage}`);
+        ? `입학 연도 기준으로 이미 졸업 시점(${freshmanAcademicYear ? `${freshmanAcademicYear}학년도 입학 · ${freshmanAcademicYear + 2}학년도 졸업` : "졸업"})으로 확인했습니다. 분석·정리한 생기부 기록을 보여드립니다.${nameMessage}${periodMessage}`
+        : `생기부를 읽었습니다. 과목 ${summary.subjectCount}개와 활동·세특 기록 ${summary.entries.length}건을 찾았습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}${policyMessage}`);
     } catch (e) {
       if (controller.signal.aborted) return;
-      setError(e instanceof Error ? e.message : "학생부를 분석하지 못했습니다. 건너뛰고 시작해도 됩니다.");
+      setError(e instanceof Error ? e.message : "생기부를 분석하지 못했습니다. 건너뛰고 시작해도 됩니다.");
       setOnboardingRecordFile("");
       setOnboardingRecordParse(null);
       setOnboardingRecordAutoFields(false);
@@ -779,19 +796,40 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   // 불일치는 안내로만 다룬다.
   const recordLocked = false;
   /**
-   * 이름은 학생부를 올려도 잠그지 않는다. 파서가 읽은 이름이 틀리거나(붙어 나온 글자,
-   * 옛 이름) 학생이 다르게 쓰고 싶을 때 고칠 길이 아예 없었다. 대신 학생부와 다르면
+   * 이름은 생기부를 올려도 잠그지 않는다. 파서가 읽은 이름이 틀리거나(붙어 나온 글자,
+   * 옛 이름) 학생이 다르게 쓰고 싶을 때 고칠 길이 아예 없었다. 대신 생기부와 다르면
    * 그 사실을 그 자리에서 알려 준다 — 다른 학생의 자료를 올린 것일 수도 있어서다.
    */
   const recordStudentName = onboardingRecordContext.studentName?.trim() ?? "";
   const recordNameMismatch = Boolean(recordStudentName && form.name.trim() && recordStudentName !== form.name.trim());
-  /** 학생부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
+  /** 생기부로 시작하기. 분석은 화면을 막지 않고 뒤에서 돌아, 그동안 폼을 채울 수 있다. */
   function startWithRecord(file: File | undefined) {
     if (!file) return;
     setSkippedRecord(false);
     setStep("profile");
     void analyzeOnboardingRecord(file);
   }
+
+  // 반영하기 전에 새로고침했거나 창을 닫았다 다시 온 경우, 서버에 남아 있는 마지막
+  // 온보딩 업로드를 이어 본다. 예전에는 처음 화면으로 돌아가 같은 파일을 다시 올려야
+  // 했다(하루 업로드 한도도 그만큼 줄었다).
+  useEffect(() => {
+    let cancelled = false;
+    jsonRequest<{ latest: { uploadId: string; status: string; fileName: string | null; importedAt: string | null; mode?: string } | null }>("/api/school-record/latest")
+      .then(({ latest }) => {
+        if (cancelled || !latest || latest.importedAt || latest.mode !== "onboarding") return;
+        if (latest.status !== "processing" && latest.status !== "done") return;
+        setSkippedRecord(false);
+        setStep("profile");
+        void analyzeOnboardingRecord(undefined, { taskId: latest.uploadId, fileName: latest.fileName ?? "생기부.pdf" });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // 화면이 처음 열릴 때 한 번만 확인한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 기본 정보 뒤에는 별도 사전 질문 없이 상담 관문으로 이어진다. */
   function stepper() {
@@ -837,7 +875,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
 
   return (
     <GateFrame onSignOut={onSignOut}>
-      {/* 파일 선택기는 세 화면이 함께 쓴다 — 어느 걸음에서도 학생부를 올릴 수 있다. */}
+      {/* 파일 선택기는 세 화면이 함께 쓴다 — 어느 걸음에서도 생기부를 올릴 수 있다. */}
       <input
         accept="application/pdf,.pdf"
         hidden
@@ -865,7 +903,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-            {/* 경로 1 — 학생부 업로드 */}
+            {/* 경로 1 — 생기부 업로드 */}
             <div className="bg-white rounded-2xl border-2 border-brand-500/80 p-7 shadow-lg flex flex-col justify-between relative overflow-hidden">
               <span className="absolute top-0 right-0 bg-brand-500 text-white text-[11px] font-extrabold px-3 py-1 rounded-bl-xl">
                 추천 · 기록부터 읽습니다
@@ -917,7 +955,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                   onClick={() => onboardingRecordRef.current?.click()}
                   type="button"
                 >
-                  <span>학생부 올리고 시작하기</span>
+                  <span>생기부 올리고 시작하기</span>
                   <span>➔</span>
                 </button>
               </div>
@@ -929,14 +967,14 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                 <div className="flex items-center gap-3">
                   <span className="w-12 h-12 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center flex-none"><Icon name="sprout" size={22} /></span>
                   <span className="block">
-                    <span className="block text-lg font-bold text-gray-900">학생부 없이 새로 시작</span>
+                    <span className="block text-lg font-bold text-gray-900">생기부 없이 새로 시작</span>
                     <span className="block text-xs text-gray-500">1학년이거나, 지금은 올리고 싶지 않은 경우</span>
                   </span>
                 </div>
 
                 <p className="text-xs text-gray-600 leading-relaxed">
                   과거 기록이 없어도 괜찮습니다. 관심분야와 목표를 답해주시면,
-                  이어지는 AI 상담에서 이번 학기 목표와 탐구 주제를 함께 정합니다. 학생부는 나중에 [활동 &amp; 세특] 화면에서
+                  이어지는 AI 상담에서 이번 학기 목표와 탐구 주제를 함께 정합니다. 생기부는 나중에 [활동 &amp; 세특] 화면에서
                   언제든 올릴 수 있습니다.
                 </p>
 
@@ -981,7 +1019,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
 
           <div className="flex items-center justify-center gap-2 text-xs text-gray-500 bg-white/80 border border-gray-200/70 px-4 py-2 rounded-full mx-auto w-fit text-center">
             <Icon className="flex-none" name="lock" size={13} />
-            <span>업로드한 학생부는 본인 계정에만 보관되며, 다른 학생의 화면에서는 조회되지 않습니다.</span>
+            <span>업로드한 생기부는 본인 계정에만 보관되며, 다른 학생의 화면에서는 조회되지 않습니다.</span>
           </div>
         </div>
       )}
@@ -992,8 +1030,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
           {stepper()}
 
           {/*
-            학생부 상태 — 분석은 이 화면을 막지 않고 뒤에서 돈다.
-            "학생부 없이 새로 시작"을 고른 학생에게는 이 칸 자체를 보이지 않는다.
+            생기부 상태 — 분석은 이 화면을 막지 않고 뒤에서 돈다.
+            "생기부 없이 새로 시작"을 고른 학생에게는 이 칸 자체를 보이지 않는다.
             이미 밝힌 선택을 여기서 다시 물으면 되돌리라는 뜻으로 읽히기 쉽다.
           */}
           {!skippedRecord && (
@@ -1023,7 +1061,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                   </span>
                   <div className="min-w-0">
                     <strong className="block text-xs font-extrabold text-gray-900">
-                      {onboardingRecordBusy ? "학생부 분석 중" : onboardingRecordFile ? "학생부 분석 완료" : "학생부 없이 진행 중"}
+                      {onboardingRecordBusy ? "생기부 분석 중" : onboardingRecordFile ? "생기부 분석 완료" : "생기부 없이 진행 중"}
                     </strong>
                     <span className="block text-[11px] text-gray-500 leading-relaxed mt-0.5">
                       {onboardingRecordBusy
@@ -1043,7 +1081,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                   </button>
                   {onboardingRecordBusy && (
                     <button
-                      aria-label="학생부 분석 취소"
+                      aria-label="생기부 분석 취소"
                       className="w-7 h-7 rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-gray-700 text-xs font-bold transition"
                       onClick={cancelOnboardingRecordAnalysis}
                       title="분석 취소"
@@ -1095,14 +1133,14 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                 {recordNameMismatch && (
                   <div className="mt-2 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <span className="text-[11px] text-amber-900 leading-relaxed">
-                      업로드한 학생부의 이름은 <strong className="font-bold">{recordStudentName}</strong>입니다. 다른 학생의 자료라면 학생부를 다시 올려주세요.
+                      업로드한 생기부의 이름은 <strong className="font-bold">{recordStudentName}</strong>입니다. 다른 학생의 자료라면 생기부를 다시 올려주세요.
                     </span>
                     <button
                       className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-800 text-[11px] font-bold hover:bg-amber-100 transition flex-none"
                       onClick={() => update("name", recordStudentName)}
                       type="button"
                     >
-                      학생부 이름으로 바꾸기
+                      생기부 이름으로 바꾸기
                     </button>
                   </div>
                 )}
@@ -1144,7 +1182,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                 </div>
                 {recordLocked && (
                   <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
-                    학년과 학기는 업로드한 학생부에서 확인한 값으로 자동 입력했습니다. 잘못됐다면 시작한 뒤 AI 상담에서 바로잡을 수 있어요.
+                    학년과 학기는 업로드한 생기부에서 확인한 값으로 자동 입력했습니다. 잘못됐다면 시작한 뒤 AI 상담에서 바로잡을 수 있어요.
                   </p>
                 )}
               </div>
@@ -1326,7 +1364,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                 value={form.constraints}
               />
               <p className="text-[11px] text-gray-400 leading-relaxed">
-                연결 과목·강점·활용 자원은 학생부와 이후 활동 기록을 보고 시스템이 판단합니다. 여기에는 꼭 지켜야 할 제약만 적어주세요.
+                연결 과목·강점·활용 자원은 생기부와 이후 활동 기록을 보고 시스템이 판단합니다. 여기에는 꼭 지켜야 할 제약만 적어주세요.
               </p>
             </div>
 
@@ -1347,7 +1385,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
               >
                 <span>
                   {onboardingRecordBusy
-                    ? "학생부 분석이 끝나면 진행할 수 있어요"
+                    ? "생기부 분석이 끝나면 진행할 수 있어요"
                     : busy
                       ? "저장하는 중…"
                       : !freshmanYearReady
@@ -1793,7 +1831,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
                     <div className="p-3.5 rounded-xl bg-white border border-gray-200/80 text-xs space-y-1">
                       <span className="text-[11px] font-bold text-gray-400 block">이 주제의 학기 역할</span>
                       <p className="text-gray-700 leading-relaxed font-medium">
-                        {active ? `${active.grade}-${active.semester}학기 목표('${active.title || "핵심 목표"}')와 직접 연계되어 학생부 세특의 전공 적합성과 깊이를 입증하는 핵심 탐구 과제입니다.` : "학생부 세특 탐구 과제로 연결됩니다."}
+                        {active ? `${active.grade}-${active.semester}학기 목표('${active.title || "핵심 목표"}')와 직접 연계되어 생기부 세특의 전공 적합성과 깊이를 입증하는 핵심 탐구 과제입니다.` : "생기부 세특 탐구 과제로 연결됩니다."}
                       </p>
                     </div>
                   </div>
@@ -1961,7 +1999,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
                     <div className="flex flex-wrap gap-2">
                       {workspace.dna.riskFlags.map((flag) => (
                         <span className="px-3 py-1 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 font-semibold flex items-center gap-1.5" key={flag}>
-                          <span className="font-bold">⚠️ 주의:</span> {flag}
+                          <span className="font-bold">주의:</span> {flag}
                         </span>
                       ))}
                     </div>
@@ -1970,7 +2008,7 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
                     <div className="flex flex-wrap gap-2">
                       {workspace.dna.opportunities.map((item) => (
                         <span className="px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-semibold flex items-center gap-1.5" key={item}>
-                          <span className="font-bold">💡 기회:</span> {item}
+                          <span className="font-bold">기회:</span> {item}
                         </span>
                       ))}
                     </div>
@@ -3916,6 +3954,8 @@ export function WorkspaceApp() {
   const [signedIn, setSignedIn] = useState(false);
   /** 랜딩에서 로그인/시작하기를 눌렀는지. 누르기 전에는 인증 화면을 띄우지 않는다. */
   const [authOpen, setAuthOpen] = useState(false);
+  /** 로그인이 만료돼 로그인 화면으로 돌아왔을 때 보여 줄 안내. */
+  const [sessionNotice, setSessionNotice] = useState("");
   // null이면 아직 확인 전, satisfied=false면 진단+상담 관문이 메인 화면을 막는다.
   const [consultationStatus, setConsultationStatus] = useState<ConsultationStatus | null>(null);
   // 이메일 인증·탈퇴 유예 상태. null이면 아직 확인 전이거나(로그인 전) 문제
@@ -4040,6 +4080,21 @@ export function WorkspaceApp() {
     });
   }, [signedIn, accountStatus, consultationStatus, workspace]);
 
+  useEffect(() => {
+    const onExpired = () => {
+      setWorkspace(null);
+      setConsultationStatus(null);
+      setAccountStatus(null);
+      setError("");
+      setLoading(false);
+      setSignedIn(false);
+      setAuthOpen(true);
+      setSessionNotice("로그인이 만료되었어요. 다시 로그인해 주세요.");
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, []);
+
   const loadingCopy = useMemo(() => (loading ? "학생 작업공간을 불러오는 중…" : ""), [loading]);
 
   // 조기 반환은 훅을 전부 부른 뒤에 온다. 훅보다 앞에 두면 로그인 전후로 호출
@@ -4050,7 +4105,9 @@ export function WorkspaceApp() {
     return (
       <SignIn
         onGoHome={() => setAuthOpen(false)}
+        notice={sessionNotice}
         onSignedIn={() => {
+          setSessionNotice("");
           setSignedIn(true);
           checkAccountThenGate();
         }}

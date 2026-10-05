@@ -372,7 +372,7 @@ export function parseSchoolRecordJson(
       category: "시험",
       subject: course.subject,
       title,
-      summary: "성취도 세부값은 확인되지 않았지만, 학생부에서 교과 기록이 인식되었습니다. 반영 전 실제 성적 정보로 보완할 수 있습니다.",
+      summary: "성취도 세부값은 확인되지 않았지만, 생기부에서 교과 기록이 인식되었습니다. 반영 전 실제 성적 정보로 보완할 수 있습니다.",
       completedAt: "",  // 생기부에 날짜가 없다 — 지어내지 않고 비워 둔다.
       confidence: 62,
       dateBasis: "unknown",
@@ -385,8 +385,8 @@ export function parseSchoolRecordJson(
     warnings.push(`분석 과정에서 확인이 필요한 항목이 ${upstreamErrors.length}개 있습니다.`);
   }
   if (!courses.size) warnings.push("교과 성적을 찾지 못했습니다.");
-  if (!entries.size) warnings.push("분석 결과에서 반영 가능한 학생부 활동을 찾지 못했습니다.");
-  if (entries.size) warnings.push("학생부 API는 활동의 정확한 날짜를 제공하지 않아 학기 안의 임시 날짜에 배치했습니다. 반영 전에 수정할 수 있습니다.");
+  if (!entries.size) warnings.push("분석 결과에서 반영 가능한 생기부 활동을 찾지 못했습니다.");
+  if (entries.size) warnings.push("생기부 API는 활동의 정확한 날짜를 제공하지 않아 학기 안의 임시 날짜에 배치했습니다. 반영 전에 수정할 수 있습니다.");
   // 생기부의 세특은 과목당 한 덩어리로 쓰여 있어 어느 활동이 몇 학기인지 문서가
   // 말해 주지 않는다. 예전에는 조용히 2학기로 정해 버렸는데, 그러면 학생이 고칠
   // 대상이 있다는 것조차 모른다.

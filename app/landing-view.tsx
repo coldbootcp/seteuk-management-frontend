@@ -84,7 +84,7 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
             </h1>
 
             <p className="text-base sm:text-lg md:text-xl text-gray-600 leading-relaxed max-w-2xl mx-auto">
-              학생부와 활동 기록을 정리하고, 이번 학기 계획을 실제 학교 기회와 연결해 보세요.
+              생기부와 활동 기록을 정리하고, 이번 학기 계획을 실제 학교 기회와 연결해 보세요.
               기록이 아직 없다면 과거를 지어내지 않고, 현재 관심사부터 함께 시작합니다.
             </p>
 
@@ -241,7 +241,7 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           <div className="text-center max-w-2xl mx-auto space-y-3">
             <h2 className="text-2xl md:text-4xl font-extrabold text-gray-950 tracking-tight leading-snug">
-              합격하는 학생부는 무엇이 다를까요?
+              합격하는 생기부는 무엇이 다를까요?
               <br />
               <span className="text-brand-600">세특연구소의 3대 핵심 엔진</span>
             </h2>
@@ -326,7 +326,7 @@ export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
       <footer className="py-10 bg-white border-t border-gray-200/70">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-gray-400">
           <span>세특연구소 — 개인 맞춤형 고교 생활기록부 코치</span>
-          <span>학생의 개인정보와 학생부 데이터를 안전하게 보관합니다.</span>
+          <span>학생의 개인정보와 생기부 데이터를 안전하게 보관합니다.</span>
         </div>
       </footer>
     </div>

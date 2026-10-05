@@ -63,7 +63,15 @@ function readableAuthError(caught: unknown, mode: Mode): string {
   return mode === "signup" ? "가입하지 못했습니다." : "로그인하지 못했습니다.";
 }
 
-export function SignIn({ onGoHome, onSignedIn }: { onGoHome: () => void; onSignedIn: () => void }) {
+export function SignIn({
+  onGoHome,
+  onSignedIn,
+  notice,
+}: {
+  onGoHome: () => void;
+  onSignedIn: () => void;
+  notice?: string;
+}) {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -189,6 +197,10 @@ export function SignIn({ onGoHome, onSignedIn }: { onGoHome: () => void; onSigne
                 <p className="text-xs text-gray-700 leading-relaxed">
                   <strong className="text-gray-950">{email}</strong>로 가입된 계정이 있다면
                   비밀번호 재설정 메일을 보냈습니다. 메일함(스팸함 포함)을 확인해주세요.
+                </p>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  운영팀에서 받은 체험 계정처럼 메일을 받을 수 없는 계정이라면, 계정을 안내받은
+                  곳으로 비밀번호 재설정을 요청해 주세요.
                 </p>
                 <button
                   className="text-xs text-brand-600 font-bold hover:text-brand-700"
@@ -381,6 +393,12 @@ export function SignIn({ onGoHome, onSignedIn }: { onGoHome: () => void; onSigne
           </>
           )}
 
+          {notice && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium">
+              {notice}
+            </div>
+          )}
+
           <form className="space-y-4" onSubmit={submit}>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1.5" htmlFor="auth-email">
@@ -556,7 +574,7 @@ export function SignIn({ onGoHome, onSignedIn }: { onGoHome: () => void; onSigne
         </div>
 
         <p className="text-center text-[11px] text-gray-400">
-          세특연구소는 학생의 개인정보와 학생부 데이터를 안전하게 보관합니다.
+          세특연구소는 학생의 개인정보와 생기부 데이터를 안전하게 보관합니다.
         </p>
       </div>
     </div>

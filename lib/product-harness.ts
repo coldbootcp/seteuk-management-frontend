@@ -12,7 +12,7 @@ export type ProfileInput = {
   name: string;
   grade: number;
   semester: number;
-  /** 고교 입학 학년도. 5·9등급제와 학생부·대입 적용 기준의 정본이다. */
+  /** 고교 입학 학년도. 5·9등급제와 생기부·대입 적용 기준의 정본이다. */
   freshmanAcademicYear?: number | null;
   targetCareer: string;
   targetMajors: string[];
