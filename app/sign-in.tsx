@@ -26,11 +26,17 @@ import { PasswordHints } from "./password-hints";
 type Mode = "login" | "signup" | "forgot";
 
 /**
- * 회원가입 공개 여부. 오픈 전에는 "회원가입"을 누르면 준비 중 안내만 보인다.
- * 열 때는 `NEXT_PUBLIC_SIGNUP_OPEN=true`로 빌드한다. 백엔드 쪽 차단은
+ * 회원가입 공개 여부. 준비 중에는 "회원가입"을 누르면 준비 중 안내만 보인다.
+ * 가입을 열 때는 `NEXT_PUBLIC_SIGNUP_OPEN=true`로 빌드한다. 백엔드 쪽 차단은
  * `ACCESS_ALLOWLIST`가 따로 맡는다 — 이 값은 화면 안내일 뿐이다.
  */
 const SIGNUP_OPEN = process.env.NEXT_PUBLIC_SIGNUP_OPEN === "true";
+
+/**
+ * 구글 로그인 버튼 노출 여부. 준비 중에는 가입 경로를 늘리지 않으려고 숨겨 둔다(임시).
+ * `NEXT_PUBLIC_GOOGLE_LOGIN_VISIBLE=true`로 빌드하면 다시 보인다.
+ */
+const GOOGLE_LOGIN_VISIBLE = process.env.NEXT_PUBLIC_GOOGLE_LOGIN_VISIBLE === "true";
 
 /**
  * 인증 실패를 사람이 읽을 말로 옮긴다. 백엔드는 로그인 실패를 한 가지 코드로만
@@ -254,19 +260,19 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
 
           <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl border border-gray-200/90 shadow-xl space-y-5 text-center">
             <p className="text-xs text-gray-700 leading-relaxed">
-              세특연구소는 아직 오픈을 준비하고 있습니다.
+              세특연구소는 지금 서비스를 준비하고 있습니다.
               <br />
-              정식으로 열면 누구나 무료로 가입할 수 있어요.
+              준비가 끝나면 누구나 무료로 이용할 수 있어요.
             </p>
             {waitlistSent ? (
               <p className="text-xs text-gray-700 leading-relaxed">
-                <strong className="text-gray-950">{email}</strong>을(를) 남겨주셨어요. 오픈하면
+                <strong className="text-gray-950">{email}</strong>을(를) 남겨주셨어요. 준비가 끝나면
                 알려드릴게요.
               </p>
             ) : (
               <form className="space-y-3 text-left" onSubmit={submitWaitlist}>
                 <label className="block text-xs font-bold text-gray-700" htmlFor="waitlist-email">
-                  오픈 소식을 받을 메일주소 (선택)
+                  서비스 소식을 받을 메일주소 (선택)
                 </label>
                 <input
                   autoComplete="email"
@@ -288,7 +294,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
                   disabled={busy}
                   type="submit"
                 >
-                  {busy ? "등록 중…" : "오픈 알림 받기"}
+                  {busy ? "등록 중…" : "소식 받기"}
                 </button>
               </form>
             )}
@@ -326,6 +332,8 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
 
         <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl border border-gray-200/90 shadow-xl space-y-6">
           {/* 소셜 로그인 */}
+          {GOOGLE_LOGIN_VISIBLE && (
+          <>
           <div className="space-y-2.5">
             <button
               className="w-full py-3 px-4 bg-white hover:bg-gray-50 text-gray-700 font-extrabold text-xs rounded-xl border border-gray-300 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -361,6 +369,8 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
             <span className="shrink mx-3 text-[11px] text-gray-400 font-medium">또는 이메일로 계속하기</span>
             <div className="grow border-t border-gray-200" />
           </div>
+          </>
+          )}
 
           <form className="space-y-4" onSubmit={submit}>
             <div>
