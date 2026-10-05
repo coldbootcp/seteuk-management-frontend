@@ -133,7 +133,7 @@ function nodeLocator(nodes: RoadmapNode[]): NodeLocator {
   return (grade, semester) => {
     const exact = nodes.find((n) => n.grade === grade && n.semester === semester);
     if (exact) return exact.id;
-    // 학기를 모르는 기록(생기부 수상·봉사 등)은 그 학년의 첫 학기 마디에 둔다.
+    // 학기를 모르는 기록(생기부 봉사 등)은 그 학년의 첫 학기 마디에 둔다.
     return nodes.find((n) => n.grade === grade)?.id ?? null;
   };
 }
@@ -148,7 +148,7 @@ function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentA
   return {
     id: raw.id as string,
     studentId,
-    activityType: (raw.activity_type as string) === "reading_linked" ? "독서" : "활동",
+    activityType: "활동",
     subject: (raw.subject as string) ?? "",
     // 생기부 활동의 절반 가까이는 과목이 없다 — 자율활동·동아리활동·진로활동·
     // 행동특성은 교과에 매이지 않기 때문이다. 화면이 "과목 · 기록"으로 쓰는 자리가
@@ -178,12 +178,6 @@ function toActivity(raw: Json, studentId: string, locate: NodeLocator): StudentA
     recordKind: "activity",
   };
 }
-
-/**
- * 수상은 학년-학기를 백엔드가 파싱 시점에 채운다(참가대상 + 수상연월일). 예전에는
- * 여기서 날짜로 추정했는데, 오늘 날짜를 기준점으로 삼는 바람에 몇 해 전 생기부의
- * 수상이 전부 학년 범위 밖으로 떨어졌다. 판정은 문서를 읽은 쪽이 해야 한다.
- */
 
 /** 백엔드 진단의 SWOT을 화면의 Student DNA 모양으로 옮긴다. */
 function toDna(raw: Json | null): DnaDiagnosis {
@@ -218,7 +212,6 @@ function toDna(raw: Json | null): DnaDiagnosis {
       grade: review.grade as number,
       semester: review.semester as number,
       gradesReview: (review.grades_review as string) ?? "",
-      readingReview: (review.reading_review as string) ?? "",
       activitiesReview: (review.activities_review as string) ?? "",
     })),
     activityInventory: ((raw.activity_inventory as Json[]) ?? []).map((entry) => ({
@@ -472,21 +465,14 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
     }
   }
 
-  // 화면은 상장·봉사·독서를 활동과 같은 목록에서 갈래로만 구분한다. 백엔드는 이
-  // 셋을 각자의 테이블에 두므로 여기서 하나로 합친다 — 합치지 않으면 화면의
-  // 상장/봉사/독서 필터가 언제나 0건이 된다.
+  // 화면은 봉사를 활동과 같은 목록에서 갈래로만 구분한다. 백엔드는 봉사를 자기 테이블에
+  // 두므로 여기서 하나로 합친다 — 합치지 않으면 화면의 봉사 필터가 언제나 0건이 된다.
   const locate = nodeLocator(roadmap.nodes);
 
-  const [awardRows, volunteerRows, readingRows] = await Promise.all([
-    optional(api<{ items: Json[] }>("/awards?limit=200")),
-    optional(api<{ items: Json[] }>("/volunteer-records?limit=200")),
-    optional(api<{ items: Json[] }>("/reading-activities?limit=200")),
-  ]);
+  const volunteerRows = await optional(api<{ items: Json[] }>("/volunteer-records?limit=200"));
 
-  const DOMAIN_RECORD_KINDS: Record<string, "award" | "volunteer" | "reading"> = {
-    상장: "award",
+  const DOMAIN_RECORD_KINDS: Record<string, "volunteer"> = {
     봉사: "volunteer",
-    독서: "reading",
   };
 
   function domainActivity(
@@ -503,7 +489,7 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
       studentId,
       activityType: kind,
       subject: (raw.subject as string) ?? "",
-      // 상장·봉사·독서는 그 자체가 기록의 갈래다 — 과목이 없으면 갈래를 보여준다.
+      // 봉사는 그 자체가 기록의 갈래다 — 과목이 없으면 갈래를 보여준다.
       activityCategory: kind,
       grade: grade ?? 0,
       semester,
@@ -523,19 +509,6 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
     };
   }
 
-  const awards = (awardRows?.items ?? []).map((raw) => {
-    const rank = raw.rank ? ` (${raw.rank as string})` : "";
-    return domainActivity(
-      raw,
-      "상장",
-      `${raw.name as string}${rank}`,
-      (raw.raw_date as string) ?? "",
-      (raw.grade as number) ?? null,
-      (raw.semester as number) ?? null,
-      (raw.date as string) ?? "",
-    );
-  });
-
   const volunteers = (volunteerRows?.items ?? []).map((raw) => {
     const grade = (raw.grade as number) ?? null;
     const hours = raw.hours ? ` · ${raw.hours as number}시간` : "";
@@ -551,18 +524,6 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
     );
   });
 
-  const readings = (readingRows?.items ?? []).map((raw) =>
-    domainActivity(
-      raw,
-      "독서",
-      `${raw.title as string}${raw.author ? ` — ${raw.author as string}` : ""}`,
-      "",
-      (raw.grade as number) ?? null,
-      (raw.semester as number) ?? null,
-      "",
-    ),
-  );
-
   // 생기부에서 온 활동은 날짜가 없어 completedAt 정렬만으로는 순서가 무너진다.
   // 시점의 정본인 학년-학기로 먼저 정렬해서 넘긴다.
   const activities = [
@@ -575,9 +536,7 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
           String(a.created_at).localeCompare(String(b.created_at)),
       )
       .map((raw) => toActivity(raw, studentId, locate)),
-    ...awards,
     ...volunteers,
-    ...readings,
   ];
   const attachmentLists = await Promise.all(
     activities.map((activity) =>
@@ -666,19 +625,23 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
  * index가 곧 백엔드 결과 배열의 위치다. 학생이 체크를 푼 것은 빠진다.
  */
 function toImportSelection(
-  entries: { id: string; selected: boolean; grade?: number; semester?: number }[],
+  entries: {
+    id: string;
+    selected: boolean;
+    grade?: number;
+    semester?: number;
+    periodBasis?: string;
+  }[],
 ): Json {
   const sections: Record<string, string> = {
-    read: "reading_activities",
     grade: "academic_performance",
-    award: "awards",
     volunteer: "volunteer_records",
     activity: "activities",
   };
   // 영역을 아예 빼면 백엔드가 "이번에 손대지 않는다"로 읽고, 빈 배열로 보내면
   // "이 영역을 비워라"로 읽는다. 화면은 카테고리를 하나씩 반영하므로 고른 영역만
   // 담아야 한다 — 예전에는 여섯 개를 전부 빈 배열로 보내서 [활동]을 반영하는
-  // 순간 앞서 반영한 상장·봉사·독서가 통째로 지워졌다.
+  // 순간 앞서 반영한 봉사가 통째로 지워졌다.
   const picked: Record<string, number[]> = {};
   // 생기부는 어느 활동이 몇 학기인지 말해 주지 않는 경우가 많다(세특은 과목당 한
   // 덩어리로 쓰여 있다). 검토 화면에서 학생이 고른 학년-학기를 함께 보낸다 —
@@ -687,12 +650,17 @@ function toImportSelection(
 
   for (const entry of entries) {
     if (!entry.selected) continue;
-    const match = /^json-(read|grade|award|volunteer|activity)-(\d+)-/.exec(entry.id);
+    const match = /^json-(grade|volunteer|activity)-(\d+)-/.exec(entry.id);
     if (!match) continue;
     const section = sections[match[1]];
     const index = Number(match[2]);
     (picked[section] ??= []).push(index);
-    if (entry.grade || entry.semester) {
+    // 문서가 학기를 말해 주지 않은 기록(periodBasis "unknown")은 보내지 않는다. 화면 초안은
+    // 모를 때 1학기로 채워 두는데(semesterValue), 그 값을 보내면 서버가 비워 둔 학기가 1학기로
+    // 굳는다 — 학년 단위 기록(자율·진로·동아리·행특)과 두 학기에 걸친 1학년 세특이 전부 1학기로
+    // 저장되던 버그다. 학생이 학기를 직접 고르는 화면이 생기면 그 값은 "document"가 아니라
+    // 별도 표시로 보내야 한다.
+    if (entry.periodBasis !== "unknown" && (entry.grade || entry.semester)) {
       overrides.push({ section, index, grade: entry.grade, semester: entry.semester });
     }
   }
@@ -818,43 +786,24 @@ export async function handleLegacyRoute(url: string, init?: RequestInit): Promis
       const kindLabel = String(activity.activityType ?? "");
 
       // 화면의 "유형"은 백엔드의 activity_type(보고서/발표/실험…)이 아니라 기록의
-      // 갈래다. 상장·봉사·독서는 각자의 테이블이 정본이라 그쪽으로 보낸다 —
-      // activities에만 넣으면 진단의 수상·봉사·독서 섹션이 이 기록을 영영 못 본다.
-      if (kindLabel === "상장" || kindLabel === "봉사" || kindLabel === "독서") {
-        const ENDPOINTS = { 상장: "/awards", 봉사: "/volunteer-records", 독서: "/reading-activities" };
-        const bodies: Record<string, Json> = {
-          // 수상 등급(rank)·주최(participants)는 예전엔 버려졌다 — 학생이 제목에
-          // 다 욱여넣어야 했다. 이제 각자의 칸으로 보낸다.
-          상장: {
-            name: activity.title,
-            rank: (activity.awardRank as string)?.trim() || null,
-            participants: (activity.awardHost as string)?.trim() || null,
-            date: activity.completedAt || null,
-            grade: period.grade,
-            semester: period.semester,
-          },
-          // 봉사 시간(hours)은 생기부 봉사활동의 핵심인데 담을 칸이 없었다.
-          봉사: {
+      // 갈래다. 봉사는 자기 테이블이 정본이라 그쪽으로 보낸다 —
+      // activities에만 넣으면 진단의 봉사 섹션이 이 기록을 영영 못 본다.
+      if (kindLabel === "봉사") {
+        await api("/volunteer-records", {
+          method: "POST",
+          body: {
             grade: period.grade,
             semester: period.semester,
             date: activity.completedAt || null,
             place: activity.title,
             content: activity.summary || null,
+            // 봉사 시간(hours)은 생기부 봉사활동의 핵심이다.
             hours: Number.isInteger(Number(activity.volunteerHours)) && String(activity.volunteerHours).length
               ? Number(activity.volunteerHours)
               : null,
           },
-          // 저자(author)도 버려지던 값이다.
-          독서: {
-            grade: period.grade,
-            semester: period.semester,
-            subject: activity.subject || null,
-            title: activity.title,
-            author: (activity.readingAuthor as string)?.trim() || null,
-          },
-        };
-        await api(ENDPOINTS[kindLabel], { method: "POST", body: bodies[kindLabel] });
-        // 이 갈래들은 로드맵 마디와 대조하지 않는다 — 정합은 탐구 활동의 축이다.
+        });
+        // 봉사는 로드맵 마디와 대조하지 않는다 — 정합은 탐구 활동의 축이다.
         return { workspace: await loadWorkspace() };
       }
 

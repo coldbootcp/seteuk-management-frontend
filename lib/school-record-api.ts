@@ -92,13 +92,11 @@ export async function rerunDiagnosis(): Promise<void> {
 const SECTION_LABELS: Record<string, string> = {
   academic_performance: "성적",
   activities: "활동",
-  reading_activities: "독서",
-  awards: "수상",
   volunteer_records: "봉사",
   attendance: "출결",
 };
 
-/** "성적 12 · 활동 30 · 독서 4"처럼 0이 아닌 영역만. */
+/** "성적 12 · 활동 30 · 봉사 4"처럼 0이 아닌 영역만. */
 export function summarizeCounts(counts: Record<string, number> | null | undefined): string {
   if (!counts) return "";
   return Object.entries(SECTION_LABELS)

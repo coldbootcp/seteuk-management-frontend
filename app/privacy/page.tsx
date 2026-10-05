@@ -7,7 +7,6 @@ import Link from "next/link";
  * - 서버·DB: Fly.io 도쿄(nrt) 리전 / 화면: Vercel
  * - AI: DeepSeek(중국) / 메일: Resend / 이용 분석·세션 녹화: Amplitude(US 데이터센터,
  *   lib/analytics.ts — 글자·입력 가림, 이메일 대신 사용자 UUID)
- * 아직 남은 [대괄호] 항목은 확인되는 대로 채울 것.
  */
 
 const cell = "border border-gray-200 px-2 py-1.5 align-top";
@@ -82,7 +81,7 @@ export default function PrivacyPolicyPage() {
             </li>
             <li>생활기록부 파일: 가장 최근에 올린 1개만 보관하며, 새 파일을 올리면 이전 파일은 삭제합니다.</li>
             <li>서비스 소식 받기 이메일: 서비스 정식 출시 안내를 보낸 뒤 또는 삭제를 요청할 때까지</li>
-            <li>자동 수집된 이용 기록(분석 도구): 수집일로부터 [보관 기간]</li>
+            <li>자동 수집된 이용 기록(분석 도구): 수집일로부터 1년</li>
             <li>관계 법령에 따라 보존해야 하는 경우에는 해당 기간 동안 분리하여 보관합니다.</li>
           </ul>
         </section>
@@ -147,7 +146,7 @@ export default function PrivacyPolicyPage() {
               </thead>
               <tbody>
                 <tr>
-                  <td className={cell}>Fly.io, Inc. ([연락처])</td>
+                  <td className={cell}>Fly.io, Inc. (compliance@fly.io)</td>
                   <td className={cell}>일본(도쿄 데이터센터)</td>
                   <td className={cell}>1항의 전체 개인정보</td>
                   <td className={cell}>서버·데이터베이스 운영</td>
@@ -167,7 +166,7 @@ export default function PrivacyPolicyPage() {
                   <td className={cell}>AI 분석·진단·상담 응답 생성</td>
                 </tr>
                 <tr>
-                  <td className={cell}>Resend, Inc. ([연락처])</td>
+                  <td className={cell}>Resend, Inc. (support@resend.com)</td>
                   <td className={cell}>미국</td>
                   <td className={cell}>이메일 주소</td>
                   <td className={cell}>인증·재설정 메일 발송</td>

@@ -670,7 +670,9 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       // 적은 게 있으면 덮지 않는다.
       if (summary.subjects.length && !form.preferredSubjects.trim()) update("preferredSubjects", summary.subjects.join(", "));
       if (summary.currentActivities && !form.currentEngagement.trim()) update("currentEngagement", summary.currentActivities);
-      const periodMessage = completedGrade ? ` ${completedGrade}학년까지 확정된 기록으로 확인했습니다.` : "";
+      const periodMessage = completedGrade
+        ? ` ${completedGrade}학년${latestPeriod?.semester ? ` ${latestPeriod.semester}학기` : ""}까지 확정된 기록으로 확인했습니다.`
+        : "";
       const gradeMessage = expectedCurrentGrade ? ` 현재 상태는 ${gradeLabel(expectedCurrentGrade)}${expectedCurrentSemester ? ` ${expectedCurrentSemester}학기` : ""} 후보로 자동 입력했습니다.` : "";
       const nameMessage = studentName ? ` 이름은 ${studentName} 학생으로 자동 입력했습니다.` : "";
       const policyMessage = freshmanAcademicYear ? ` 입학 연도는 ${freshmanAcademicYear}학년도로 확인했습니다.` : "";
@@ -681,7 +683,7 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
       // 연도상 재학 중이면(현역 고3) 졸업자로 안내하지 않는다.
       const graduatedByYear = expectedCurrentGrade != null && isGraduatedGrade(expectedCurrentGrade);
       setOnboardingRecordMessage(graduatedByYear
-        ? `입학 연도 기준으로 이미 졸업 시점으로 확인했습니다. 분석·정리한 학생부 기록을 보여드립니다.${nameMessage}${periodMessage}`
+        ? `입학 연도 기준으로 이미 졸업 시점(${freshmanAcademicYear ? `${freshmanAcademicYear}학년도 입학 · ${freshmanAcademicYear + 2}학년도 졸업` : "졸업"})으로 확인했습니다. 분석·정리한 학생부 기록을 보여드립니다.${nameMessage}${periodMessage}`
         : `학생부에서 과목 ${summary.subjects.length}개, 활동 후보 ${summary.entries.length}개를 확인했습니다. 시작하면 활동 기록에 함께 저장됩니다.${nameMessage}${periodMessage}${gradeMessage}${policyMessage}`);
     } catch (e) {
       if (controller.signal.aborted) return;
@@ -898,10 +900,10 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
 
                 <div className="space-y-2 text-xs text-gray-600 pt-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-emerald-500 font-bold">✓</span> 과목·세특·수상·봉사·독서를 항목으로 정리
+                    <span className="text-emerald-500 font-bold">✓</span> 과목·세특·봉사를 항목으로 정리
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-emerald-500 font-bold">✓</span> 이름과 현재 학년을 읽어 기본 정보를 자동 입력
+                    <span className="text-emerald-500 font-bold">✓</span> 현재 학년·학기를 읽어 기본 정보를 자동 입력
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-emerald-500 font-bold">✓</span> 정리한 기록이 그대로 진단과 상담의 근거가 됨
@@ -2024,7 +2026,6 @@ function Overview({ workspace, onNavigate, onConvertPlan, onWorkspace }: { works
                                   <span>{review.grade}학년 {review.semester}학기</span>
                                 </div>
                                 {review.gradesReview && <p className="text-gray-700 leading-relaxed">{review.gradesReview}</p>}
-                                {review.readingReview && <p className="text-gray-500 text-[11px]">독서: {review.readingReview}</p>}
                                 {review.activitiesReview && <p className="text-gray-500 text-[11px]">활동: {review.activitiesReview}</p>}
                               </div>
                             ))}
@@ -2275,12 +2276,9 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft, showTourSam
     concepts: "",
     outputs: "",
     completedAt: new Date().toISOString().slice(0, 10),
-    // 갈래별 고유 항목. 예전에는 이 값들을 담을 칸이 없어 봉사 시간·수상 등급·저자가
-    // 저장되지 않았다(백엔드는 받는데 화면이 안 보냈다).
-    awardRank: "",       // 상장: 수상 등급(예: 최우수상)
-    awardHost: "",       // 상장: 주최/주관
+    // 갈래별 고유 항목. 예전에는 봉사 시간을 담을 칸이 없어 저장되지 않았다
+    // (백엔드는 받는데 화면이 안 보냈다).
     volunteerHours: "",  // 봉사: 봉사 시간(정수)
-    readingAuthor: "",   // 독서: 저자
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -2365,13 +2363,13 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft, showTourSam
         "/api/activities",
         { method: "POST", body: payload },
       );
-      // 상장·봉사·독서는 로드맵 마디와 대조하지 않으므로 정합 결과가 없다.
+      // 봉사는 로드맵 마디와 대조하지 않으므로 정합 결과가 없다.
       // 정합을 저장 성공의 조건으로 두면 실제로 저장된 기록이 실패로 보인다.
       if (!result.workspace) throw new Error(result.error || "활동을 저장하지 못했습니다.");
       onWorkspace(result.workspace);
       setLastReview(result.workspace.activityReviews.find((review) => review.activityId === result.reconciliation?.activityId) ?? null);
       clearDraft();
-      setPlanEventId(""); setFiles([]); setForm((cur) => ({ ...cur, title: "", summary: "", reflection: "", activityType: "", awardRank: "", awardHost: "", volunteerHours: "", readingAuthor: "" }));
+      setPlanEventId(""); setFiles([]); setForm((cur) => ({ ...cur, title: "", summary: "", reflection: "", activityType: "", volunteerHours: "" }));
       setQualityNotice(null);
     } catch (e) { setError(e instanceof Error ? e.message : "활동을 저장하지 못했습니다."); }
     finally { setBusy(false); }
@@ -2539,10 +2537,8 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft, showTourSam
             <label htmlFor="act-type">활동 유형</label>
             <select id="act-type" value={form.activityType} onChange={(e) => setForm({ ...form, activityType: e.target.value })}>
               <option value="" disabled>실제로 진행한 유형 선택</option>
-              <option value="상장(대회)">상장(대회)</option>
               <option value="활동">활동(세특용 보고서·그 외 활동)</option>
               <option>봉사</option>
-              <option>독서</option>
             </select>
           </div>
           <div className="form-field">
@@ -2553,41 +2549,23 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft, showTourSam
             </select>
           </div>
           <div className="form-field">
-            <label htmlFor="act-date">{form.activityType === "독서" ? "읽은 날" : form.activityType === "봉사" ? "봉사한 날" : form.activityType === "상장(대회)" ? "수상일" : "완료일"}</label>
+            <label htmlFor="act-date">{form.activityType === "봉사" ? "봉사한 날" : "완료일"}</label>
             <input id="act-date" type="date" value={form.completedAt} onChange={(e) => setForm({ ...form, completedAt: e.target.value })} />
           </div>
           {/* 갈래별 고유 항목 — 유형을 고른 뒤에만 관련 칸을 보여준다. */}
-          {form.activityType === "상장(대회)" && (
-            <>
-              <div className="form-field">
-                <label htmlFor="act-award-rank">수상 등급 <em>(선택)</em></label>
-                <input id="act-award-rank" value={form.awardRank} onChange={(e) => setForm({ ...form, awardRank: e.target.value })} placeholder="예: 최우수상, 은상, 장려상" />
-              </div>
-              <div className="form-field">
-                <label htmlFor="act-award-host">주최·주관 <em>(선택)</em></label>
-                <input id="act-award-host" value={form.awardHost} onChange={(e) => setForm({ ...form, awardHost: e.target.value })} placeholder="예: ○○고등학교, ○○학회" />
-              </div>
-            </>
-          )}
           {form.activityType === "봉사" && (
             <div className="form-field">
               <label htmlFor="act-volunteer-hours">봉사 시간 <em>(선택)</em></label>
               <input id="act-volunteer-hours" type="number" min="0" inputMode="numeric" value={form.volunteerHours} onChange={(e) => setForm({ ...form, volunteerHours: e.target.value.replace(/[^0-9]/g, "") })} placeholder="예: 8 (시간 단위)" />
             </div>
           )}
-          {form.activityType === "독서" && (
-            <div className="form-field">
-              <label htmlFor="act-reading-author">저자 <em>(선택)</em></label>
-              <input id="act-reading-author" value={form.readingAuthor} onChange={(e) => setForm({ ...form, readingAuthor: e.target.value })} placeholder="예: 레이첼 카슨" />
-            </div>
-          )}
         </div>
-        {/* 수강 과목은 교과 세특(활동)에만 필요하다. 봉사·독서·교외 수상은 특정
+        {/* 수강 과목은 교과 세특(활동)에만 필요하다. 봉사는 특정
             과목과 무관한 경우가 많아 과목 미등록이 기록을 막지 않도록 한다. */}
         {form.activityType === "활동" && !currentSemesterCourseSubjects.length && <div className="banner banner-error" style={{ marginBottom: "14px" }}><strong>현재 학기 수강 과목을 먼저 등록해주세요.</strong><br />[성적 관리] 또는 [시간표] 화면에서 이번 학기 과목을 추가하면 여기에서 고를 수 있습니다.</div>}
         <div className="form-field" style={{ marginBottom: "14px" }}>
-          <label htmlFor="act-title">{form.activityType === "독서" ? "도서명" : form.activityType === "봉사" ? "봉사 기관·장소" : form.activityType === "상장(대회)" ? "대회·상장명" : "활동 제목"}</label>
-          <input id="act-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={form.activityType === "독서" ? "예: 침묵의 봄" : form.activityType === "봉사" ? "예: 지역아동센터" : form.activityType === "상장(대회)" ? "예: 교내 과학탐구대회" : "활동의 핵심을 한 문장으로"} />
+          <label htmlFor="act-title">{form.activityType === "봉사" ? "봉사 기관·장소" : "활동 제목"}</label>
+          <input id="act-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={form.activityType === "봉사" ? "예: 지역아동센터" : "활동의 핵심을 한 문장으로"} />
         </div>
         <div className="form-field" style={{ marginBottom: "14px" }}>
           <label htmlFor="act-summary">무엇을 어떻게 했나요?</label>
@@ -2605,8 +2583,8 @@ function ActivitiesView({ workspace, onWorkspace, draft, clearDraft, showTourSam
         {error && <div className="banner banner-error" style={{ marginBottom: "14px" }}>{error}</div>}
         <button
           className="btn btn-primary"
-          // 과목은 교과 세특(활동)에만 필수다. 봉사·독서·상장은 과목 없이도 저장할 수 있어야
-          // 갓 온보딩한(시간표 미입력) 학생도 이 기록들을 남길 수 있다.
+          // 과목은 교과 세특(활동)에만 필수다. 봉사는 과목 없이도 저장할 수 있어야
+          // 갓 온보딩한(시간표 미입력) 학생도 이 기록을 남길 수 있다.
           disabled={busy || !form.activityType || !form.title.trim() || !form.summary.trim() || (form.activityType === "활동" && (!currentSemesterCourseSubjects.length || !form.subject))}
           onClick={() => submit()}
           type="button"
