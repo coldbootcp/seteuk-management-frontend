@@ -15,10 +15,13 @@ import { Icon } from "./icons";
 export function GateFrame({
   children,
   onSignOut,
+  onClose,
   width = "narrow",
 }: {
   children: ReactNode;
   onSignOut: () => void;
+  /** 주면 로그아웃 대신 닫기(✕)를 둔다 — 관문이 아니라 잠깐 들어온 화면(생기부 확인)일 때. */
+  onClose?: () => void;
   width?: "narrow" | "wide";
 }) {
   return (
@@ -30,14 +33,25 @@ export function GateFrame({
             <img alt="세특연구소" className="w-7 h-7 object-contain flex-none" src="/logo.png?v=2" />
             <span className="font-extrabold text-sm text-gray-950 tracking-tight truncate">세특연구소</span>
           </div>
-          <button
-            className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 text-[11px] font-bold transition flex items-center gap-1.5 flex-none"
-            onClick={onSignOut}
-            type="button"
-          >
-            <Icon name="logout" size={14} />
-            <span>로그아웃</span>
-          </button>
+          {onClose ? (
+            <button
+              aria-label="닫기"
+              className="w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition flex items-center justify-center flex-none"
+              onClick={onClose}
+              type="button"
+            >
+              ✕
+            </button>
+          ) : (
+            <button
+              className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 text-[11px] font-bold transition flex items-center gap-1.5 flex-none"
+              onClick={onSignOut}
+              type="button"
+            >
+              <Icon name="logout" size={14} />
+              <span>로그아웃</span>
+            </button>
+          )}
         </div>
       </header>
 
