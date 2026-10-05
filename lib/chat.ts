@@ -110,15 +110,31 @@ async function streamSSE(
   signal?: AbortSignal,
 ): Promise<void> {
   const access = tokens.access;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(access ? { Authorization: `Bearer ${access}` } : {}),
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
+  // 끝 신호(done/error) 없이 연결이 닫히거나 멈추면, 예전에는 화면이 "답변을 작성하는
+  // 중"에 영영 멈췄다(운영에서 DB 연결이 끊긴 날 실제로 겪었다). 그럴 때도 학생이 다시
+  // 보낼 수 있게 오류로 끝낸다.
+  const interrupted = () =>
+    onError({
+      error_code: "STREAM_INTERRUPTED",
+      message: "답변을 받는 중에 연결이 끊겼어요. 잠시 후 다시 보내 주세요.",
+    });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(access ? { Authorization: `Bearer ${access}` } : {}),
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (caught) {
+    if (signal?.aborted) return;
+    void caught;
+    interrupted();
+    return;
+  }
 
   if (!response.ok || !response.body) {
     let message = `대화를 시작하지 못했습니다 (HTTP ${response.status}).`;
@@ -152,22 +168,48 @@ async function streamSSE(
     } catch {
       return;
     }
+    if (event === "done" || event === "error") finished = true;
     dispatch(event, payload);
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    // 프레임 경계는 빈 줄. 마지막 조각은 아직 안 끝났을 수 있으니 버퍼에 남긴다.
-    let boundary = buffer.indexOf("\n\n");
-    while (boundary !== -1) {
-      dispatchFrame(buffer.slice(0, boundary));
-      buffer = buffer.slice(boundary + 2);
-      boundary = buffer.indexOf("\n\n");
+  let finished = false;
+  try {
+    while (true) {
+      const { done, value } = await readWithIdleLimit(reader);
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // 프레임 경계는 빈 줄. 마지막 조각은 아직 안 끝났을 수 있으니 버퍼에 남긴다.
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        dispatchFrame(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf("\n\n");
+      }
     }
+    if (buffer.trim()) dispatchFrame(buffer);
+  } catch {
+    if (signal?.aborted) return;
+    void reader.cancel().catch(() => {});
   }
-  if (buffer.trim()) dispatchFrame(buffer);
+  if (!finished && !signal?.aborted) interrupted();
+}
+
+/** 이만큼 아무것도 오지 않으면 연결이 멈춘 것으로 본다. 도구를 여러 번 부르는 답도 이
+ * 사이에 토큰이 오므로 넉넉히 잡는다. */
+const STREAM_IDLE_LIMIT_MS = 120_000;
+
+async function readWithIdleLimit(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("stream idle")), STREAM_IDLE_LIMIT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function streamMessage(
