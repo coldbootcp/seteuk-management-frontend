@@ -62,7 +62,7 @@ function readableAuthError(caught: unknown, mode: Mode): string {
   return mode === "signup" ? "가입하지 못했습니다." : "로그인하지 못했습니다.";
 }
 
-export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
+export function SignIn({ onGoHome, onSignedIn }: { onGoHome: () => void; onSignedIn: () => void }) {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -262,12 +262,12 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
             <p className="text-xs text-gray-700 leading-relaxed">
               세특연구소는 지금 서비스를 준비하고 있습니다.
               <br />
-              준비가 끝나면 누구나 무료로 이용할 수 있어요.
+              준비가 끝나면 가장 먼저 이용 안내를 보내드릴게요.
             </p>
             {waitlistSent ? (
               <p className="text-xs text-gray-700 leading-relaxed">
-                <strong className="text-gray-950">{email}</strong>을(를) 남겨주셨어요. 준비가 끝나면
-                알려드릴게요.
+                <strong className="text-gray-950">{email}</strong>을(를) 남겨주셨어요. 준비가 끝나면 가장 먼저
+                이용 안내를 보내드릴게요.
               </p>
             ) : (
               <form className="space-y-3 text-left" onSubmit={submitWaitlist}>
@@ -318,13 +318,18 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     <div className="min-h-screen bg-surface-bg flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-3">
-          <div className="flex items-center justify-center gap-2">
+          <button
+            aria-label="세특연구소 홈으로 돌아가기"
+            className="flex items-center justify-center gap-2 mx-auto rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+            onClick={onGoHome}
+            type="button"
+          >
             <img alt="세특연구소 로고" className="w-9 h-9 object-contain" src="/logo.png?v=2" />
             <span className="text-xl font-extrabold text-gray-950 tracking-tight">세특연구소</span>
             <span className="text-brand-600 font-extrabold text-[11px] px-1.5 py-0.5 rounded bg-brand-50 border border-brand-200/80">
               Pro
             </span>
-          </div>
+          </button>
           <h2 className="text-2xl font-extrabold text-gray-950 tracking-tight">
             {mode === "login" ? "로그인" : "회원가입"}
           </h2>

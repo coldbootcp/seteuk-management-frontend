@@ -4047,6 +4047,7 @@ export function WorkspaceApp() {
     if (!authOpen) return <LandingView onGoToLogin={() => setAuthOpen(true)} />;
     return (
       <SignIn
+        onGoHome={() => setAuthOpen(false)}
         onSignedIn={() => {
           setSignedIn(true);
           checkAccountThenGate();
