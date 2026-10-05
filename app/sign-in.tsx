@@ -551,7 +551,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         </div>
 
         <p className="text-center text-[11px] text-gray-400">
-          세특연구소는 학생의 개인정보와 학생부 데이터를 안전하게 보관합니다.
+          세특연구소는 학생의 개인정보와 생기부 데이터를 안전하게 보관합니다.
         </p>
       </div>
     </div>

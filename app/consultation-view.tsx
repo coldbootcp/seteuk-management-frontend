@@ -742,7 +742,7 @@ export function ConsultationGate({
                   <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs space-y-1.5">
                     <h3 className="text-xs font-extrabold text-gray-900">과거 기록 기반 진단은 아직 없어요</h3>
                     <p className="text-[11px] text-gray-500 leading-relaxed">
-                      학생부·활동·성적 기록이 없으면 강점·약점을 사실처럼 판단할 수 없어요. 입력한 진로와 관심사를
+                      생기부·활동·성적 기록이 없으면 강점·약점을 사실처럼 판단할 수 없어요. 입력한 진로와 관심사를
                       바탕으로 상담을 이어갑니다.
                     </p>
                   </div>
@@ -966,7 +966,7 @@ export function ConsultationGate({
                               <span className="w-2 h-2 rounded-full bg-brand-500 animate-bounce [animation-delay:300ms]" />
                             </div>
                             <span className="text-xs text-gray-500 font-medium ml-1">
-                              학생부 분석 데이터를 바탕으로 답변을 작성 중입니다...
+                              생기부 분석 데이터를 바탕으로 답변을 작성 중입니다...
                             </span>
                           </div>
                         </div>

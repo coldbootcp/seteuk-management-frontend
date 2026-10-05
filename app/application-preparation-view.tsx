@@ -519,7 +519,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
       <p>지원하려는 대학과 학과를 고르면, 그곳에 맞춰 활동 근거와 지원 스토리를 정리할 수 있습니다.</p>
     </section> : <section className="portfolio-workspace" aria-label={`${activeTarget.university} ${activeTarget.department} 준비 작업실`}>
       <div className="portfolio-workspace-head">
-        <div><span className="portfolio-step">02</span><h2>{activeTarget.university} · {activeTarget.department}</h2><p>{activeTarget.track} · 이 지원처를 위한 학생부·면접 준비 작업실</p></div>
+        <div><span className="portfolio-step">02</span><h2>{activeTarget.university} · {activeTarget.department}</h2><p>{activeTarget.track} · 이 지원처를 위한 생기부·면접 준비 작업실</p></div>
         <span className={`portfolio-readiness ${evidence.length >= 3 ? "ready" : "building"}`}>{evidence.length >= 3 ? "근거 구성 중" : "근거 더 고르기"}</span>
       </div>
 
@@ -527,7 +527,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
         <article>
           <span>전형 방식</span>
           <strong>{activeTarget.trackDetails?.recruitment_period ?? "수시"}</strong>
-          <p>{(activeTarget.trackDetails?.has_document_review ?? trackReference?.has_document_review) === true ? "학생부 서류평가 포함" : (activeTarget.trackDetails?.has_document_review ?? trackReference?.has_document_review) === false ? "서류평가 미반영" : "세부 반영 방식은 원문 확인 필요"}</p>
+          <p>{(activeTarget.trackDetails?.has_document_review ?? trackReference?.has_document_review) === true ? "생기부 서류평가 포함" : (activeTarget.trackDetails?.has_document_review ?? trackReference?.has_document_review) === false ? "서류평가 미반영" : "세부 반영 방식은 원문 확인 필요"}</p>
           {trackReference && <small>{trackReference.source_admission_year}학년도 공식 자료 참고</small>}
         </article>
         <article>
@@ -612,7 +612,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
       </section>}
 
       {admissionResearch && admissionResearch.cards.length > 0 && <section className="admission-research" aria-label="지원처 추가 정보">
-        <div className="admission-research-head"><div><span>지원 판단에 도움 되는 정보</span><h3>{activeTarget.university} · {activeTarget.department} 추가 리서치</h3><p>전형 조건뿐 아니라 과거 결과, 단과대학이 내세우는 방향, 학생부를 읽는 관점까지 함께 확인하세요. 과거 지표는 합격선을 뜻하지 않습니다.</p></div></div>
+        <div className="admission-research-head"><div><span>지원 판단에 도움 되는 정보</span><h3>{activeTarget.university} · {activeTarget.department} 추가 리서치</h3><p>전형 조건뿐 아니라 과거 결과, 단과대학이 내세우는 방향, 생기부를 읽는 관점까지 함께 확인하세요. 과거 지표는 합격선을 뜻하지 않습니다.</p></div></div>
         <div className="admission-research-grid">{admissionResearch.cards.map((card) => <article key={card.title}>
           <div className="admission-research-title"><h4>{card.title}</h4>{card.is_service_interpretation && <span>서비스 해석</span>}</div>
           <p>{card.description}</p><ul>{card.items.map((item) => <li key={item}>{item}</li>)}</ul>
@@ -621,7 +621,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
       </section>}
 
       <section className="portfolio-design" aria-label="지원 스토리 설계">
-        <div className="panel-title"><div><h3>핵심 활동과 지원 흐름</h3><p>지원 학과와 연결해 설명할 수 있는 활동을 골라, 관심이 어떻게 깊어졌는지 정리하세요.</p></div><span>학생부 기반</span></div>
+        <div className="panel-title"><div><h3>핵심 활동과 지원 흐름</h3><p>지원 학과와 연결해 설명할 수 있는 활동을 골라, 관심이 어떻게 깊어졌는지 정리하세요.</p></div><span>생기부 기반</span></div>
         {activityFlows.length > 0 && <div className="flow-options">{activityFlows.map((flow) => <article key={flow.id ?? flow.title}>
           <strong>{flow.title}</strong>{flow.description && <p>{flow.description}</p>}
           <div>{flow.activities.map((item) => <button type="button" key={item.activity_id} className={activeTarget.activityIds.includes(item.activity_id) ? "picked" : ""} onClick={() => toggleEvidence(item.activity_id)}>
@@ -635,7 +635,7 @@ export function ApplicationPreparationView({ workspace }: { workspace: ProductWo
       <div className="portfolio-work-grid">
         <section className="portfolio-panel evidence-panel">
           <div className="panel-title"><div><h3>핵심 활동 후보</h3><p>선택한 지원처 기준으로 우선순위를 정하고, 직접 설명할 수 있는 활동만 남기세요.</p></div><span>{evidence.length} / {records.length}</span></div>
-          <div className="key-activity-action"><button className="btn btn-secondary" type="button" onClick={() => void recommendKeyActivities()} disabled={recommendationLoading || records.length === 0}>{recommendationLoading ? "활동을 살피는 중" : "AI가 핵심 활동 추리기"}</button><p>추천은 학생부 기록만 바탕으로 하며, 최종 선택은 학생이 직접 바꿀 수 있습니다.</p></div>
+          <div className="key-activity-action"><button className="btn btn-secondary" type="button" onClick={() => void recommendKeyActivities()} disabled={recommendationLoading || records.length === 0}>{recommendationLoading ? "활동을 살피는 중" : "AI가 핵심 활동 추리기"}</button><p>추천은 생기부 기록만 바탕으로 하며, 최종 선택은 학생이 직접 바꿀 수 있습니다.</p></div>
           {activityRecommendation && <div className="key-activity-result">{activityRecommendation.activities.length ? <>{activityRecommendation.activities.map((item) => <p key={item.activity_id}><b>{item.rank}순위</b> {item.reason}{item.missing_fields.length > 0 && <small>기록 보완: {item.missing_fields.join(" · ")}</small>}</p>)}</> : <p>현재 기록만으로는 핵심 활동을 고르기 어렵습니다.</p>}{activityRecommendation.gap_notice && <aside>{activityRecommendation.gap_notice}</aside>}</div>}
           {records.length ? <div className="evidence-list">{records.map((record) => {
             const selected = activeTarget.activityIds.includes(record.id);
