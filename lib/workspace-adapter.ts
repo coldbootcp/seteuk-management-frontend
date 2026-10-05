@@ -538,22 +538,24 @@ export async function loadWorkspace(): Promise<ProductWorkspace | null> {
       .map((raw) => toActivity(raw, studentId, locate)),
     ...volunteers,
   ];
-  const attachmentLists = await Promise.all(
-    activities.map((activity) =>
-      optional(api<Json[]>(`/activities/${activity.id}/attachments`)).then((rows) =>
-        (rows ?? []).map(
-          (row): ActivityAttachment => ({
-            id: row.id as string,
-            activityId: activity.id,
-            fileName: row.file_name as string,
-            contentType: row.content_type as string,
-            sizeBytes: row.size_bytes as number,
-            storageKey: row.id as string,
-          }),
-        ),
+  // 첨부는 한 번에 받는다. 예전에는 활동마다 따로 물어서, 활동이 100건 넘는 학생은
+  // 요청 100여 개가 한꺼번에 몰려 운영 서버에서 30초 넘게 멈췄다.
+  const activityIds = new Set(activities.map((activity) => activity.id));
+  const allAttachments = (await optional(api<Json[]>("/attachments"))) ?? [];
+  const attachmentLists = [
+    allAttachments
+      .filter((row) => activityIds.has(row.activity_id as string))
+      .map(
+        (row): ActivityAttachment => ({
+          id: row.id as string,
+          activityId: row.activity_id as string,
+          fileName: row.file_name as string,
+          contentType: row.content_type as string,
+          sizeBytes: row.size_bytes as number,
+          storageKey: row.id as string,
+        }),
       ),
-    ),
-  );
+  ];
 
   const profile = toProfile(profileRaw, studentId);
   const isWithinProfilePeriod = (grade: number | null | undefined, semester: number | null | undefined) => {
