@@ -792,6 +792,27 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
   // 정하게 하면 이후 모든 추천의 출발점이 부정확해진다.
   const canSubmitProfile = !!form.name.trim() && !!form.grade && (isGraduatedGrade(form.grade) || !!form.semester) && freshmanYearReady;
   const canLeaveProfileStep = canSubmitProfile && !!form.careerResolution;
+  // 입학 연도와 고른 학년이 맞지 않으면 알려만 준다(막지 않는다 — 휴학·유급 등 예외가 있다).
+  const freshmanYearMismatch = (() => {
+    const year = Number(form.freshmanAcademicYear);
+    if (!isValidFreshmanYear(year) || !form.grade) return "";
+    const expected = expectedPeriodFromFreshmanYear(year);
+    if (!expected) return `${year}학년도 입학이면 아직 입학 전이에요. 입학 연도를 확인해 주세요.`;
+    if (expected.grade === form.grade) return "";
+    const expectedLabel = expected.grade === "graduated" ? "졸업한 시점" : `${expected.grade}학년`;
+    return `${year}학년도 입학이면 지금은 ${expectedLabel}이에요. 입학 연도나 학년이 맞는지 확인해 주세요.`;
+  })();
+  // 다음 버튼이 꺼진 이유를 버튼에 그대로 적는다. 예전에는 진로 정도를 안 골라 꺼졌는데
+  // 버튼에는 아무 이유도 없어 학생이 멈췄다.
+  const profileMissing = !form.name.trim()
+    ? "이름을 입력해주세요"
+    : !form.grade || (!isGraduatedGrade(form.grade) && !form.semester)
+      ? "현재 학년·학기를 골라주세요"
+      : !freshmanYearReady
+        ? "입학 연도를 입력해주세요"
+        : !form.careerResolution
+          ? "진로가 어느 정도 정해졌는지 골라주세요"
+          : "";
   // 파서가 읽은 학년·학기는 제안값일 뿐이다. 학생이 언제든 직접 고칠 수 있고,
   // 불일치는 안내로만 다룬다.
   const recordLocked = false;
@@ -1208,6 +1229,11 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                       ? "생기부에서 입학 연도를 읽지 못했어요. 직접 입력해주세요. 예: 2025학년도 고1이었다면 2025."
                       : "예: 2025학년도 고1이었다면 2025."}
                   </p>
+                  {freshmanYearMismatch && (
+                    <p className="mt-1.5 p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] leading-relaxed text-amber-900">
+                      {freshmanYearMismatch}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1388,8 +1414,8 @@ function Onboarding({ onComplete, onSignOut }: { onComplete: () => void; onSignO
                     ? "생기부 분석이 끝나면 진행할 수 있어요"
                     : busy
                       ? "저장하는 중…"
-                      : !freshmanYearReady
-                        ? "입학 연도를 입력해주세요"
+                      : profileMissing
+                        ? profileMissing
                         : isGraduatedGrade(form.grade)
                           ? "AI 상담 시작하기 ➔"
                           : "다음: 이번 학기 과목 고르기 ➔"}

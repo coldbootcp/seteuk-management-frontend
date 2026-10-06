@@ -216,7 +216,7 @@ export function ConsultationGate({
         if (latest?.status === "done") {
           // cancelled여도 반영한다. StrictMode(dev)에서는 이 이펙트가 정리된 뒤 ref
           // 가드 때문에 다시 돌지 않으므로, 여기서 건너뛰면 아무도 진단을 넣지 않아
-          // 상담 중 새로고침한 학생이 "정밀 분석하는 중"에 영영 갇힌다.
+          // 상담 중 새로고침한 학생이 진단 대기 화면에 영영 갇힌다.
           setDiagnosis(latest);
           return;
         }
@@ -502,9 +502,10 @@ export function ConsultationGate({
               <Icon name="zap" size={28} />
             </span>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">지금까지의 기록을 정밀 분석하는 중…</h2>
+              <h2 className="text-lg font-bold text-gray-900">상담을 준비하는 중…</h2>
               <p className="text-xs text-gray-500 mt-1">
-                성적 추이 · 학기별 리뷰 · 활동 인벤토리 · 지식 연계를 각각 계산합니다. 보통 1~3분 걸립니다.
+                입력한 정보와 지금까지의 기록을 바탕으로 진단을 만들고 있어요. 생기부가 없어도 괜찮아요.
+                보통 1~3분 걸립니다.
               </p>
             </div>
             <div className="space-y-2 text-left bg-gray-50 p-4 rounded-xl border border-gray-100 text-xs text-gray-600">
