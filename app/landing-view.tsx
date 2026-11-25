@@ -1,333 +1,176 @@
 "use client";
 
-/**
- * 비로그인 랜딩.
- *
- * 목업(preview-3200)의 첫 화면을 옮긴 것이다. 문구·수치·후기·요금은 전부
- * `landing-content.ts`에 모아 두었고 아직 실제 값이 아니다 — 그래서 화면 곳곳에
- * 예시임을 밝히는 표시를 남긴다(`IS_PLACEHOLDER`).
- *
- * 버튼은 전부 로그인/가입으로만 이어진다. 결제는 백엔드 범위 밖이라 요금 카드도
- * 결제 흐름을 흉내 내지 않고 가입으로 보낸다.
- */
-
-import { useState } from "react";
-import {
-  FAQS,
-  FEATURE_ENGINES,
-  HERO_PRINCIPLES,
-} from "./landing-content";
+import Image from "next/image";
+import Link from "next/link";
+import { FAQS, WORKSPACE_TOOLS } from "./landing-content";
+import { InquiryPreview } from "./inquiry-preview";
 import { Icon } from "./icons";
 
-const NAV_LINKS = [
-  { href: "#features", label: "핵심 기능" },
+const container = "mx-auto w-full max-w-[1208px] px-5 sm:px-8 lg:px-10";
+const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600";
+const sectionTitle = "text-[1.85rem] leading-[1.24] font-extrabold tracking-[-0.045em] sm:text-[2.45rem]";
+const navLinks = [
+  { href: "#preview", label: "탐구 예시" },
+  { href: "#features", label: "주요 기능" },
   { href: "#faq", label: "자주 묻는 질문" },
 ];
 
-export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-
+function Brand() {
   return (
-    <div className="min-h-screen bg-surface-bg text-gray-950 overflow-x-hidden">
-      {/* 헤더 */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-200/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          <button
-            className="flex items-center gap-3"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            type="button"
-          >
-            <img alt="세특연구소 로고" className="w-8 h-8 md:w-9 md:h-9 object-contain flex-none" src="/logo.png?v=2" />
-            <span className="font-extrabold text-lg md:text-xl text-gray-950 tracking-tight">세특연구소</span>
-          </button>
+    <a className={`inline-flex items-center gap-2 rounded-lg ${focusRing}`} href="#top" aria-label="세특연구소 첫 화면">
+      <Image src="/logo.png?v=2" alt="" width={34} height={34} className="size-8 object-contain" unoptimized />
+      <span className="text-[1.22rem] font-extrabold tracking-[-0.055em]">세특연구소</span>
+    </a>
+  );
+}
 
-          <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-gray-600">
-            {NAV_LINKS.map((link) => (
-              <a className="hover:text-brand-600 transition" href={link.href} key={link.href}>
-                {link.label}
-              </a>
-            ))}
-          </nav>
+function LoginButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      className={`inline-flex min-h-12 items-center justify-center gap-3 rounded-xl bg-brand-600 px-5 py-3 text-[15px] font-bold text-white transition-colors hover:bg-brand-700 ${focusRing}`}
+      onClick={onClick}
+      type="button"
+    >
+      로그인하고 시작하기 <Icon name="chevron-right" size={16} />
+    </button>
+  );
+}
 
-          <div className="flex items-center gap-2.5 flex-none">
-            <button
-              className="px-3.5 py-1.5 text-sm font-semibold text-gray-700 hover:text-gray-950 transition"
-              onClick={onGoToLogin}
-              type="button"
-            >
-              로그인
-            </button>
-            <button
-              className="px-4 py-2 text-sm font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition"
-              onClick={onGoToLogin}
-              type="button"
-            >
-              무료로 시작하기
+export function LandingView({ onGoToLogin }: { onGoToLogin: () => void }) {
+  return (
+    <div id="top" className="min-h-screen bg-white text-gray-950 break-keep">
+      <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/95 backdrop-blur-md">
+        <div className={`${container} flex h-16 items-center justify-between gap-4 md:h-[72px]`}>
+          <Brand />
+          <div className="flex items-center gap-9">
+            <nav className="hidden items-center gap-7 text-sm font-semibold text-gray-600 md:flex" aria-label="서비스 소개">
+              {navLinks.map(({ href, label }) => (
+                <a key={href} className={`inline-flex min-h-11 items-center rounded-md hover:text-brand-700 ${focusRing}`} href={href}>{label}</a>
+              ))}
+            </nav>
+            <button type="button" onClick={onGoToLogin} className={`inline-flex min-h-11 items-center gap-1 rounded-xl border border-gray-200 px-4 text-sm font-bold text-gray-800 hover:bg-gray-50 ${focusRing}`}>
+              로그인 <Icon name="chevron-right" size={14} />
             </button>
           </div>
         </div>
       </header>
 
-      {/* 히어로 */}
-      <section className="relative pt-12 pb-20 md:pt-20 md:pb-28 overflow-hidden bg-gradient-to-b from-white via-blue-50/20 to-surface-bg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto space-y-6">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-50 border border-brand-200/80 text-brand-600 text-xs md:text-sm font-bold">
-              <span className="flex h-2 w-2 rounded-full bg-brand-500" />
-              <span>고교 활동 기록부터 수시 준비까지</span>
-            </div>
-
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-gray-950 tracking-tight leading-[1.15]">
-              산발적인 세특 기록을 넘어,
-              <br />
-              <span className="text-brand-600">나만의 탐구 흐름을 차분히 쌓아가세요</span>
-            </h1>
-
-            <p className="text-base sm:text-lg md:text-xl text-gray-600 leading-relaxed max-w-2xl mx-auto">
-              생기부와 활동 기록을 정리하고, 이번 학기 계획을 실제 학교 기회와 연결해 보세요.
-              기록이 아직 없다면 과거를 지어내지 않고, 현재 관심사부터 함께 시작합니다.
+      <main>
+        <section aria-labelledby="landing-title" className={`${container} grid items-center gap-8 pt-9 pb-12 sm:py-14 md:grid-cols-[0.98fr_1.02fr] md:gap-8 lg:gap-12 lg:pt-[72px] lg:pb-20`}>
+          <div>
+            <p className="flex items-center gap-2.5 text-sm font-bold text-brand-700">
+              <span aria-hidden="true" className="h-0.5 w-6 bg-brand-600" />
+              고등학생을 위한 생기부 탐구 코치
             </p>
-
-            <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-3.5">
-              <button
-                className="w-full sm:w-auto px-8 py-4 text-base font-extrabold text-white bg-brand-600 hover:bg-brand-700 rounded-2xl transition flex items-center justify-center gap-2.5"
-                onClick={onGoToLogin}
-                type="button"
-              >
-                <span>무료로 시작하기</span>
-                <span aria-hidden="true">→</span>
-              </button>
+            <h1 id="landing-title" className="mt-4 text-[clamp(2.6rem,4.45vw,4.15rem)] leading-[1.16] font-extrabold tracking-[-0.062em] sm:mt-5">
+              지난 탐구가<br />
+              <span className="text-brand-600">다음 질문이 되는 곳</span>
+            </h1>
+            <p className="mt-5 max-w-[29rem] text-base leading-[1.8] text-gray-600 lg:text-lg">
+              지난 학기 활동과 이번 학기에 듣는 과목을 AI와 함께 살펴보세요. 해 보고 싶은 주제를 고르고, 직접 해낸 과정과 배운 점을 내 기록에 남겨요.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 sm:mt-8">
+              <LoginButton onClick={onGoToLogin} />
+              <a href="#preview" className={`inline-flex min-h-12 items-center gap-1.5 rounded-lg px-1 text-[15px] font-bold text-gray-800 hover:text-brand-700 ${focusRing}`}>
+                탐구 예시 보기 <Icon name="chevron-right" className="rotate-90" size={15} />
+              </a>
             </div>
+          </div>
+          <figure className="m-0 min-w-0">
+            <div className="relative aspect-[1.55] overflow-hidden rounded-2xl md:aspect-[1.23] lg:aspect-[1.42]">
+              <Image
+                alt="운동장 나무 사진과 시간에 따른 온도 그래프를 함께 펼쳐 둔 탐구 노트"
+                className="object-cover"
+                src="/inquiry-notebook.webp"
+                fill
+                sizes="(min-width: 1208px) 550px, (min-width: 768px) 46vw, 100vw"
+                preload
+              />
+            </div>
+            <figcaption className="mt-3 flex items-baseline gap-2 text-xs leading-relaxed text-gray-600">
+              <span className="shrink-0 font-bold text-brand-700">탐구 노트 예시</span>
+              <span className="border-l border-gray-200 pl-2">운동장 햇볕과 나무 그늘의 온도 비교</span>
+            </figcaption>
+          </figure>
+        </section>
 
-            <div className="pt-6 flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs md:text-sm text-gray-500 font-medium">
-              {HERO_PRINCIPLES.map((stat, index) => (
-                <div className="flex items-center gap-2" key={stat.label}>
-                  {index > 0 && <span className="h-3 w-px bg-gray-300 hidden sm:block -ml-4 mr-2" />}
-                  <span className="font-extrabold text-base md:text-lg text-gray-900">{stat.value}</span>
-                  <span>{stat.label}</span>
-                </div>
+        <InquiryPreview />
+
+        <section id="features" aria-labelledby="feature-title" className={`${container} scroll-mt-20 py-14 sm:py-20 lg:py-24`}>
+          <h2 id="feature-title" className={sectionTitle}>한 학기씩 쌓아서, 수시 준비까지</h2>
+          <div className="mt-7 grid gap-7 md:mt-9 md:grid-cols-[0.94fr_1.06fr] md:gap-9 lg:gap-16">
+            <div className="rounded-2xl bg-brand-50 p-6 sm:p-8">
+              <h3 className="text-[1.4rem] font-extrabold tracking-tight">고교 3개년 흐름</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-gray-700">이미 해 본 활동과 앞으로 해 보고 싶은 일을 학기 순서로 펼쳐 보세요.</p>
+              <ol className="m-0 mt-6 list-none p-0">
+                {[
+                  ["지난 학기", "실제로 마친 활동과 배운 점"],
+                  ["이번 학기", "수업에서 실행할 목표와 탐구 주제"],
+                  ["다음 학기", "관심을 넓히거나 더 깊게 살펴볼 방향"],
+                ].map(([term, detail], index) => (
+                  <li key={term} className="relative flex gap-4 pb-5 last:pb-0">
+                    {index < 2 && <span aria-hidden="true" className="absolute top-4 bottom-0 left-[7px] w-px bg-brand-200" />}
+                    <span aria-hidden="true" className={`relative mt-1 flex size-[15px] shrink-0 items-center justify-center rounded-full ${index === 1 ? "bg-brand-600" : "border border-brand-300 bg-white"}`}>
+                      {index === 1 && <span className="size-[5px] rounded-full bg-white" />}
+                    </span>
+                    <div>
+                      <p className="text-xs font-bold text-brand-700">{term}</p>
+                      <p className="mt-1 text-[15px] font-semibold text-gray-900">{detail}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <div className="flex flex-col justify-center">
+              {WORKSPACE_TOOLS.map((tool) => (
+                <article key={tool.title} className="flex gap-4 border-b border-gray-200 py-5 first:pt-0 last:border-0 last:pb-0">
+                  <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-brand-700">
+                    <Icon name={tool.icon} size={21} />
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-bold tracking-tight">{tool.title}</h3>
+                    <p className="mt-1.5 text-[15px] leading-[1.7] text-gray-600">{tool.body}</p>
+                  </div>
+                </article>
               ))}
             </div>
           </div>
+        </section>
 
-          {/* 워크스페이스 미리보기 — 실제 화면의 구성을 그대로 축소해 보여준다.
-              안의 내용은 예시다(로그인 후 자기 기록으로 채워진다).
-
-              전에는 창 제어 버튼처럼 보이는 점 세 개와 모노스페이스 라벨로 브라우저
-              창을 흉내 냈고, 정적인 미리보기에 초록 점을 단 "화면 예시" 배지를 붙여
-              실시간 상태처럼 보이게 했다. 둘 다 이 카드가 실제로 하지 않는 것(창,
-              라이브 상태)을 흉내 내고 있어 없앤다. */}
-          <div className="mt-14 max-w-5xl mx-auto rounded-3xl bg-white border border-gray-200/90 shadow-2xl p-4 sm:p-6 md:p-8 relative overflow-hidden">
-            <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-4 mb-6 flex-wrap">
-              <span className="text-xs font-bold text-gray-500">이번 학기 화면 미리보기</span>
-              <span className="text-[11px] font-semibold text-gray-400">예시 데이터입니다</span>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start text-left">
-              <div className="lg:col-span-4 bg-gray-50/90 rounded-2xl p-5 border border-gray-200/80 space-y-4">
-                <div className="flex items-center gap-3.5">
-                  <span className="w-12 h-12 rounded-2xl bg-brand-600 text-white font-extrabold text-base flex items-center justify-center">
-                    민준
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-extrabold text-gray-950 text-sm">김민준</h4>
-                      <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-blue-100 text-brand-700">
-                        고2 2학기
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5">예시 학생 화면</p>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-white rounded-xl border border-gray-200/70 text-xs space-y-1.5">
-                  <div className="text-[11px] font-bold text-gray-400">목표 전공 &amp; 진로</div>
-                  <div className="font-bold text-gray-900">컴퓨터공학 / 시스템 아키텍트</div>
-                  <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
-                    <span className="text-gray-500">지망 모집단위</span>
-                    <span className="font-bold text-brand-600">컴퓨터공학부 (학종)</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-[11px] font-bold text-gray-400">핵심 학업 키워드 DNA</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {["분산컴퓨팅", "CPU캐시", "RISC-V", "선형대수", "커널최적화"].map((tag) => (
-                      <span
-                        className="text-[11px] font-semibold px-2 py-0.5 rounded bg-white text-gray-700 border border-gray-200"
-                        key={tag}
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="lg:col-span-8 space-y-4">
-                <div className="bg-gray-50/90 p-4 rounded-2xl border border-gray-200/80 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <span className="text-[10px] font-extrabold text-brand-600 uppercase tracking-wide">
-                      THIS SEMESTER GOAL
-                    </span>
-                    <h4 className="text-sm md:text-base font-extrabold text-gray-950 mt-0.5 leading-snug">
-                      분산 컴퓨팅 환경에서의 메모리 병목 및 병렬 연산 최적화 심화 실증
-                    </h4>
-                  </div>
-                </div>
-
-                <div className="space-y-2.5">
-                  <div className="text-xs font-bold text-gray-500 flex items-center justify-between gap-2 flex-wrap">
-                    <span>★ 이번 학기 AI 추천 1순위 탐구 주제 (수행평가·세특 연동)</span>
-                    <span className="text-[11px] text-brand-600 font-semibold">교과 직결</span>
-                  </div>
-
-                  {[
-                    {
-                      sub: "물리학Ⅰ",
-                      title: "반도체 밴드갭 이론을 활용한 FinFET 구조의 누설 전류 억제 메커니즘",
-                      area: "하드웨어·반도체",
-                    },
-                    {
-                      sub: "수학Ⅱ",
-                      title: "경사하강법의 학습률에 따른 발산·수렴 거동 수학적 증명",
-                      area: "알고리즘 수리",
-                    },
-                    {
-                      sub: "정보과제연구",
-                      title: "비동기 이벤트 루프와 논블로킹 I/O 다중화의 동시성 처리 성능 비교",
-                      area: "시스템 실증",
-                    },
-                  ].map((item) => (
-                    <div
-                      className="p-3.5 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-between gap-3"
-                      key={item.title}
-                    >
-                      <div className="min-w-0">
-                        <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-white text-gray-800 border border-gray-200 mr-2 whitespace-nowrap">
-                          {item.sub}
-                        </span>
-                        <span className="text-xs font-bold text-gray-900">{item.title}</span>
-                      </div>
-                      <span className="text-[11px] font-bold text-brand-600 flex-none bg-white px-2 py-0.5 rounded border border-brand-100 whitespace-nowrap">
-                        {item.area}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <span className="text-xs text-gray-500 text-center sm:text-left inline-flex items-start gap-1.5">
-                <Icon className="mt-0.5 flex-none text-amber-500" name="lightbulb" size={14} />
-                <span>진단과 상담을 마치면 우리 학교 시간표 과목에 맞춘 이번 학기 탐구 주제가 만들어집니다.</span>
-              </span>
-              <button
-                className="w-full sm:w-auto px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
-                onClick={onGoToLogin}
-                type="button"
-              >
-                <span>무료로 시작하기</span>
-                <span>→</span>
-              </button>
+        <section id="faq" aria-labelledby="faq-title" className="scroll-mt-16 border-t border-gray-200 bg-surface-bg">
+          <div className={`${container} grid items-start gap-6 py-12 md:grid-cols-[0.72fr_1.28fr] md:gap-12 md:py-16`}>
+            <h2 id="faq-title" className={sectionTitle}>자주 묻는 질문</h2>
+            <div>
+              {FAQS.map(({ q, a }) => (
+                <details key={q} name="landing-faq" className="group border-b border-gray-200 first:border-t">
+                  <summary className={`flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 rounded-sm py-4 text-[15px] font-bold leading-relaxed sm:text-base [&::-webkit-details-marker]:hidden ${focusRing}`}>
+                    {q}
+                    <Icon name="chevron-right" size={16} className="shrink-0 rotate-90 text-brand-700 group-open:-rotate-90" />
+                  </summary>
+                  <p className="pb-5 pr-6 text-[15px] leading-[1.8] text-gray-600">{a}</p>
+                </details>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* 핵심 기능 */}
-      <section className="py-20 bg-white border-y border-gray-200/70" id="features">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <div className="text-center max-w-2xl mx-auto space-y-3">
-            <h2 className="text-2xl md:text-4xl font-extrabold text-gray-950 tracking-tight leading-snug">
-              합격하는 생기부는 무엇이 다를까요?
-              <br />
-              <span className="text-brand-600">세특연구소의 3대 핵심 엔진</span>
-            </h2>
+        <section aria-label="세특연구소 시작하기" className="bg-brand-50">
+          <div className={`${container} flex flex-col items-start justify-between gap-5 py-10 sm:flex-row sm:items-center md:py-12`}>
+            <div>
+              <h2 className="text-[1.5rem] font-extrabold tracking-tight sm:text-[1.85rem]">지금 궁금한 것부터 시작해요.</h2>
+              <p className="mt-2 text-[15px] text-gray-600">생기부가 아직 없어도, 관심 있는 과목으로 상담을 시작할 수 있어요.</p>
+            </div>
+            <div className="shrink-0"><LoginButton onClick={onGoToLogin} /></div>
           </div>
+        </section>
+      </main>
 
-          {/*
-            전에는 카드마다 파랑·인디고·에메랄드로 색을 달리하고 "01 · 02 · 03"을
-            앞에 붙였다. 셋 다 같은 정도로 중요한 기능이라 색으로 위계를 만들 근거가
-            없었고, 번호는 실제 순서(학생이 이 순서대로 쓴다는 뜻)를 말하려던
-            것이었지만 숫자만으로는 그 뜻이 전달되지 않아 장식처럼 보였다. 하나의
-            액션 블루로 통일하고, 순서는 "먼저 → 그다음" 문구로 직접 말한다.
-          */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {FEATURE_ENGINES.map((engine, index) => (
-              <div
-                className="p-7 rounded-3xl bg-surface-bg border border-gray-200/90 space-y-4 hover:border-brand-300 transition"
-                key={engine.tag}
-              >
-                <div className="w-12 h-12 rounded-2xl border bg-brand-50 border-brand-200/70 flex items-center justify-center">
-                  <Icon className="text-brand-600" name={engine.icon} size={22} />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs font-bold text-brand-600">
-                    {index === 0 ? "먼저" : index === FEATURE_ENGINES.length - 1 ? "마지막" : "그다음"} · {engine.tag}
-                  </span>
-                  <h3 className="text-xl font-extrabold text-gray-950 leading-snug">{engine.title}</h3>
-                </div>
-                <p className="text-sm text-gray-600 leading-relaxed">{engine.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="py-20 bg-white border-t border-gray-200/70" id="faq">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
-          <h2 className="text-2xl md:text-4xl font-extrabold text-gray-950 tracking-tight text-center">
-            자주 묻는 질문
-          </h2>
-
-          <div className="space-y-3">
-            {FAQS.map((faq, index) => {
-              const open = openFaq === index;
-              return (
-                <div className="rounded-2xl border border-gray-200/90 bg-surface-bg overflow-hidden" key={faq.q}>
-                  <button
-                    className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left"
-                    onClick={() => setOpenFaq(open ? null : index)}
-                    type="button"
-                  >
-                    <span className="text-sm font-bold text-gray-900">{faq.q}</span>
-                    <span className={`text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
-                  </button>
-                  {open && <p className="px-5 pb-5 text-sm text-gray-600 leading-relaxed">{faq.a}</p>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* 마무리 CTA */}
-      <section className="py-20 bg-gradient-to-b from-white to-brand-50/40">
-        <div className="max-w-3xl mx-auto px-4 text-center space-y-6">
-          <h2 className="text-2xl md:text-3xl font-extrabold text-gray-950 tracking-tight leading-snug">
-            지금 쌓인 기록으로 이번 학기 계획을 시작하세요
-          </h2>
-          <p className="text-sm text-gray-600">
-            가입 후 진단과 상담을 마치면 이번 학기 목표와 탐구 주제가 바로 만들어집니다.
-          </p>
-          <button
-            className="px-8 py-4 text-base font-extrabold text-white bg-brand-600 hover:bg-brand-700 rounded-2xl transition"
-            onClick={onGoToLogin}
-            type="button"
-          >
-            무료로 시작하기 →
-          </button>
-        </div>
-      </section>
-
-      <footer className="py-10 bg-white border-t border-gray-200/70">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-gray-400">
-          <span>세특연구소 — 개인 맞춤형 고교 생활기록부 코치</span>
-          <span>학생의 개인정보와 생기부 데이터를 안전하게 보관합니다.</span>
-        </div>
+      <footer className={`${container} flex flex-wrap items-center justify-between gap-4 py-5`}>
+        <Brand />
+        <nav className="flex flex-wrap gap-x-4 text-xs font-semibold text-gray-600" aria-label="이용 안내">
+          <Link className={`inline-flex min-h-11 items-center rounded-sm hover:underline ${focusRing}`} href="/privacy">개인정보처리방침</Link>
+          <Link className={`inline-flex min-h-11 items-center rounded-sm hover:underline ${focusRing}`} href="/terms">이용약관</Link>
+        </nav>
       </footer>
     </div>
   );
